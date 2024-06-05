@@ -1,0 +1,301 @@
+FIELD
+-
+The present disclosure generally relates to systems and methods to solve optimization problems, such as training a machine-learned model. More particularly, the present disclosure relates to adaptive optimization techniques with improved convergence properties.
+BACKGROUND
+-
+Machine-learned models such as artificial neural networks typically include a number of parameters. In various machine learning techniques, the final values of the parameters are learned through an iterative training process which updates the parameters at each of a plurality of training iterations. For example, at each iteration, the performance of the model relative to a set (e.g., a “minibatch”) of training data is evaluated using a loss function. The parameters can be updated based on the performance of model as evaluated by the loss function.
+-
+The degree or amount by which the parameters of the model are updated at each iteration can be controlled by or otherwise performed in accordance with an effective learning rate. For example, a relatively smaller effective learning rate will typically result in relatively smaller changes to the values of the parameters, while a relatively larger effective learning rate will typically result in relatively larger changes to the values of the parameters at that iteration.
+-
+Stochastic gradient descent (SGD) is one of the dominant methods used today to train deep neural networks. This method iteratively updates the parameters of a model by moving them in the direction of the negative gradient of the loss evaluated on a minibatch of training data.
+-
+Though a well-tuned SGD outperforms adaptive methods in many traditional tasks such as ImageNet classification, certain tasks necessitate the use of adaptive variants of SGD such as, Adam, AMSGrad, which employ adaptive per-parameter learning rates. For instance, consider the task of training an attention model using BERT. It can be observed that in spite of extensive hyperparameter tuning, SGD converges much slower than Adam.
+-
+While these algorithms have been successfully employed in several practical applications, they have also been observed to not converge in certain settings such as strongly convex functions with heavy tailed noise. For example, in the heavy-tailed noise setting, some stochastic gradients can be much larger than the mean and can excessively influence the SGD updates. This makes SGD unstable and leads to its poor performance.
+SUMMARY
+-
+Aspects and advantages of embodiments of the present disclosure will be set forth in part in the following description, or can be learned from the description, or can be learned through practice of the embodiments.
+-
+One example aspect of the present disclosure is directed to a computer-implemented method for optimizing machine-learned models with improved convergence properties. The method includes determining, by one or more computing devices, a gradient of a loss function that evaluates a performance of a machine-learned model that comprises a plurality of parameters, wherein the gradient of the loss function comprises a plurality of coordinates that respectively correspond to the plurality of parameters. The method includes determining, by the one or more computing devices, a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function, wherein the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function. The method includes clipping, by the one or more computing devices, a respective current first moment for each of the plurality of coordinates of the gradient of the loss function based at least in part on the respective adaptive per-coordinate threshold for the coordinate to obtain a current update value for the coordinate. The method includes determining, by the one or more computing devices, an updated set of values for the plurality of parameters of the machine-learned model based at least in part on a respective previous value for each of the plurality of parameters, the current update value for each coordinate, and a learning rate. The method includes outputting, by the one or more computing devices, the machine-learned model as a trained model having the updated set of values for the plurality of parameters of the machine-learned model.
+-
+Another example aspect is directed to a computer system that includes one or more processors; and one or more non-transitory computer-readable media that store instructions that, when executed by the one or more processors, cause the one or more processors to perform operations. The operations include determining a gradient of a loss function that evaluates a performance of a machine-learned model that comprises a plurality of parameters, wherein the gradient of the loss function comprises a plurality of coordinates that respectively correspond to the plurality of parameters. The operations include determining a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function, wherein the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function. The operations include clipping a respective current first moment for each of the plurality of coordinates of the gradient of the loss function based at least in part on the respective adaptive per-coordinate threshold for the coordinate to obtain a current update value for the coordinate. The operations include determining an updated set of values for the plurality of parameters of the machine-learned model based at least in part on a respective previous value for each of the plurality of parameters, the current update value for each coordinate, and a learning rate.
+-
+Another example aspect is directed to one or more non-transitory computer-readable media that store a machine-learned model that has been trained through execution of operations. The operations include, for each of a plurality of iterations: determining a gradient of a loss function that evaluates a performance of the machine-learned model that comprises a plurality of parameters, wherein the gradient of the loss function comprises a plurality of coordinates that respectively correspond to the plurality of parameters; determining a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function, wherein the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function; clipping a respective current first moment for each of the plurality of coordinates based at least in part on the respective adaptive per-coordinate threshold for the coordinate to obtain a current update value for the coordinate; and determining an updated set of values for the plurality of parameters of the machine-learned model based at least in part on a respective previous value for each of the plurality of parameters, the current update value for each coordinate, and a learning rate.
+-
+Other aspects of the present disclosure are directed to various systems, apparatuses, non-transitory computer-readable media, user interfaces, and electronic devices.
+-
+These and other features, aspects, and advantages of various embodiments of the present disclosure will become better understood with reference to the following description and appended claims. The accompanying drawings, which are incorporated in and constitute a part of this specification, illustrate example embodiments of the present disclosure and, together with the description, serve to explain the related principles.
+BRIEF DESCRIPTION OF THE DRAWINGS
+-
+Detailed discussion of embodiments directed to one of ordinary skill in the art is set forth in the specification, which makes reference to the appended figures, in which:
+-
+FIG. 1A depicts a block diagram of an example computing system according to example embodiments of the present disclosure.
+-
+FIG. 1B depicts a block diagram of an example computing device according to example embodiments of the present disclosure.
+-
+FIG. 1C depicts a block diagram of an example computing device according to example embodiments of the present disclosure.
+-
+FIG. 2 depicts a flow chart diagram of an example method to optimize machine-learned models according to example embodiments of the present disclosure.
+-
+FIG. 3A depicts a flow chart diagram of an example method to determine a current update value according to example embodiments of the present disclosure.
+-
+FIG. 3B depicts a flow chart diagram of an example method to determine a current update value according to example embodiments of the present disclosure.
+-
+FIGS. 4A-F depict example experimental results according to example embodiments of the present disclosure.
+-
+FIG. 5 depicts example experimental results according to example embodiments of the present disclosure.
+-
+FIGS. 6A-B depict example experimental results according to example embodiments of the present disclosure.
+-
+FIG. 7 depicts example experimental results according to example embodiments of the present disclosure.
+-
+Reference numerals that are repeated across plural figures are intended to identify the same features or components in various implementations.
+DETAILED DESCRIPTION
+-
+Generally, the present application is directed to systems and methods that perform adaptive optimization with improved convergence properties. The adaptive optimization techniques herein are useful in various optimization scenarios, including, for example, training a machine-learned model, such as, for example, a neural network. In particular, according to one aspect of the present disclosure, a computing system implementing the adaptive optimization techniques described herein can, over a plurality of iterations, employ an adaptive per-coordinate gradient clipping threshold to ensure faster convergence, particularly when the noise in stochastic gradients is heavy tailed. As one example, some of the adaptive optimization techniques proposed by the present disclosure can clip, at each of the plurality of iterations, the respective current first moment of each coordinate of the gradient of a loss function based in part on the respective adaptive per-coordinate threshold for the coordinate. The proposed adaptive optimization techniques can use the respective clipped current first moment to determine a current update value for the respective coordinate of the gradient of the loss function. Using the current update value for each coordinate, a learning rate, and a previous value of the plurality of coordinates for each of the parameters, the adaptive optimization techniques can determine an updated set of values for the parameters of the machine-learned model. Using the current first moment for each coordinate, including the clipped current first moments for some coordinates, the system can determine a current and updated gradient of the loss function without being excessively influenced by those coordinates with large variances. The systems and methods of the present disclosure provide guaranteed convergence when the noise is heavy tailed, converging faster than certain existing techniques, and providing superior generalization capacity. Faster convergence during training can result in savings of computer resources such as conservation of processor usage, memory usage, and/or network bandwidth.
+-
+According to aspects of the present disclosure, the respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function can be determined based on one or more previous adaptive per-coordinate thresholds for the coordinate and an exponential moving average of past gradients raised to an alpha moment value.
+-
+In some examples, the respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function can be determined based on a sum of an exponential average of past and current gradients and a previous adaptive per-coordinate threshold. Using values of alpha moment=(1,2] to determine the adaptive per-coordinate threshold to clip the respective current first moment of the coordinate places a conservative bound on the exponential moving average of past gradients. In some examples, the respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function can be determined based on a square root of the exponential moving average of the square of the past gradients for said coordinate.
+-
+According to aspects of the present disclosure, a computing system implementing the example adaptive coordinate-wise clipping techniques described herein can determine a respective current first moment based at least in part on one or more previous respective current first moments for the coordinate and the gradient of the loss function. The computing system implementing the example adaptive per-coordinate clipping techniques described herein can clip the respective current first moment for the coordinate based at least in part on the respective adaptive per-coordinate threshold to obtain a current update value for the coordinate. In some examples, if the respective adaptive per-coordinate threshold divided by a value indicative of the current first moment for said coordinate is less than 1, the current first moment value can be clipped by setting the current update value for the coordinate equal to the respective adaptive per-coordinate threshold for the coordinate times the respective current first moment divided by the value indicative of the respective current first moment for the coordinate. Thus, if a coordinate of the gradient of the loss function has a large variance or excessively influences the update to the gradient of the loss function, the respective first current moment for that coordinate can be clipped using the respective adaptive per-coordinate threshold by setting the current update value for the coordinate equal to the respective adaptive per-coordinate threshold for the coordinate time the respective current first moment divided by the value indicative of the respective current first moment for the coordinate. In some examples, if the respective adaptive per-coordinate threshold divided by a value indicative of the current first moment for said coordinate is greater than 1, the first current moment value is not clipped by setting the current update value for said coordinate equal to the current first moment for said coordinate.
+-
+More particularly, although SGD performs very well in many training tasks such as ImageNet classification, often outperforming more adaptive methods such as Adam, AMSGrad, its performance deteriorates in certain tasks that necessitate the use of adaptive methods that employ adaptive per parameter learning rates. For example, in settings where the gradient noise norm is heavy tailed, it is necessary to use adaptive techniques to stabilize updates because in such settings, some stochastic gradients can be much larger than the mean and can excessively influence the SGD updates. This makes SGD unstable and leads to its poor performance, with non-convergence in certain situations, e.g., strongly convex function with heavy tailed noise.
+-
+As demonstrated herein, one cause for such poor performance is the excessive influence of some gradients on the SGD updates. In the sections below, the present disclosure provides an explicit example of an optimization setting where SGD performance degrades, and previous convergence proof fails. Further, the present disclosure provides an explicit example of training a neural network with heavy-tailed noise where the algorithm proposed in the present disclosure outperforms the Adam algorithm.
+-
+According to an aspect of the present disclosure, the systems and methods provided herein fix the issues mentioned above by adaptive coordinate-wise clipping for each iteration. To that end, the present disclosure proposes a novel adaptive-threshold coordinate-wise clipping algorithm to clip the variances (e.g., a first moment for a coordinate) of those coordinates of the gradient of the loss function that have a large variance to stabilize the gradient updates adaptively.
+-
+According to some aspects of the present disclosure, a computing system implementing the example adaptive per-coordinate clipping techniques described herein, can update a set of values for a plurality of parameters of the machine-learned models being optimized based at least in part on the previous values of the plurality of parameters, the current update value for each coordinate of the gradient of the loss function and a learning rate. In some examples, the learning rate can be constant. For example, the system can adaptively determine the coordinate-wise clipping threshold and a constant step-size or learning rate. Using a simpler update scheme involving a constant learning rate avoids scenarios wherein the learning rate decreases or increases iteration-over-iteration. Some optimization algorithms like Adam, RMSProp, etc., use a decreasing learning rate to update the values of the plurality of parameters. However, a simpler update scheme allows ACClip to take larger steps that Adam or other optimization algorithms and hence converge slightly faster.
+-
+The convergence guarantee for SGD breaks when the stochastic gradient descent does not have a bounded second moment, for e.g., in tasks with heavy tailed noise norm. To ensure convergence, the present disclosure suggests clipping the stochastic gradients for those coordinates with large variances. While clipping does introduce more bias, in some examples, the clipping threshold can be tuned to trade-off between the variance and the bias. For example, smaller threshold values for clipping imply larger bias. In examples where the noise is heavy tailed, the bias introduced by clipping can be offset by picking a smaller threshold. As another example, if the noise is heavy tailed with respect to only certain coordinates of the gradient of the loss function, aspects of the present disclosure that provide adaptive coordinate-wise clipping can clip only those coordinates which are more heavy tailed and converge faster. Thus, adaptive coordinate-wise clipping can converge faster in situations where noise is heavy tailed only for certain coordinates by clipping the variance of only those coordinates with heavy tailed noise norm. Thus, the optimization techniques described herein can provide the benefits of use of an adaptive learning rate, while avoiding certain scenarios in which existing adaptive optimization techniques fail to converge (e.g., scenarios which result in learning rates that are not monotonically non-increasing). The systems and methods of the present disclosure provide a number of technical effects and benefits, including, as examples, providing guaranteed convergence, while also reducing the number of hyperparameters, converging faster than certain existing techniques, and providing superior generalization capacity.
+-
+Faster and guaranteed convergence, as provided by the techniques described herein, has a number of technical benefits. As examples, faster convergence means that the training operations require less memory usage, less processor usage, and decreased peak processor requirements. Guaranteed convergence provides more certainty and efficiency in scheduling multiple jobs.
+-
+Example implementations of aspects of the present disclosure will now be discussed in further detail. The example algorithms and other mathematical expressions provided below are examples of possible ways to implement aspects of the present disclosure. The systems and methods of the present disclosure are not limited to the example implementations described below.
+-
+Example Optimization Setup
+-
+A flexible and example framework to analyze iterative optimization methods is neural network training with heavy tailed noise. In such a network, neural network training can be seen as minimizing a differentiable stochastic function ƒ(x)=
+ξ[ƒ(x,ξ)], where ƒ:
+d→
+can be potentially nonconvex. Each iteration of the training can assume access to an unbiased stochastic gradient g(x)=∇ƒ(x,ξ) corresponding to the parameters x, and also assume finite α moment.
+-
+Assumption 1—There exists positive real numbers α∈(1,2] and G>0 such that for all x,
+[∥g(x)∥
+α]≤G
+α. Assumption 1 is a weaker assumption than the standard bounded second moment assumption. The possibility that the variance could be unbounded has a profound impact on the optimization process. In some examples, the variance of g(x) is unbounded while simultaneously satisfying the above assumption for α<2, e.g. the Pareto distribution. More particularly, in some examples, previous convergence proofs for SGD fail due to the
+[∥g∥
+2] in the inequality. One way to overcome the problem of unbounded variance, while ensuring
+convergence even under heavy-tailed noise, is to adaptively clip the heavy tailed coordinates of the gradient.
+-
+Example Discussion of Generic Gradient Based Algorithms
+-
+A framework of gradient based algorithms is now provided that gives insights into the differences between different gradient based optimization algorithms and is useful for understanding the flaws in a few popular methods when the gradient noise norm is heavy tailed. Algorithm 1 provides an example of a general SGD framework that encapsulates clipping.
+-
+|
+Algorithm 1: Example Gradient Based Optimization Setup |
+|
+|
+| x, mk ← x0, 0 |
+| for k = 1,•, T do |
+| mk ← β1mk−1 + (1 − β1)gk |
+| ĝk ← clip(τk, mk) |
+| xk ← xk−1 − ηkĝk |
+| end for |
+| return xK, where random variable K is supported on {1, ... , T}. |
+|
+return x
+K,
+-
+However, with heavy tailed noise norms in gradients, in some examples, SGD convergence breaks down. For example, when the stochastic gradient does not have bounded second moment, the optimization solution in SGD breaks down and does not converge. One way to control the variance is by clipping the stochastic gradients. While clipping the gradient introduces some additional bias, the clipping threshold can be (possibly adaptively) tuned to trade-off variance with the introduced bias.
+-
+Some example clipping mechanisms are Global Clipping where a single global threshold is used for all the coordinates of the gradient and Coordinate-wise Clipping using d coordinate-wise thresholds for each respective coordinate of the gradient. GClip and CClip can be described using Algorithm 1 by replacing the clipping step as follows.
+-
+-
+where all operations for CClip are performed element-wise.
+-
+While GClip preserves the update direction and only scales its magnitude, GClip scales the magnitude across all the coordinates of the gradient, irrespective of whether a respective coordinate is heavy tailed. On the other hand, while CClip may not preserve the direction of the gradient, but since CClip scales each coordinate individually, CClip can be configured to clip only the variance of those coordinates whose noise distribution varies significantly. However, to perform such a coordinate-wise variance-bias trade off optimally would require tuning all d thresholds, which could be extremely large in deep learning. Even if tuning were feasible, the noise distribution may be non-stationary and significantly vary as training progresses.
+-
+To address this challenge, the present disclosure proposes Adaptive Coordinate-wise Clipping, which adaptively sets the thresholds for each coordinate for each iteration of the training.
+-
+-
+where operations are element-wise, E is a small number for numerical stability, and a can be set α=1 by default. The use of a coordinate-wise α-moment (as opposed to the traditional second moment) estimates B=[|gk α|]1/α in Assumption 1. Since [|gk α|]1/α is increasing in α≥1, using α=1 is a conservative bound on B when the true a is unknown. Smaller threshold values of τk imply smaller variance, but also higher bias. If the noise distribution is very heavy-tailed (or has a large variance), one could compensate by picking a smaller threshold. A value of β1=0.9 and β2=0.999 is typically recommended in practice.
+In some examples, Adam without momentum implicitly behaves as ACClip without momentum. For instance, when β1=0, the update for Adam and ACClip can be rewritten as SGD with effective step-sizes hAdam and hclip respectively
+-
+-
+Given any set of parameters for RMSProp, setting the parameters for ACClip as
+-
+Results in
+-
+-
+Thus, the two algorithms differ in coordinate-wise step size by at most a factor of 2 and Adam can be seen as ACClip where Tk is set using √{square root over (vk)}, which estimates [|gk|2]1/2, and a correspondingly decreasing step-size. While Adam uses an estimate of [|gk|2]1/2, and a decreasing learning rate, ACClip uses a simpler update scheme where Tk is set using an estimate of [|gk|] and a constant step-size. This allows ACClip to take larger steps than Adam and hence converge faster than Adam.
+-
+Example Discussion of Convergence of SGD
+-
+As will be shown below, gradient clipping, particularly when the gradient noise is heavy tailed, ensures convergence for both convex and non-convex functions. Gradient clipping can be an optimal strategy under strongly convex settings.
+-
+Example frameworks with strongly-convex functions and for smooth non-convex functions are described below. As an example, consider Theorem 1—that ƒ is a μ-strongly convex function and the noise satisfies assumption 1. Then let {xk} be the iterates of Algorithm 1 using GClip, clipping parameter τk=Gkα-1 and steps-size
+-
+-
+The output can be a j-weighted combination of the iterates: x k=Σj=1 kjxj-1/(Σj=1 kj). Then the output x k satisfies:
+-
+-
+Note that with α=2 and with bounded second moment results in exactly the optimal SGD rate of (G2/μk). This rate is optimal for every α∈(1,2]. For any other α∈(1,2), the performance of GClip gracefully degrades. Essentially, SGD's proof fails. Similarly, it can be understood that the rates of convergence recover to an optimal stationary point for smooth non-convex functions.
+-
+As another example, consider Theorem 2—ƒ is an L-smooth function and the noise satisfies assumption 1. Then let {xk} be the iterates of Algorithm 1 using GClip with momentum β=0, constant step-size
+-
+-
+and constant clipping parameter
+-
+-
+Then, the sequence {xk} satisfies
+-
+-
+The rates of convergence for the non-convex case exactly match those of the usual SGD rates of (1/√{square root over (k)}) when α=2 and gracefully degrades for α∈(1,2]. Thus, GClip converges for both convex and non-convex functions under Assumption 1. However, Assumption 1 is quite crude and summarizes noise into a single number G. The noise present in the different gradient coordinates can be quite varied and summarizing the noise into a single number G does not consider the impact of only those coordinates whose variances are very large. However, CClip clips each coordinate independently, clipping only those coordinates whose variance is very large. This selective clipping allows CClip, if tuned properly, to have a significantly better and faster convergence when compared to GClip.
+-
+The previous examples assumed a global bound on the α-moment of the norm of the stochastic gradient is bounded by G. However, there is a possibility that G might be hiding some dimension dependence d. A more detailed model of the noise is needed in order to understand this dependence. For example, consider Assumption 2: {g
+i(x)} to be the coordinate-wise gradients for i∈[d]. Assuming that there exist constants {B
+i}≥0 and α∈(1,2] such that E[|g
+i(x)|
+α]≤B
+i α, denoting B=[B
+1; B
+2; . . . ; B
+d]∈
+d, B
+a=ΣB
+i a 1/a . Under this more detailed assumption, it can be shown that if ƒ is μ-strongly convex, then with appropriate step-sizes and averaging, the output
+x k satisfies
+-
+-
+This convergence has a strong dependence on d which is a problem for deep networks with a large number of dimensions. Per coordinate clipping avoids such dimensional dependence. For example, consider Theorem 3—if we clip coordinate-wise under assumption 2 with τk=Bkα-1 to obtain the sequence {xk}, and if ƒ is μ-strongly convex, with appropriate step-sizes and averaging, the output x k satisfies
+-
+-
+Thus, per-coordinate clipping has a better dimensional dependence. This difference in the dependence is based on two sources: coordinate-wise clipping can adapt to different Bi in each coordinate and the global L2 clipping does not align with the geometry of coordinate-wise noise. A similar comparison between GClip and CClip for non-convex conditions yields similar results with CClip outperforming GClip.
+-
+As another example, consider Theorem 4—a problem ƒ which is 1-strongly convex and 1-smooth (μ=1 and L=1), and stochastic gradients which satisfy Assumptions 1 and 2 with G, ∥B∥≤1 such that the output xk of the algorithm after processing k stochastic gradients has an error
+-
+-
+for any α∈(1,2] and any (possibly randomized) algorithm.
+-
+As disclosed herein, a strong lower-bound for the class of strongly convex functions with stochastic gradients satisfying [|g(x)|α]≤1 matches the upper bounds of Theorems 1 and 2 for strongly-convex functions, showing that the simple clipping mechanism of Algorithm 1 is (up to constants) theoretically optimal, providing a strong justification for its use.
+-
+Example Devices and Systems
+-
+FIG. 1A depicts a block diagram of an example computing system 100 according to example embodiments of the present disclosure. The system 100 includes a user computing device 102, a server computing system 130, and a training computing system 150 that are communicatively coupled over a network 180.
+-
+The user computing device 102 can be any type of computing device, such as, for example, a personal computing device (e.g., laptop or desktop), a mobile computing device (e.g., smartphone or tablet), a gaming console or controller, a wearable computing device, an embedded computing device, or any other type of computing device.
+-
+The user computing device 102 includes one or more processors 112 and a memory 114. The one or more processors 112 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, an FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected. The memory 114 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof. The memory 114 can store data 116 and instructions 118 which are executed by the processor 112 to cause the user computing device 102 to perform operations.
+-
+In some implementations, the user computing device 102 can store or include one or more machine-learned models 120. For example, the machine-learned models 120 can be or can otherwise include various machine-learned models such as neural networks (e.g., deep neural networks) or other types of machine-learned models, including non-linear models and/or linear models. Neural networks can include feed-forward neural networks, recurrent neural networks (e.g., long short-term memory recurrent neural networks), convolutional neural networks or other forms of neural networks.
+-
+In some implementations, the one or more machine-learned models 120 can be received from the server computing system 130 over network 180, stored in the user computing device memory 114, and then used or otherwise implemented by the one or more processors 112. In some implementations, the user computing device 102 can implement multiple parallel instances of a single machine-learned model 120.
+-
+Additionally or alternatively, one or more machine-learned models 140 can be included in or otherwise stored and implemented by the server computing system 130 that communicates with the user computing device 102 according to a client-server relationship. For example, the machine-learned models 140 can be implemented by the server computing system 140 as a portion of a web service. Thus, one or more models 120 can be stored and implemented at the user computing device 102 and/or one or more models 140 can be stored and implemented at the server computing system 130.
+-
+The user computing device 102 can also include one or more user input component 122 that receives user input. For example, the user input component 122 can be a touch-sensitive component (e.g., a touch-sensitive display screen or a touchpad) that is sensitive to the touch of a user input object (e.g., a finger or a stylus). The touch-sensitive component can serve to implement a virtual keyboard. Other example user input components include a microphone, a traditional keyboard, or other means by which a user can provide user input.
+-
+The server computing system 130 includes one or more processors 132 and a memory 134. The one or more processors 132 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, an FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected. The memory 134 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof. The memory 134 can store data 136 and instructions 138 which are executed by the processor 132 to cause the server computing system 130 to perform operations.
+-
+In some implementations, the server computing system 130 includes or is otherwise implemented by one or more server computing devices. In instances in which the server computing system 130 includes plural server computing devices, such server computing devices can operate according to sequential computing architectures, parallel computing architectures, or some combination thereof.
+-
+As described above, the server computing system 130 can store or otherwise include one or more machine-learned models 140. For example, the models 140 can be or can otherwise include various machine-learned models. Example machine-learned models include neural networks or other multi-layer non-linear models. Example neural networks include feed forward neural networks, deep neural networks, recurrent neural networks, and convolutional neural networks.
+-
+The user computing device 102 and/or the server computing system 130 can train the models 120 and/or 140 via interaction with the training computing system 150 that is communicatively coupled over the network 180. The training computing system 150 can be separate from the server computing system 130 or can be a portion of the server computing system 130.
+-
+The training computing system 150 includes one or more processors 152 and a memory 154. The one or more processors 152 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, an FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected. The memory 154 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof. The memory 154 can store data 156 and instructions 158 which are executed by the processor 152 to cause the training computing system 150 to perform operations. In some implementations, the training computing system 150 includes or is otherwise implemented by one or more server computing devices.
+-
+The training computing system 150 can include a model trainer 160 that trains the machine-learned models 120 and/or 140 stored at the user computing device 102 and/or the server computing system 130 using various training or learning techniques, such as, for example, backwards propagation of errors. In some implementations, performing backwards propagation of errors can include performing truncated backpropagation through time. The model trainer 160 can perform a number of generalization techniques (e.g., weight decays, dropouts, etc.) to improve the generalization capability of the models being trained.
+-
+In particular, the model trainer 160 can train the machine-learned models 120 and/or 140 based on a set of training data 162. The training data 162 can include, for example, training data divided into a number of minibatches. The model trainer 160 can perform any of the optimization techniques described herein including, as examples, Algorithm 1 and any variants described herein using any of the clipping techniques described herein.
+-
+In some implementations, if the user has provided consent, the training examples can be provided by the user computing device 102. Thus, in such implementations, the model 120 provided to the user computing device 102 can be trained by the training computing system 150 on user-specific data received from the user computing device 102. In some instances, this process can be referred to as personalizing the model.
+-
+The model trainer 160 includes computer logic utilized to provide desired functionality. The model trainer 160 can be implemented in hardware, firmware, and/or software controlling a general purpose processor. For example, in some implementations, the model trainer 160 includes program files stored on a storage device, loaded into a memory and executed by one or more processors. In other implementations, the model trainer 160 includes one or more sets of computer-executable instructions that are stored in a tangible computer-readable storage medium such as RAM hard disk or optical or magnetic media.
+-
+The network 180 can be any type of communications network, such as a local area network (e.g., intranet), wide area network (e.g., Internet), or some combination thereof and can include any number of wired or wireless links. In general, communication over the network 180 can be carried via any type of wired and/or wireless connection, using a wide variety of communication protocols (e.g., TCP/IP, HTTP, SMTP, FTP), encodings or formats (e.g., HTML, XML), and/or protection schemes (e.g., VPN, secure HTTP, SSL).
+-
+FIG. 1A illustrates one example computing system that can be used to implement the present disclosure. Other computing systems can be used as well. For example, in some implementations, the user computing device 102 can include the model trainer 160 and the training dataset 162. In such implementations, the models 120 can be both trained and used locally at the user computing device 102. In some of such implementations, the user computing device 102 can implement the model trainer 160 to personalize the models 120 based on user-specific data.
+-
+FIG. 1B depicts a block diagram of an example computing device 10 according to example embodiments of the present disclosure. The computing device 10 can be a user computing device or a server computing device.
+-
+The computing device 10 includes a number of applications (e.g., applications 1 through N). Each application contains its own machine learning library and machine-learned model(s). For example, each application can include a machine-learned model. Example applications include a text messaging application, an email application, a dictation application, a virtual keyboard application, a browser application, etc.
+-
+As illustrated in FIG. 1B, each application can communicate with a number of other components of the computing device, such as, for example, one or more sensors, a context manager, a device state component, and/or additional components. In some implementations, each application can communicate with each device component using an API (e.g., a public API). In some implementations, the API used by each application is specific to that application.
+-
+FIG. 1C depicts a block diagram of an example computing device 50 according to example embodiments of the present disclosure. The computing device 50 can be a user computing device or a server computing device.
+-
+The computing device 50 includes a number of applications (e.g., applications 1 through N). Each application is in communication with a central intelligence layer. Example applications include a text messaging application, an email application, a dictation application, a virtual keyboard application, a browser application, etc. In some implementations, each application can communicate with the central intelligence layer (and model(s) stored therein) using an API (e.g., a common API across all applications).
+-
+The central intelligence layer includes a number of machine-learned models. For example, as illustrated in FIG. 1C, a respective machine-learned model (e.g., a model) can be provided for each application and managed by the central intelligence layer. In other implementations, two or more applications can share a single machine-learned model. For example, in some implementations, the central intelligence layer can provide a single model (e.g., a single model) for all of the applications. In some implementations, the central intelligence layer is included within or otherwise implemented by an operating system of the computing device 50.
+-
+The central intelligence layer can communicate with a central device data layer. The central device data layer can be a centralized repository of data for the computing device 50. As illustrated in FIG. 1C, the central device data layer can communicate with a number of other components of the computing device, such as, for example, one or more sensors, a context manager, a device state component, and/or additional components. In some implementations, the central device data layer can communicate with each device component using an API (e.g., a private API).
+-
+Example Methods
+-
+FIG. 2 depicts a flow chart diagram of an example method to perform according to example embodiments of the present disclosure. Although FIG. 2 depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particularly illustrated order or arrangement. The various steps of the method 200 can be omitted, rearranged, combined, and/or adapted in various ways without deviating from the scope of the present disclosure.
+-
+At 202, a computing system can determine a gradient of a loss function that evaluates a performance of a machine-learned model that comprises a plurality of parameters, wherein the gradient of the loss function comprises a plurality of coordinates that respectively correspond to the plurality of parameters.
+-
+At 204, the computing system can determine a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function, wherein the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function. For example, in some implementations, determining the respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function comprises determining the respective adaptive per-coordinate threshold based on a sum of an exponential average of past and current gradients and a previous adaptive per-coordinate threshold. In some examples, determining the adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function comprises determining the respective adaptive per-coordinate threshold based at least in part on one or more previous adaptive per-coordinate thresholds for said coordinate and an exponential moving average of past gradients raised to an alpha moment value. In some examples, determining the adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function comprises determining the respective adaptive per-coordinate threshold based at least in part on an exponential moving average of past gradients and the respective previous adaptive per-coordinate threshold for the said coordinates.
+-
+At 206, the computing system can clip a respective current first moment for each coordinate based at least in part on the respective adaptive per-coordinate threshold for said coordinate.
+-
+At 208, the computing system can obtain a current update value for each coordinate of the gradient of the loss function based on the respective clipped current first moment.
+-
+At 210, the computing system can update a set of values for the plurality of parameters of the machine-learned model based at least in part on a respective previous value for each of the plurality of parameters, the current update value for each coordinate, and a learning rate.
+-
+After 210, method 200 can optionally return to 202 and again determine a gradient of the loss function evaluated for the machine-learned model with respect to a different batch of training data. Thus, in some implementations, method 200 can be performed iteratively. The iterative look can stop when one or more stopping criteria are met. The stopping criteria can be any number of different criteria including as examples, a loop counter reaching a predefined maximum, iteration over iteration change in parameter adjustments falling below a threshold, the gradient being below a threshold value, and/or various other criteria.
+-
+FIG. 3A depicts a flow chart diagram of an example method to determine a current update value according to example embodiments of the present disclosure. Although FIG. 3A depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particularly illustrated order or arrangement. The various steps of the method 300 can be omitted, rearranged, combined, and/or adapted in various ways without deviating from the scope of the present disclosure.
+-
+At 302, the computing system can determine a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function. In some examples, the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function.
+-
+At 304, the computing system can determine an intermediate value equal to the adaptive per-coordinate threshold divided by a value indicative of the respective current first moment.
+-
+At 306, the computing system can determine that the intermediate value is less than 1. Based on determining that the intermediate value is less than 1, at 308, the computing system can determine a current update value for the respective coordinate by setting the current update for said coordinate equal to the respective adaptive per-coordinate threshold times the respective current first moment divided by the value indicative of the respective current first moment for the coordinate.
+-
+FIG. 3B depicts a flow chart diagram of an example method to determine a current update value according to example embodiments of the present disclosure. Although FIG. 3B depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particularly illustrated order or arrangement. The various steps of the method 350 can be omitted, rearranged, combined, and/or adapted in various ways without deviating from the scope of the present disclosure.
+-
+At 352, the computing system can determine a respective adaptive per-coordinate threshold for each of the plurality of coordinates of the gradient of the loss function. In some examples, the respective adaptive per-coordinate threshold for each coordinate is based at least in part on a previous adaptive per-coordinate threshold for the coordinate and the gradient of the loss function.
+-
+At 354, the computing system can determine an intermediate value equal to the adaptive per-coordinate threshold divided by a value indicative of the respective current first moment.
+-
+At 356, the computing system can determine that the intermediate value is less than 1. Based on determining that the intermediate value is greater than 1, at 358, the computing system can determine a current update value for the respective coordinate by setting the current update for said coordinate equal to the respective current first moment for said coordinate.
+-
+Example Discussion of Experimental Results
+-
+A significant factor for the difference in Adam and SGD performance on BERT and ImageNet comes from the distribution of the heavy tailed distribution of stochastic gradients. There has been little study of the actual stochastic gradient noise distributions in neural network training. To understand gradient noise and its effects, the present disclosure treats noise as a high dimensional vector instead of treating deviations in each coordinate as scalar noises to estimate tail index. Further, the present disclosure focuses on the convergence of optimization algorithms and how heavy tailed gradient noise norm affects optimization and convergence instead of focusing on the consistence of the index estimator.
+-
+The present disclosure compares noise distributions while training two deep learned models, namely BERT on Wikipedia dataset and ResNet on ImageNet. For example, FIG. 4A depicts a histogram comparing the Validation Loss for ResNet trained on ImageNet for SGD and Adam. SGD with momentum clearly outperforms Adam. FIG. 4B depicts a histogram comparing the Validation Loss for BERTbase pretraining between SGD and Adam with momentum. Although the hyperparameters for SGD momentum are fine-tuned, there is still a large performance gap between SGD and Adam.
+-
+For ResNet trained on ImageNet, the gradient norms of the mini batch gradients are typically quite small and well concentrated around the centers, whereas for BERT these gradient norms take a wide range of values which are sometimes much larger than their means. For example, while training BERT and ResNet, the gradient noise norm can be computed as ∥g−∇ƒ(x)∥, where g is the stochastic gradient computed from a minibatch sample. When plotted, the gradient noise norm of BERT appears to be heavy tailed, whereas that of ResNet appears to be Gaussian (with a well concentrated center) in nature. FIGS. 4C and 4D are histograms depicting the gradient noise norm for ResNet and BERT respectively. It can be observed that the noise distribution for BERT appears to be heavy-tailed whereas the noise distribution for ResNet is well concentrated in the center.
+-
+FIGS. 4E and 4F depict histograms indicative of the estimation of variance of stochastic gradients
+-
+-
+with respect to the sample size used in the estimation of variance in stochastic gradients while training BERT and ResNet respectively. As can be seen from the figures, while the corresponding estimator converges for Imagenet, the empirical variance does not converge in BERT training even as the sample size approaches 107. Thus, heavy tailed noise distribution of the gradients is one of the main aspects that determines the performance of SGD and adaptive methods.
+-
+FIG. 5 depicts a table indicative of error bounds for strongly convex and non-convex functions after k iterations using SGD, GClip, and CClip. As disclosed herein, gradient clipping ensures convergence for both convex and non-convex functions under heavy-tailed noise. As seen in FIG. 5, for α-moment [∥g(x)∥α]≤Gα (Assump 1) and coordinate-wise moments [∥gi(x)|α]≤Bi α (Assump 2), which satisfy G2≤dB2, in the standard setting (α=2), GClip recovers the optimal rates of SGD. For heavy-tailed noise (α∈(1,2)), GClip converges both for convex and non-convex functions, whereas the proof for SGD fails, denoted as N/A. However, under a more fine-grained noise model, CClip has better convergence rates as compared to both SGD and GClip. Further, matching lower-bounds for all α∈(1,2] prove the optimality of clipping methods over other SGD methods.
+-
+A more detailed comparison between ImageNet and BERT training is provided to analyze the cause of the heavy-tailedness and show that both the architecture and the data play a role in the difference in performance of the different algorithms. For example, a comparison of ACClip on BERT per-training and fine-tuning tasks demonstrate ACClip's advantages over Adam.
+-
+Important to understanding the impact of heavy tailed gradient noise norm is understanding the effect of model architecture and training data on the shape of gradient noise, and to understand how this shape evolves during training. To understand the effect of model architecture on the shape of gradient noise, the noise distribution in an Attention and a ResNet-like model on both Wikipedia and synthetic Gaussian data can be studied. Using BERTbase model as the Attention model, and the ResNet is constructed by removing the self-attention modules in the transformer blocks. Gaussian synthetic data is generated by replacing the token embedding layer with normalized Gaussian input. From the models, heavy-tailed noises are observed in the Attention model independently of the input data. For the ResNet model, it can be observed that Gaussian input leads to Gaussian noise while Wikipedia data makes the noise to be heavy-tailed. Therefore, the noise pattern results from both the model architecture as well as the data distribution.
+-
+During training, the noise distribution is non-stationary during BERT training as the noise is becoming increasingly more concentrated. In contrast, for the ResNet model on ImageNet, the shape of the noise distribution remains almost unchanged. This result supports the use of exponential moving average as an estimator for the underlying non-stationary distribution to accelerate optimization.
+-
+To evaluate the empirical performance of the proposed ACClip algorithm, a comparison of ACClip and Adam on BERT pre-training as well fine-tuning using the SQUAD v1.1 dataset is performed. Adam optimizer can be used and the same training setup as in the BERT paper Devlin et al. For ACClip, setting lr=1e−4,β1=0.9, β2=0.99, ϵ=1e−5, and wd=1e−5, can be performed to compare the performance between ACCLip and Adam on both setups on BERT models of three different sizes, BERTbase with 6 and 12 layers as well as BERTlarge with 24 layers.
+-
+FIG. 6A depicts a table including a comparison of Validation Loss and LM Accuracy between Adam and ACClip for BERTbase with 6 layers, 12 layers, and 24 layers. As can be seen from FIG. 6A, ACClip achieves lower loss and higher masked-LM accuracy for all model sizes.
+-
+FIG. 6B depicts a table including a comparison of the mean and standard deviation of F1 and exact match score for 5 runs on the SQUAD v1.1 dev set. Even for these metrics, the proposed algorithm outperforms Adam for both F1 and an exact match on all model sizes when evaluated on the SQUAD v1.1 fine-tuning task. The experimental results on BERT pretraining and fine-tuning indicate the effectiveness of the proposed algorithm over Adam and other SGD based optimization techniques.
+-
+FIG. 7 depicts a histogram indicating the validation loss for pretraining BERTbase using SGD momentum, GClip, Adam, and ACClip. After performing a hyper-parameter search for all three algorithms, SGD, Adam, and ACClip, it is observed that even after extensive tuning, there remains a large gap between (clipped) SGD momentum and adaptive methods. Furthermore, clipped SGD achieves faster convergence as well as lower final loss compared to standard SGD. Lastly, the proposed optimizer ACClip achieves a lower loss than the Adam. Thus, ACClip achieves lower loss and higher masked-LM accuracy for all model sizes.
+-
+Additional Disclosure
+-
+The technology discussed herein makes reference to servers, databases, software applications, and other computer-based systems, as well as actions taken and information sent to and from such systems. The inherent flexibility of computer-based systems allows for a great variety of possible configurations, combinations, and divisions of tasks and functionality between and among components. For instance, processes discussed herein can be implemented using a single device or component or multiple devices or components working in combination. Databases and applications can be implemented on a single system or distributed across multiple systems. Distributed components can operate sequentially or in parallel.
+-
+While the present subject matter has been described in detail with respect to various specific example embodiments thereof, each example is provided by way of explanation, not limitation of the disclosure. Those skilled in the art, upon attaining an understanding of the foregoing, can readily produce alterations to, variations of, and equivalents to such embodiments. Accordingly, the subject disclosure does not preclude inclusion of such modifications, variations and/or additions to the present subject matter as would be readily apparent to one of ordinary skill in the art. For instance, features illustrated or described as part of one embodiment can be used with another embodiment to yield a still further embodiment. Thus, it is intended that the present disclosure cover such alterations, variations, and equivalents.

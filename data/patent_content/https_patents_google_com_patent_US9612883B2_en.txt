@@ -1,0 +1,801 @@
+US9612883B2 - System and method for large-scale data processing using an application-independent framework - Google Patents
+System and method for large-scale data processing using an application-independent framework Download PDFInfo
+- Publication number
+- US9612883B2 US9612883B2 US14/099,806 US201314099806A US9612883B2 US 9612883 B2 US9612883 B2 US 9612883B2 US 201314099806 A US201314099806 A US 201314099806A US 9612883 B2 US9612883 B2 US 9612883B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- application
+- map
+- intermediate data
+- independent
+- tasks
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/22—Indexing; Data structures therefor; Storage structures
+- G06F16/2282—Tablespace storage structures; Management thereof
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/23—Updating
+- G06F16/2379—Updates performed during online database operations; commit processing
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2453—Query optimisation
+- G06F16/24532—Query optimisation of parallel queries
+-
+- G06F17/30445—
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/48—Program initiating; Program switching, e.g. by interrupt
+- G06F9/4806—Task transfer initiation or dispatching
+- G06F9/4843—Task transfer initiation or dispatching by program, e.g. task dispatcher, supervisor, operating system
+- G06F9/4881—Scheduling strategies for dispatcher, e.g. round robin, multi-level priority queues
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/54—Interprogram communication
+Definitions
+- the disclosed embodiments relate generally to data processing systems and methods, and in particular to a framework for simplifying large-scale data processing.
+- Large-scale data processing involves extracting data of interest from raw data in one or more datasets and processing it into a useful data product.
+- the implementation of large-scale data processing in a parallel and distributed processing environment typically includes the distribution of data and computations among multiple disks and processors to make efficient use of aggregate storage space and computing power.
+- a system and method for large-scale data processing includes operations for automatically handling programming details associated with parallelization, distribution, and fault-recovery.
+- application programmers can process large amounts of data by specifying map and reduce operations.
+- the map operations retrieve data (e.g., key/value pairs) from input data files and produce intermediate data values in accordance with the mapping operations.
+- the reduce operations merge or otherwise combine the intermediate data values in accordance with the reduce operations (e.g., combining intermediate values that share the same key).
+- the system and methods use a master process to manage tasks and one or more local databases to reduce network traffic and file system (FS) reads.
+- FS file system
+- a system for large-scale processing of data in a parallel processing environment includes one or more map modules configured to read input data and to apply at least one application-specific map operation to the input data to produce intermediate data values.
+- An intermediate data structure stores the intermediate data values.
+- the system also includes reduce modules, which are configured to retrieve the intermediate data values from the intermediate data structure and to apply at least one user-specified reduce operation to the intermediate data values to provide output data.
+- the map and/or reduce operations are automatically parallelized across multiple processors in the parallel processing environment.
+- the programs or instructions for handling parallelization of the map and reduce operation are application independent.
+- the input data and the intermediate data values can include key/value pairs and the reduce operation can include combining intermediate data values having the same key.
+- the intermediate data structure can include one or more intermediate data files coupled to each map module for storing intermediate data values.
+- the map and reduce operations can be implemented on different processors coupled to a distributed network.
+- the output data can be written to a file system, which is accessible via the distributed network.
+- a system for large-scale processing of data in a parallel processing environment includes a set of interconnected computing systems. At least one of the computing systems includes a set of application independent map modules configured for reading portions of input files containing data, and for applying at least one application-specific map operation to the data to produce intermediate key-value pairs.
+- the system also includes a set of application independent reduce modules, which are configured to apply at least one application-specific reduce operation to the intermediate key-value pairs so as to combine intermediate values sharing the same key.
+- the application independent map modules and application independent reduce modules are both incorporated into a same process, sometimes called a worker process.
+- FIG. 1 is a block diagram of a large-scale data processing model.
+- FIG. 2 is a block diagram of a large-scale data processing system.
+- FIG. 3 is a block diagram of a large-scale data processing system, including a master process for managing tasks.
+- FIG. 4 is a block diagram of a computer system for the data processing systems shown in FIGS. 2 and 3 .
+- FIG. 5 is a block diagram of a data distribution network for large-scale data processing.
+- FIG. 6 is a flow diagram of an embodiment of a process for assigning tasks to processes.
+- FIG. 7A is a block diagram of an exemplary task status table.
+- FIG. 7B is a block diagram of an exemplary process status table.
+- FIG. 1 is a block diagram of a large-scale data processing model 100 .
+- the model 100 generally includes mapping operations 102 and reduction operations 104 .
+- the mapping operations 102 apply one or more mapping operations to a set of input data ⁇ i (e.g., text files, records, logs, sorted maps, etc.) to provide a set of intermediate data values ⁇ i .
+- the reduction operations 104 apply one or more reduction operations to the set of intermediate data values ⁇ i to provide a set of output data ⁇ i (e.g., tables, sorted maps, record I/O, etc.).
+- the mapping operations 102 are implemented by one or more application-specific mapping functions, which map a set of input data ⁇ i to a set of intermediate data values ⁇ i .
+- the intermediate data values ⁇ i are stored in one or more intermediate data structures. Some examples of intermediate data structures include, without limitation, files, buffers, histograms, count tables and any other suitable data structure or device for storing digital information.
+- the intermediate data values ⁇ i are processed by the reduction operations 104 , which are implemented by one or more application-specific reduction functions, which reduce the set of intermediate data values ⁇ i to a set of output data ⁇ i .
+- the embodiments described here can be performed by a set of interconnected processors that are interconnected by one or more communication networks.
+- FIG. 5 is a block diagram of an exemplary distributed data processing system 500 .
+- the system 500 is used to store data, perform computational tasks, and transmit data between datacenters DC1-DC4.
+- the system may include any number of data centers DCx, and thus the number of data centers shown in FIG. 5 is only exemplary.
+- the system 500 may include dedicated optical links or other dedicated communication channels, as well as supporting hardware such as modems, bridges, routers, switches, wireless antennas and towers, and the like.
+- the network 500 includes one or more wide area networks (WANs) as well as multiple local area networks (LANs).
+- the system 500 utilizes a private network, i.e., the system and its interconnections are designed and operated exclusively for a particular company or customer. Alternatively, a public network may be used.
+- each datacenter includes multiple racks.
+- datacenter 502 (DC1) includes multiple racks 508 a , . . . , 508 n .
+- the racks 508 can include frames or cabinets into which components are mounted.
+- Each rack can include one or more processors (CPUs) 510 .
+- the rack 508 a includes CPUs 510 a , . . . , 510 n (slaves 1-16) and the nth rack 506 n includes multiple CPUs 510 (CPUs 17-31).
+- the processors 510 can include data processors, network attached storage devices, and other computer controlled devices. In some embodiments, at least one of processors 510 operates as a master processor, and controls the scheduling and data distribution tasks performed throughout the network 500 . In some embodiments, one or more processors 510 may take on one or more roles, such as a master and/or slave.
+- a rack can include storage (e.g., one or more network attached disks) that is shared by the one or more processors 510 .
+- the processors 510 within each rack 508 are interconnected to one another through a rack switch 506 . Furthermore, all racks 508 within each datacenter 502 are also interconnected via a datacenter switch 504 . As noted above, the present invention can be implemented using other arrangements of multiple interconnected processors.
+- processors shown in FIG. 5 are replaced by a single large-scale multiprocessor.
+- map and reduce operations are automatically assigned to processes running on the processors of the large-scale multiprocessor.
+- FIG. 2 is a block diagram of a large-scale data processing system 200 .
+- the system 200 provides application programmers with an application-independent framework for writing data processing software that can run in parallel across multiple different machines on a distributed network.
+- the system 200 is typically a distributed system having multiple processors, possibly including network attached storage nodes, that are interconnected by one or more communication networks.
+- FIG. 2 provides a logical view of a system 200 , which in some embodiments may be implemented on a system having the physical structure shown in FIG. 5 .
+- the system 200 operates within a single data center of the system 500 shown in FIG. 5 , while in another embodiment, the system 200 operates over two or more data centers of the system 500 .
+- a set of input files 202 are processed by a first set of processes 204 , herein called map processes, to produce a set of intermediate data, represented here by files 206 .
+- the intermediate data 206 is processed by a second set of processes 208 , herein called reduce processes, to produce output data 210 .
+- each “map process” is a process configured (or configurable) to perform map functions and to execute an application-specific map operator.
+- Each “reduce process” is a process configured (or configurable) to perform reduce functions and to execute an application-specific reduce operator.
+- a control or supervisory process, herein called the work queue master 214 controls the set of processing tasks.
+- the work queue master 214 determines how many map tasks to use, how many reduce tasks to use, which processes and processors to use to perform those tasks, where to store the intermediate data and output data, how to respond to any processing failures, and so on.
+- the work queue master 214 assigns tasks to processes, and that multiple processes may be executed by each of the processors in the group of processors that are available to do the work assigned by the work queue master 214 .
+- the set of processes controlled by the work queue master 214 may be a subset of the full set of processes executed by the system, and furthermore the set of processors available to do the work assigned by the work queue master 214 may be fewer than the full set of processors in the system.
+- Some of the resources of the system may be used for other tasks, such as tasks that generate the input data 202 , or that utilize the output data 210 .
+- some or all of the tasks that generate the input data 202 or utilize the output data 210 may also be controlled or supervised by the work queue master 214 .
+- processors can be added or removed from the processing system during the execution of a map-reduce operation.
+- the work queue master 214 keeps track of the processors in the system and the available processes executing on those processors.
+- Application programmers are provided with a restricted set of application-independent operators for reading input data and generating output data.
+- the operators invoke library functions that automatically handle data partitioning, parallelization of computations, fault tolerance (e.g., recovering from process and machine failures) and I/O scheduling.
+- the only information that must be provided by an application programmer provide is: information identifying of the input file(s), information identifying or specifying the output files to receive output data, and two application-specific data processing operators, hereinafter referred to as map( ) and reduce( )
+- map( ) operator specifies how input data is to be processed to produce intermediate data
+- the reduce( ) operator specifies how the intermediate data values are to be merged or otherwise combined.
+- the disclosed embodiments are not limited to any particular type or number of operators. Other types of operators (e.g., data filters) can be provided, as needed, depending upon the system 200 architecture and the data processing operations required to produce the desired, application-specific results.
+- the application programmers provide a partition operator, in addition to the map( ) and reduce( ) operators. The partition( ) operator, specifies how the intermediate data is to be partitioned over a set of intermediate files.
+- a set of input files 202 are split into multiple data blocks 0, . . . , N ⁇ 1 of either a specified or predefined size (e.g., 64 MB). Alternately, in some embodiments the input files 202 have a predefined maximum size (e.g., 1 GB), and the individual files are the data blocks.
+- a data block is a subset of data that is retrieved during processing. In some embodiments, the data blocks are distributed across multiple storage devices (e.g., magnetic or optical disks) in a data distribution network to fully utilize the aggregate storage space and disk bandwidth of the data processing system.
+- the input data files 202 are stored in one or more data centers DC1-DC4.
+- the work queue master 214 assigns tasks to processors 510 in datacenters where the input files are stored so as to minimize network traffic whenever possible.
+- the work queue master 214 uses input file information received from a file system to determine the appropriate processor or process for executing a task, using a hierarchical decision process. When a process in a processor in a datacenter DC1-DC4 is idle, it requests a task from the work queue master 214 .
+- the work queue master 214 searches the input file information received from the file system (e.g., FS 446 , FIG.
+- the work queue master 214 searches the file information for an unprocessed data block on the same rack 508 as the machine assigned to process the task. If none are available, the work queue master 214 searches the file information for an unprocessed data block in the same datacenter as the machine assigned to process the task. If none are available, the work queue master 214 will search for unprocessed blocks in other datacenters.
+- map( ) and/or reduce( ) operators which are computer programs that process input data and intermediate, respectively.
+- these operators are compiled into binary files 212 suitable for use on a particular processing platform.
+- the binary files 202 are loaded into a work queue master module 214 , which manages jobs submitted by users of the system 200 .
+- the work queue master 214 loads (or causes to be loaded) onto each process to which it allocates a map or reduce task, the library procedures, and the map( ) or reduce( ) operator required to perform the task assigned to the process.
+- the work queue master 214 when it receives a request to process a set of data using a specified set application-specific map( ) reduce( ) and, optionally, partition( ) operators, determines the number of map tasks and reduce tasks to be performed to process the input data. This may be based on the amount of input data to be processed. For example, a job may include 10,000 map tasks and 10 reduce tasks.
+- the work queue master module generates a task status table having entries representing all the tasks to be performed, and then begins assigning those tasks to idle processes. As noted above, tasks may be allocated to idle processes based on a resource allocation scheme (e.g., priority, round-robin, weighted round-robin, etc.).
+- FIG. 6 is a flow diagram of an embodiment of a process 600 for assigning tasks to processes.
+- Process 600 parallelizes a data processing task over as many processes as is consistent with the available computing resources. While the process 600 described below includes a number of steps that appear to occur in a specific order, it should be apparent that the process 600 steps are not limited to any particular order, and, moreover, the process 600 can include more or fewer steps, which can be executed serially or in parallel (e.g., using parallel processors or a multi-threading environment). Further, it should noted that the steps or acts in process 600 are application-independent and are implemented using modules or instructions that are application-independent.
+- the process 600 begins by determining if there are tasks waiting to be assigned to a process (step 606 ). If there are no tasks waiting, then the process 600 waits for all the tasks to complete (step 604 ). If there are tasks waiting, then the process 600 determines if there are any idle processes (step 608 ). If there are idle processes, then the process 600 assigns a waiting task to an idle process (step 610 ) and returns to step 606 . If there are no idle processes, the process 600 waits for an idle process (step 614 ). Whenever a process completes a task, the process sends a corresponding message to the work queue master 214 , which updates the process and task status tables (step 612 ).
+- the work queue master 214 may then assign a new task to the idle process, if it has any unassigned tasks waiting for processing resources. For reduce tasks, the work queue master 214 may defer assigning any particular reduce task to an idle process until such time that the intermediate data to be processed by the reduce task has, in fact, been generated by the map tasks. Some reduce tasks may be started long before the last of the map tasks are started if the intermediate data to be processed by those reduce tasks is ready for reduce processing.
+- the work queue master 214 determines what task was running in the failed process, if any, (B) assigns that task to a new process, waiting if necessary until an idle process becomes available, and (C) updates its process and task status tables accordingly.
+- the work queue master 214 may undertake remedial measures (step 602 ), such as causing the failed process to be restarted or replaced by a new process.
+- the work queue master may further detect when such remedial measures fail and then update its process status table to indicate such failures.
+- FIG. 7A shows an exemplary task status table for keeping track of the status of map and reduce tasks.
+- each task e.g., map, reduce
+- the input files field may specify a portion of an input file (e.g., where the portion comprises a data block) to be processed by the task, or this field may specify portions of two of more input files.
+- the status field indicates the current status of the task (e.g., waiting, in-progress, completed, or failed), which is being performed by the assigned process identified in the process field.
+- the process retrieves data from one or more input files (or the one or more input file portions) identified in the input file field and writes the results of the task ID to one or more output files identified in the output file field.
+- task Red0000 is assigned to process P0033, which is still in progress.
+- the process P0033 retrieves data blocks from input file 12340 (e.g., intermediate file A, FIG. 2 ) and writes the results of the task to output file 14000.
+- the process field in the task status table indicates that no process has yet been assigned to perform that task. It should be apparent that there could be more or fewer fields in the task status table than shown in FIG. 7A , such as multiple fields for identifying output and input files.
+- FIG. 7B shows a process status table for keeping track of the status of all the processes to which the work queue master 214 can assign tasks.
+- each process is assigned to a task and a location.
+- each process is permanently assigned to a particular location (i.e., a particular processor).
+- the status field indicates the current status of the process, which performs the assigned task at the assigned location.
+- process P0010 is “Busy” performing task Map0103 on location CPU011. It should be apparent that there could be more or fewer field in the process status table than shown in FIG. 7B , such as assigning multiple locations assigned to a single task (e.g., parallel processing).
+- the set of application-specific data processing operations that the map( ) operator can perform is constrained.
+- the map( ) operator may be required to process the input data one record at a time, proceeding monotonically from the first record to the last record in the data block being processed.
+- the map( ) operator may be required to generate its output data in the form of key/value pairs. Either the key or value or both can comprise structured data, as long as the data can be encoded into a string.
+- the key may have multiple parts, or the value may have multiple parts.
+- the resulting intermediate data can be mapped to a set of intermediate data files in accordance with a partition( ) operator.
+- An exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the first byte of the key.
+- Another exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the function “hash(Key) modulo N”, where N is a value specified by the application programmer and “hash(Key)” represents the value produced by applying a hash function to the key of the key/value pairs in the intermediate data.
+- the partition operator is always a modulo function and the application programmer only specifies the modulus to be used by the modulo function. In one embodiment, the partition operator is automatically selected by the work queue master 214 , or by one of the application-independent library functions, discussed below.
+- the data blocks 0, . . . , N ⁇ 1 are automatically assigned to map tasks (executed by map processes 204 - 0 , . . . , 204 -N ⁇ 1) in an application independent manner, by the work queue master 214 .
+- the work queue master 214 is configured to determine the number of data blocks to be processed, and to create a corresponding number of instances of the map process 204 . Stated in another way, the work queue master 214 assigns a corresponding number of map tasks to processes, as suitable processes become available.
+- the work queue master 214 Since the number of map tasks may exceed the number of processes available to the work queue master 214 , the work queue master 214 will assign as many map tasks as it can to available processes, and will continue to assign the remaining map tasks to processes as the processes complete previously assigned tasks and become available to take on new tasks.
+- the work queue master 214 uses the task status table and process status tables, described above, to coordinate its efforts.
+- Application independent reduce modules 208 read intermediate data values (e.g., key/value pairs) from the intermediate files 206 .
+- each reduce module 208 reads from only one intermediate file 206 .
+- the reduce modules 208 sort the intermediate data values, merge or otherwise combine sorted intermediate data values having the same key and then write the key and combined values to one or more output files 210 .
+- the intermediate file 206 and the output files 210 are stored in a File System (FS), which is accessible to other systems via a distributed network.
+- FS File System
+- the map and reduce modules 204 and 208 are implemented as user-defined objects with methods to carry out application-specific processing on data using known object oriented programming techniques.
+- a MapReduction base class can be created that includes methods and data for counting the number of input files that contain a particular term or pattern of terms, sorting the results of the sort, eliminating duplicates in the sorted results and counting the number of occurrences of the term.
+- Application programmers can derive other classes from the base class and instantiate the base class as an object in the application code to access its data and methods.
+- the performance of the system 200 may diminish as the amount of data to be processed and thus the number of tasks increases. For instance, performance may be diminished when the size of the data blocks is decreased, thereby increasing the number of map tasks.
+- the intermediate files 206 are stored in the FS, an increase in tasks results in an increase in intermediate file access requests and an associated increase in network traffic.
+- a single work queue master 214 can only handle a limited number of task assignments per time period, beyond which the work queue master 214 begins to limit system performance. Increasing the size of those tasks to accommodate additional jobs could result in load imbalances in the system 200 .
+- FIG. 3 is a block diagram of a large-scale data processing system 300 , including a master process 320 (sometimes called a supervisory process) for managing tasks.
+- a master process 320 (sometimes called a supervisory process) for managing tasks.
+- one or more master processes 320 assign one or more tasks to one or more worker processes 304 and 308 .
+- the master process 320 is a task itself (e.g., task 0) initiated by the work queue master module 314 and is responsible for assigning all other tasks (e.g., mapping and reducing tasks) to the worker processes 304 , 308 , in a master/slave type relationship.
+- the worker processes 304 , 308 include two or more process threads, each of which can be invoked based on the particular task assigned to it by the master process 320 .
+- each worker process 304 invokes a map thread to handle an assigned map task and invokes a reduce thread to handle an assigned reduce task.
+- the worker processes 304 , 308 include one or more additional threads.
+- a distinct thread may be used to receive remote procedure calls (e.g., from the master process) and to coordinate work done by the other threads.
+- a distinct thread may be used to handle remote read requests received from other processors (i.e., peers) in the system.
+- the number of worker processes is equal to the number of machines available in the system 300 (i.e., one worker process per machine). In another embodiment, two or more worker processes are used in each of the machines in the system 300 . If a worker process fails, its task is reassigned to another worker process by the master process 320 . In some embodiments, the master process 320 or the work queue master 314 may undertake remedial measures to repair, restart or replace a failed worker process.
+- the work queue master 314 when the work queue master 314 receives a map/reduce data processing job, the work queue master 314 allocates the job to a master process 320 .
+- the master process 320 determines the number (M) of map tasks and the number (R) of reduce tasks to be performed, and then makes a request to the work queue master 314 for M+R processes (M+R+1, including the master process 320 ) to be allocated to the map/reduce data processing job.
+- the work queue master 314 responds by assigning a number of processes to the job, and sends that information to the master process 320 , which will then manage the performance of the data processing job. If the number of processes requested exceeds the number of processes available, or otherwise exceeds the number of processes that the work queue master 314 is allowed to assign to the job, the number of processes assigned to the job will be less than the number requested.
+- all R of the reduce tasks are all immediately assigned to processes, but the reduce tasks do not begin work (e.g., on data sorting) until the master process 320 informs them that there are intermediate files ready for processing.
+- a single worker process 304 / 308 can be assigned both a map task and a reduce task, simultaneously (with each being executed by a distinct process thread), and therefore assigning reduce tasks to processes at the beginning of the job does not reduce the throughput of the system.
+- the division of input files 302 into data blocks 0, . . . , N ⁇ 1, may be handled automatically by the application independent code.
+- the user may set an optional flag, or specify a parameter, so as to control the size of the data blocks into which the input files are divided.
+- the input data may come from sources other than files, such as a database or in-memory data structures.
+- the input data blocks 0, . . . , N ⁇ 1, which may in some embodiments be treated as key/value pairs, are read by application independent worker processes 304 - 0 , . . . , 304 -N ⁇ 1, as shown in FIG. 3 .
+- the input files 302 can include a variety of data types typically used in data processing systems, including without limitation text files, record I/O, sorted data structures (such as B-trees), tables and the like.
+- Each of the worker processes 304 to which a map task has been assigned applies the application-specific map( ) operator to the respective input data block so as generate intermediate data values.
+- the intermediate data values are collected and written to one or more intermediate files 306 , which are stored locally at the machine (e.g., in one or more local databases) in which the worker process 304 is executed.
+- the intermediate files 306 are retained (i.e., they are persistent) until the reduce phase completes.
+- each of the intermediate files 306 receives output from only one worker process 304 , as shown in FIG. 3 .
+- a worker process 304 completes its assigned task, it informs the master process 320 of the task status (e.g., complete or error). If the task was successfully completed, the worker process's status report is treated by the master process 320 as a request for another task.
+- the system need not write any data to files on local disks. This optimization reduces execution time for map-reduce operations in which the number of worker processes is sufficient to handle all the map tasks at once, and the amount of intermediate data is sufficiently small to be kept in memory.
+- the application-specific Reduce function is both commutative and associative.
+- a special optimization can be used to significantly reduce execution time of the map-reduce task.
+- An example of a situation in which the optimization can be applied is a map-reduce operation for counting the number of occurrences of each distinct word in a large collection of documents.
+- the application-specific map function (sometimes called the map( ) operator elsewhere in this document) outputs a key/value pair for every word w in every document in the collection, where the key/value pair is ⁇ w, 1>.
+- the application-specific reduce function (sometimes called the reduce( ) operator elsewhere in this document) for this example is:
+- Each map task in this example will produce hundreds or thousands of records of the form ⁇ word, 1>.
+- the Reduce function simply adds up the count values.
+- the user may provide an application-specific Combiner function or operator.
+- the Combiner function is invoked with each unique intermediate key and a partial set of intermediate values for the key. This is similar to the Reduce function, except that it gets executed at the end of each Map task by the same machine and process that performed by Map task.
+- the Combiner function partially summarizes the intermediate key/value pairs. In fact, when using a Combiner function, the same function is typically specified for the Combiner and Reduce operations.
+- the partial combining performed by the Combiner operation significantly speeds up certain classes of Map-Reduce operations, in part by significantly reducing the amount of information that must be conveyed from the processors that handle Map tasks to processors handling Reduce tasks, and in part by reducing the complexity and computation time required by the data sorting and Reduce function performed by the Reduce tasks.
+- Application independent worker processes 308 which have been assigned reduce tasks read data from the locally stored intermediate files 306 .
+- the master process 320 informs the worker processes 308 where to find intermediate data files 306 and schedules read requests for retrieving intermediate data values from the intermediate data files 306 .
+- each of the worker processes 308 reads a corresponding one of the intermediate files 306 produced by all or a subset of the worker processes 304 . For example, consider a system in which each of the worker processes 304 assigned a map task outputs M (e.g., 100) intermediate files, which we will call Partion-1,j through Partition-M,j, where j is an index identifying the map task that produced the intermediate files.
+- M e.g. 100
+- the system will have 100 worker processes 308 , Worker-1 to Worker-M, each of which reads a corresponding subset of the intermediate files, Partition-p,j for all valid values of “j,” produced by the worker processes 304 , where “p” indicates the partition assigned to a particular worker process Worker-P ( 304 ) and “j” is an index identifying the map tasks that produced the intermediate files.
+- Each worker process 308 sorts the intermediate data values in the subset of the intermediate files read by that worker process in accordance with the key of the key/value pairs in the intermediate data.
+- the sorting of the key/value pairs is an application independent function of the reduce threads in the worker processes 308 .
+- Each worker process 308 also merges or otherwise combines the sorted intermediate data values having the same key, and writes the key and combined values to one or more output files 310 .
+- the merging or other combining operation performed on the sorted intermediate data is performed by an application-specific reduce( ) operator.
+- the output files 310 are stored in a File System, which is accessible to other systems via a distributed network.
+- a worker process 308 When a worker process 308 completes its assigned reduce task, it informs the master process 320 of the task status (e.g., complete or error). If the reduce task was completed successfully, the worker process's status report is treated by the master process 320 as a request for another task. If the reduce task failed, the master process 320 reassigns the reduce task to another worker process 308 .
+- the task status e.g., complete or error
+- the master process 320 is configured to detect task and processor failures. When a task failure is detected, the master process 320 reassigns the task to another process. In some embodiments, the master process 320 redistributes the work of the failed task over a larger number of tasks so as to complete that task more quickly than by simply re-executing the task on another process. The master process subdivides the work assigned to the failed task to a plurality of newly mini-tasks, and then resumes normal operation by assigning the mini-tasks to available processes. The number of mini-tasks may be a predefined number, such as a number between 8 and 32, or it may be dynamically determined based on the number of idle processes available to the master process.
+- division of the work assigned to the failed task means assigning smaller data blocks to the mini-tasks.
+- division of the work assigned to the failed task may mean assigning the data sorting portion of the reduce task to a larger number of worker processes, thereby performing a distributed sort and merge.
+- the resulting sorted data may, in some embodiments, be divided into a number of files or portions, each of which is then processed using the reduce( ) operator to produce output data.
+- the master process 320 determines all the tasks that ran on the processor, and also determines which of those tasks need to be re-executed (e.g., because the results of the tasks are unavailable and are still needed). The master process 320 then updates its status tables to indicate that these identified tasks are waiting for assignment to worker tasks. Thereafter, re-execution of the identified tasks is automatically handled using the processes and mechanisms described elsewhere in this document.
+- an additional mechanism herein called backup tasks, is used to guard against task failures as well as task slow downs.
+- backup tasks One of the main problems that lengthens the total time taken for a map-reduce operation to complete is the occurrence of “straggler” tasks or machines.
+- a straggler is a process or machine that takes an unusually long time to complete one of the last few map or reduce tasks in the computation. Stragglers can arise for many reasons, including both hardware and software errors or conditions. When a large map-reduce operation is divided into thousands of map and reduce tasks executed by thousands of processes, the risk of a straggler task occurring is significant.
+- the master process determines when the map-reduce operation is close to completion.
+- the criteria for being close to completion is that the percentage of map tasks that have completed is above a threshold.
+- the criteria for being close to completion is that the percentage of map and reduce tasks, taken together, that have completed is above a threshold.
+- the threshold can be any reasonably number, such as 95, 98, or 99 percent, or any percentage above 90 percent.
+- FIG. 7A shows an exemplary backup task, Map103b, in the task status table.
+- Map103b exemplary backup task
+- Each task is marked as completed when either the primary or backup execution completes.
+- This mechanism obviously increases the computational resources, and thus in some embodiments the criteria for invoking this mechanism are selected so as to increase the computational resources by no more than a few percent (e.g., five percent).
+- the use of backup tasks significantly reduces the time to complete large map-reduce operations, often by more than twenty-five percent.
+- the master process 320 is responsible for assigning tasks to the worker processes 304 and 308 and for tracking their status and output. Periodically, the master process 320 solicits a report from each worker process assigned a task to determine its task status. In some embodiments, the report can be solicited using a polling scheme (e.g., round-robin). If the task status indicates that the worker process has failed, then the task is put back in the appropriate task queue to be reassigned to another worker process. In some embodiments, the master process 320 maintains status tables 326 for managing tasks, as described with respect to FIGS. 7A and 7B .
+- a polling scheme e.g., round-robin
+- a locking mechanism is used to ensure that each of the entries of the status tables is modified by only one of the master processes at any one time.
+- the master process first acquires (or attempts to acquire) a lock on the corresponding status table entry. If the lock is refused, the master process concludes that the map/reduce task is being managed by another master process and therefore the master process looks for another map/reduce task to manage.
+- the task status table is divided into portions, with each master process being given ownership of a corresponding portion of the task status table, and responsibility for managing the map/reduce tasks in that portion of the task status table.
+- Each master process can read other portions of the task status table, but only uses information in entries indicating that the corresponding task has been completed.
+- the system 300 provides several advantages over other systems and methods by using one or more master processes to assign and manage tasks, together with local databases to store intermediate results produced by the tasks. For example, by distributing file reads over multiple local databases more machines can be used to complete tasks faster. Moreover, since smaller tasks are spread across many machines, a machine failure will result in less lost work and a reduction in the latency introduced by such failure.
+- the FS load for system 200 is O(M*R) file opens and the FS load for system 300 is O(M) input file opens+O(R) output file opens, where M is the number of map tasks and R is the number of reduce tasks.
+- the system 200 requires significantly more file system file open operations than the system 300 .
+- FIG. 4 is a computer system 400 for the data processing systems 200 and 300 shown in FIGS. 2 and 3 .
+- the computer system 400 generally includes one or more processing units (CPUs) 402 , one or more network or other communications interfaces 410 , memory 412 , and one or more communication buses 414 for interconnecting these components.
+- the system 400 may optionally include a user interface 404 , for instance a display 406 and a keyboard 408 .
+- Memory 412 may include high speed random access memory and may also include non-volatile memory, such as one or more magnetic disk storage devices.
+- Memory 412 may include mass storage that is remotely located from the central processing unit(s) 402 .
+- the memory 412 stores an operating system 416 (e.g., Linux or Unix), a network communication module 418 , a system initialization module 420 , application software 422 and a library 430 .
+- the operating system 416 generally includes procedures for handling various basic system services and for performing hardware dependent tasks.
+- the network communication module 418 is used for connecting the system 400 to a file system (FS) 446 , servers or other computing devices via one or more communication networks, such as the Internet, other wide area networks, local area networks, metropolitan area networks, and the like.
+- the system initialization module 420 initializes other modules and data structures stored in memory 414 required for the appropriate operation of the system 400 .
+- the application software 422 includes a map operator 424 , a reduce operator 426 and a partition operator 428 , and the library 430 includes application-independent map functions 432 , reduce functions 434 , and partition functions 436 .
+- the application software 422 may also include a combiner operator 425 when the map-reduce operation meets certain conditions.
+- the functions, procedures or instructions in the library 430 handle the application independent aspects of large scaled data processing jobs, while the application software 422 provides the application-specific functions for producing output data.
+- the application software 422 may include source programs for the map, combiner, reduce and partition operators as well as the corresponding compiled programs, represented by binary files 212 and 312 in FIGS. 2 and 3 , respectively.
+- One or more status tables 444 are also included to track tasks and processes, as described with respect to FIGS. 7A and 7B .
+- the computer system 400 includes worker processes 438 , intermediate files 440 , and one or more master process(es) 442 . The interaction of worker processes 438 and master processes 442 were described with respect to FIG. 3 .
+- an application programmer can create a script or program using the application software 422 , which includes one or more operators 424 , 426 and 428 .
+- the script or program is processed into binary files 212 , 312 and provided to the work queue master 214 , 314 .
+- input files 202 are split into multiple data blocks and assigned by the work queue master 214 to individual, application independent map and reduce processes 204 and 208 .
+- the processes 204 invoke map functions 432 to process the input data (e.g., counting the number of occurrences of a term) to provide intermediate data values.
+- the input data is structured in the form of key-value pairs.
+- the partition function 436 partitions the map output into one or more intermediate files 440 , which are stored on the FS 446 .
+- the intermediate data values are processed by the map and reduce processes 204 and 208 , which invoke reduce functions 208 for sorting and combining intermediate data values having the same key, and for storing the key and values in one or more output files 210 located on the FS 446 .
+- the work queue master 214 manages the map and reduce processes 204 and 208 with the assistance of status tables 444 , as described with respect to FIGS. 7A and 7B .
+- input files 302 are split into multiple data blocks and assigned by the master process 442 to individual, application independent worker processes 438 .
+- the worker processes 438 invoke map functions 432 for operating on blocks of input data (e.g., counting the number of occurrences of a term) to provide intermediate data values.
+- the partition function 436 partitions the map output into one or more intermediate files 440 , which are stored locally in memory 412 .
+- the intermediate data values are processed by application independent worker processes 438 , which invoke reduce functions 434 for sorting and combining intermediate data values having the same key, and for storing the resulting output data in one or more output files 310 located on the file system 446 .
+- the master process 442 manages the worker processes 436 with the assistance of status tables 444 , as described with respect to FIGS. 7A and 7B .
+Abstract
+A large-scale data processing system and method for processing data in a distributed and parallel processing environment is disclosed. The system comprises a set of interconnected computing systems, each having one or more processors and memory. The set of interconnected computing systems include: a set of application-independent map modules for reading portions of input files containing data, and for producing intermediate data values by applying at least one user-specified, application-specific map operation to the data; a set of intermediate data structures distributed among a plurality of the interconnected computing systems for storing the intermediate data values; and a set of application-independent reduce modules, distinct from the plurality of application-independent map modules, for producing final output data by applying at least one user-specified, application-specific reduce operation to the intermediate data values.
+Description
+This application is a continuation of U.S. patent application Ser. No. 12/686,292, filed Jan. 12, 2010, which is a continuation of U.S. patent application Ser. No. 10/871,245, filed Jun. 18, 2004, now U.S. Pat. No. 7,756,919, which are incorporated by reference in their entireties.
+This application is also related to U.S. patent application Ser. No. 10/871,244 filed Jun. 18, 2004, now U.S. Pat. No. 7,650,331, which is hereby incorporated by reference in its entirety.
+The disclosed embodiments relate generally to data processing systems and methods, and in particular to a framework for simplifying large-scale data processing.
+Large-scale data processing involves extracting data of interest from raw data in one or more datasets and processing it into a useful data product. The implementation of large-scale data processing in a parallel and distributed processing environment typically includes the distribution of data and computations among multiple disks and processors to make efficient use of aggregate storage space and computing power.
+Various functional languages (e.g., LISP™) and systems provide application programmers with tools for querying and manipulating large datasets. These conventional languages and systems, however, fail to provide support for automatically parallelizing these operations across multiple processors in a distributed and parallel processing environment. Nor do these languages and systems automatically handle system faults (e.g., processor failures) and I/O scheduling.
+A system and method for large-scale data processing includes operations for automatically handling programming details associated with parallelization, distribution, and fault-recovery. In some embodiments, application programmers can process large amounts of data by specifying map and reduce operations. The map operations retrieve data (e.g., key/value pairs) from input data files and produce intermediate data values in accordance with the mapping operations. The reduce operations merge or otherwise combine the intermediate data values in accordance with the reduce operations (e.g., combining intermediate values that share the same key). In some embodiments, the system and methods use a master process to manage tasks and one or more local databases to reduce network traffic and file system (FS) reads.
+In some embodiments, a system for large-scale processing of data in a parallel processing environment includes one or more map modules configured to read input data and to apply at least one application-specific map operation to the input data to produce intermediate data values. An intermediate data structure stores the intermediate data values. The system also includes reduce modules, which are configured to retrieve the intermediate data values from the intermediate data structure and to apply at least one user-specified reduce operation to the intermediate data values to provide output data. Preferably, the map and/or reduce operations are automatically parallelized across multiple processors in the parallel processing environment. The programs or instructions for handling parallelization of the map and reduce operation are application independent. The input data and the intermediate data values can include key/value pairs and the reduce operation can include combining intermediate data values having the same key. The intermediate data structure can include one or more intermediate data files coupled to each map module for storing intermediate data values. The map and reduce operations can be implemented on different processors coupled to a distributed network. The output data can be written to a file system, which is accessible via the distributed network.
+In some embodiments, a system for large-scale processing of data in a parallel processing environment includes a set of interconnected computing systems. At least one of the computing systems includes a set of application independent map modules configured for reading portions of input files containing data, and for applying at least one application-specific map operation to the data to produce intermediate key-value pairs. The system also includes a set of application independent reduce modules, which are configured to apply at least one application-specific reduce operation to the intermediate key-value pairs so as to combine intermediate values sharing the same key. In one embodiment, the application independent map modules and application independent reduce modules are both incorporated into a same process, sometimes called a worker process.
+In order to explain the operation of the large scale data processing system, it is helpful to consider an exemplary distributed data processing system in which the large scale data processing is performed. In general, the embodiments described here can be performed by a set of interconnected processors that are interconnected by one or more communication networks.
+Some of the datacenters DC1-DC4 may be located geographically close to each other, and others may be located far from the other datacenters. In some embodiments, each datacenter includes multiple racks. For example, datacenter 502 (DC1) includes multiple racks 508 a, . . . , 508 n. The racks 508 can include frames or cabinets into which components are mounted. Each rack can include one or more processors (CPUs) 510. For example, the rack 508 a includes CPUs 510 a, . . . , 510 n (slaves 1-16) and the nth rack 506 n includes multiple CPUs 510 (CPUs 17-31). The processors 510 can include data processors, network attached storage devices, and other computer controlled devices. In some embodiments, at least one of processors 510 operates as a master processor, and controls the scheduling and data distribution tasks performed throughout the network 500. In some embodiments, one or more processors 510 may take on one or more roles, such as a master and/or slave. A rack can include storage (e.g., one or more network attached disks) that is shared by the one or more processors 510.
+In some embodiments, the processors 510 within each rack 508 are interconnected to one another through a rack switch 506. Furthermore, all racks 508 within each datacenter 502 are also interconnected via a datacenter switch 504. As noted above, the present invention can be implemented using other arrangements of multiple interconnected processors.
+Further details regarding the distributed network 500 of FIG. 5 can be found in U.S. patent application Ser. No. 10/613,626, entitled “System and Method For Data Distribution,” filed Jul. 3, 2003, which application is incorporated by reference herein in its entirety.
+In another embodiment, the processors shown in FIG. 5 are replaced by a single large-scale multiprocessor. In this embodiment, map and reduce operations are automatically assigned to processes running on the processors of the large-scale multiprocessor.
+As shown in FIG. 2 , a set of input files 202 are processed by a first set of processes 204, herein called map processes, to produce a set of intermediate data, represented here by files 206. The intermediate data 206 is processed by a second set of processes 208, herein called reduce processes, to produce output data 210. Generally each “map process” is a process configured (or configurable) to perform map functions and to execute an application-specific map operator. Each “reduce process” is a process configured (or configurable) to perform reduce functions and to execute an application-specific reduce operator. A control or supervisory process, herein called the work queue master 214, controls the set of processing tasks. As described in more detail below, the work queue master 214 determines how many map tasks to use, how many reduce tasks to use, which processes and processors to use to perform those tasks, where to store the intermediate data and output data, how to respond to any processing failures, and so on.
+It should be noted that the work queue master 214 assigns tasks to processes, and that multiple processes may be executed by each of the processors in the group of processors that are available to do the work assigned by the work queue master 214. In the context of FIG. 5 or any other multiple processor system, the set of processes controlled by the work queue master 214 may be a subset of the full set of processes executed by the system, and furthermore the set of processors available to do the work assigned by the work queue master 214 may be fewer than the full set of processors in the system. Some of the resources of the system may be used for other tasks, such as tasks that generate the input data 202, or that utilize the output data 210. However, in some embodiments, some or all of the tasks that generate the input data 202 or utilize the output data 210 may also be controlled or supervised by the work queue master 214. In addition, in some embodiments processors can be added or removed from the processing system during the execution of a map-reduce operation. The work queue master 214 keeps track of the processors in the system and the available processes executing on those processors.
+Application programmers are provided with a restricted set of application-independent operators for reading input data and generating output data. The operators invoke library functions that automatically handle data partitioning, parallelization of computations, fault tolerance (e.g., recovering from process and machine failures) and I/O scheduling. In some embodiments, to perform a specific data processing operation on a set of input files, the only information that must be provided by an application programmer provide is: information identifying of the input file(s), information identifying or specifying the output files to receive output data, and two application-specific data processing operators, hereinafter referred to as map( ) and reduce( ) Generally, the map( ) operator specifies how input data is to be processed to produce intermediate data and the reduce( ) operator specifies how the intermediate data values are to be merged or otherwise combined. Note that the disclosed embodiments are not limited to any particular type or number of operators. Other types of operators (e.g., data filters) can be provided, as needed, depending upon the system 200 architecture and the data processing operations required to produce the desired, application-specific results. In some embodiments, the application programmers provide a partition operator, in addition to the map( ) and reduce( ) operators. The partition( ) operator, specifies how the intermediate data is to be partitioned over a set of intermediate files.
+To perform large-scale data processing, a set of input files 202 are split into multiple data blocks 0, . . . , N−1 of either a specified or predefined size (e.g., 64 MB). Alternately, in some embodiments the input files 202 have a predefined maximum size (e.g., 1 GB), and the individual files are the data blocks. A data block is a subset of data that is retrieved during processing. In some embodiments, the data blocks are distributed across multiple storage devices (e.g., magnetic or optical disks) in a data distribution network to fully utilize the aggregate storage space and disk bandwidth of the data processing system.
+Referring to FIGS. 2 and 5 , in some embodiments the input data files 202 are stored in one or more data centers DC1-DC4. Ideally, the work queue master 214 assigns tasks to processors 510 in datacenters where the input files are stored so as to minimize network traffic whenever possible. In some embodiments, the work queue master 214 uses input file information received from a file system to determine the appropriate processor or process for executing a task, using a hierarchical decision process. When a process in a processor in a datacenter DC1-DC4 is idle, it requests a task from the work queue master 214. The work queue master 214 searches the input file information received from the file system (e.g., FS 446, FIG. 5 ), for an unprocessed data block on the machine assigned to process the task. If none are available, the work queue master 214 searches the file information for an unprocessed data block on the same rack 508 as the machine assigned to process the task. If none are available, the work queue master 214 searches the file information for an unprocessed data block in the same datacenter as the machine assigned to process the task. If none are available, the work queue master 214 will search for unprocessed blocks in other datacenters.
+By using a hierarchical assignment scheme, data blocks can be processed quickly without requiring large volumes of data transfer traffic on the network 500. This in turn allows more tasks to be performed without straining the limits of the network 500.
+Referring again to FIG. 2 , application programmers develop the map( ) and/or reduce( ) operators, which are computer programs that process input data and intermediate, respectively. In some embodiments these operators are compiled into binary files 212 suitable for use on a particular processing platform. The binary files 202 are loaded into a work queue master module 214, which manages jobs submitted by users of the system 200. In some embodiments, the work queue master 214 loads (or causes to be loaded) onto each process to which it allocates a map or reduce task, the library procedures, and the map( ) or reduce( ) operator required to perform the task assigned to the process.
+The work queue master 214, when it receives a request to process a set of data using a specified set application-specific map( ) reduce( ) and, optionally, partition( ) operators, determines the number of map tasks and reduce tasks to be performed to process the input data. This may be based on the amount of input data to be processed. For example, a job may include 10,000 map tasks and 10 reduce tasks. In some embodiments, the work queue master module generates a task status table having entries representing all the tasks to be performed, and then begins assigning those tasks to idle processes. As noted above, tasks may be allocated to idle processes based on a resource allocation scheme (e.g., priority, round-robin, weighted round-robin, etc.).
+The process 600 begins by determining if there are tasks waiting to be assigned to a process (step 606). If there are no tasks waiting, then the process 600 waits for all the tasks to complete (step 604). If there are tasks waiting, then the process 600 determines if there are any idle processes (step 608). If there are idle processes, then the process 600 assigns a waiting task to an idle process (step 610) and returns to step 606. If there are no idle processes, the process 600 waits for an idle process (step 614). Whenever a process completes a task, the process sends a corresponding message to the work queue master 214, which updates the process and task status tables (step 612). The work queue master 214 may then assign a new task to the idle process, if it has any unassigned tasks waiting for processing resources. For reduce tasks, the work queue master 214 may defer assigning any particular reduce task to an idle process until such time that the intermediate data to be processed by the reduce task has, in fact, been generated by the map tasks. Some reduce tasks may be started long before the last of the map tasks are started if the intermediate data to be processed by those reduce tasks is ready for reduce processing.
+In some embodiments, whenever a process fails, which may be discovered by the work queue master 214 using any of a number of known techniques, the work queue master 214 (A) determines what task was running in the failed process, if any, (B) assigns that task to a new process, waiting if necessary until an idle process becomes available, and (C) updates its process and task status tables accordingly. In some embodiments, the work queue master 214 may undertake remedial measures (step 602), such as causing the failed process to be restarted or replaced by a new process. In some embodiments, the work queue master may further detect when such remedial measures fail and then update its process status table to indicate such failures. In addition, in some embodiments, when a map task fails and is restarted in a new process, all processes executing reduce tasks are notified of the re-execution so that any reduce task that has not already read the data produced by the failed process will read the data produced by the new process.
+In some embodiments, the set of application-specific data processing operations that the map( ) operator can perform is constrained. For example, in some embodiments, the map( ) operator may be required to process the input data one record at a time, proceeding monotonically from the first record to the last record in the data block being processed. In some embodiments, the map( ) operator may be required to generate its output data in the form of key/value pairs. Either the key or value or both can comprise structured data, as long as the data can be encoded into a string. For example, the key may have multiple parts, or the value may have multiple parts.
+By requiring the map( ) operator's output to be in the form of key/value pairs, the resulting intermediate data can be mapped to a set of intermediate data files in accordance with a partition( ) operator. An exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the first byte of the key. Another exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the function “hash(Key) modulo N”, where N is a value specified by the application programmer and “hash(Key)” represents the value produced by applying a hash function to the key of the key/value pairs in the intermediate data. In some embodiments, the partition operator is always a modulo function and the application programmer only specifies the modulus to be used by the modulo function. In one embodiment, the partition operator is automatically selected by the work queue master 214, or by one of the application-independent library functions, discussed below.
+In some embodiments, the data blocks 0, . . . , N−1 are automatically assigned to map tasks (executed by map processes 204-0, . . . , 204-N−1) in an application independent manner, by the work queue master 214. In particular, the work queue master 214 is configured to determine the number of data blocks to be processed, and to create a corresponding number of instances of the map process 204. Stated in another way, the work queue master 214 assigns a corresponding number of map tasks to processes, as suitable processes become available. Since the number of map tasks may exceed the number of processes available to the work queue master 214, the work queue master 214 will assign as many map tasks as it can to available processes, and will continue to assign the remaining map tasks to processes as the processes complete previously assigned tasks and become available to take on new tasks. The work queue master 214 uses the task status table and process status tables, described above, to coordinate its efforts.
+Application independent reduce modules 208 read intermediate data values (e.g., key/value pairs) from the intermediate files 206. In some embodiments, each reduce module 208 reads from only one intermediate file 206. The reduce modules 208 sort the intermediate data values, merge or otherwise combine sorted intermediate data values having the same key and then write the key and combined values to one or more output files 210. In some embodiments, the intermediate file 206 and the output files 210 are stored in a File System (FS), which is accessible to other systems via a distributed network.
+In some embodiments, the map and reduce modules 204 and 208 are implemented as user-defined objects with methods to carry out application-specific processing on data using known object oriented programming techniques. For example, a MapReduction base class can be created that includes methods and data for counting the number of input files that contain a particular term or pattern of terms, sorting the results of the sort, eliminating duplicates in the sorted results and counting the number of occurrences of the term. Application programmers can derive other classes from the base class and instantiate the base class as an object in the application code to access its data and methods.
+While the system 200 provides good performance for many large-scale data processing, the performance of the system 200 may diminish as the amount of data to be processed and thus the number of tasks increases. For instance, performance may be diminished when the size of the data blocks is decreased, thereby increasing the number of map tasks. Since the intermediate files 206 are stored in the FS, an increase in tasks results in an increase in intermediate file access requests and an associated increase in network traffic. Additionally, a single work queue master 214 can only handle a limited number of task assignments per time period, beyond which the work queue master 214 begins to limit system performance. Increasing the size of those tasks to accommodate additional jobs could result in load imbalances in the system 200. These performance issues are addressed in the system 300, which is described below with respect to FIG. 3 .
+In one embodiment, the number of worker processes is equal to the number of machines available in the system 300 (i.e., one worker process per machine). In another embodiment, two or more worker processes are used in each of the machines in the system 300. If a worker process fails, its task is reassigned to another worker process by the master process 320. In some embodiments, the master process 320 or the work queue master 314 may undertake remedial measures to repair, restart or replace a failed worker process.
+In some embodiments, when the work queue master 314 receives a map/reduce data processing job, the work queue master 314 allocates the job to a master process 320. The master process 320 determines the number (M) of map tasks and the number (R) of reduce tasks to be performed, and then makes a request to the work queue master 314 for M+R processes (M+R+1, including the master process 320) to be allocated to the map/reduce data processing job. The work queue master 314 responds by assigning a number of processes to the job, and sends that information to the master process 320, which will then manage the performance of the data processing job. If the number of processes requested exceeds the number of processes available, or otherwise exceeds the number of processes that the work queue master 314 is allowed to assign to the job, the number of processes assigned to the job will be less than the number requested.
+In some embodiments, all R of the reduce tasks are all immediately assigned to processes, but the reduce tasks do not begin work (e.g., on data sorting) until the master process 320 informs them that there are intermediate files ready for processing. In some embodiments, a single worker process 304/308 can be assigned both a map task and a reduce task, simultaneously (with each being executed by a distinct process thread), and therefore assigning reduce tasks to processes at the beginning of the job does not reduce the throughput of the system.
+The division of input files 302 into data blocks 0, . . . , N−1, may be handled automatically by the application independent code. Alternately, the user may set an optional flag, or specify a parameter, so as to control the size of the data blocks into which the input files are divided. Furthermore, the input data may come from sources other than files, such as a database or in-memory data structures.
+The input data blocks 0, . . . , N−1, which may in some embodiments be treated as key/value pairs, are read by application independent worker processes 304-0, . . . , 304-N−1, as shown in FIG. 3 . The input files 302 can include a variety of data types typically used in data processing systems, including without limitation text files, record I/O, sorted data structures (such as B-trees), tables and the like. Each of the worker processes 304 to which a map task has been assigned applies the application-specific map( ) operator to the respective input data block so as generate intermediate data values. The intermediate data values are collected and written to one or more intermediate files 306, which are stored locally at the machine (e.g., in one or more local databases) in which the worker process 304 is executed. The intermediate files 306 are retained (i.e., they are persistent) until the reduce phase completes. Note that in some embodiments, each of the intermediate files 306 receives output from only one worker process 304, as shown in FIG. 3 . When a worker process 304 completes its assigned task, it informs the master process 320 of the task status (e.g., complete or error). If the task was successfully completed, the worker process's status report is treated by the master process 320 as a request for another task.
+In some embodiments, if there are enough worker processes 304 that all the intermediate values can be held in memory across the worker processes, then the system need not write any data to files on local disks. This optimization reduces execution time for map-reduce operations in which the number of worker processes is sufficient to handle all the map tasks at once, and the amount of intermediate data is sufficiently small to be kept in memory.
+In some cases, there is significant repetition in the intermediate keys produced by each map task, and the application-specific Reduce function is both commutative and associative. When all these conditions apply, a special optimization can be used to significantly reduce execution time of the map-reduce task. An example of a situation in which the optimization can be applied is a map-reduce operation for counting the number of occurrences of each distinct word in a large collection of documents. In this example, the application-specific map function (sometimes called the map( ) operator elsewhere in this document) outputs a key/value pair for every word w in every document in the collection, where the key/value pair is <w, 1>. The application-specific reduce function (sometimes called the reduce( ) operator elsewhere in this document) for this example is:
+input data is “values”; | ||
+int result=0; // initialize result to zero | ||
+for each v in values: | ||
+result += ParseInt(v); | ||
+output: <key, result> | ||
+Each map task in this example will produce hundreds or thousands of records of the form <word, 1>. The Reduce function simply adds up the count values. To help conserve network bandwidth for map-reduce operations that satisfy these properties, the user may provide an application-specific Combiner function or operator. The Combiner function is invoked with each unique intermediate key and a partial set of intermediate values for the key. This is similar to the Reduce function, except that it gets executed at the end of each Map task by the same machine and process that performed by Map task. The Combiner function partially summarizes the intermediate key/value pairs. In fact, when using a Combiner function, the same function is typically specified for the Combiner and Reduce operations. The partial combining performed by the Combiner operation significantly speeds up certain classes of Map-Reduce operations, in part by significantly reducing the amount of information that must be conveyed from the processors that handle Map tasks to processors handling Reduce tasks, and in part by reducing the complexity and computation time required by the data sorting and Reduce function performed by the Reduce tasks.
+Application independent worker processes 308 which have been assigned reduce tasks read data from the locally stored intermediate files 306. In some embodiments, the master process 320 informs the worker processes 308 where to find intermediate data files 306 and schedules read requests for retrieving intermediate data values from the intermediate data files 306. In some embodiments, each of the worker processes 308 reads a corresponding one of the intermediate files 306 produced by all or a subset of the worker processes 304. For example, consider a system in which each of the worker processes 304 assigned a map task outputs M (e.g., 100) intermediate files, which we will call Partion-1,j through Partition-M,j, where j is an index identifying the map task that produced the intermediate files. The system will have 100 worker processes 308, Worker-1 to Worker-M, each of which reads a corresponding subset of the intermediate files, Partition-p,j for all valid values of “j,” produced by the worker processes 304, where “p” indicates the partition assigned to a particular worker process Worker-P (304) and “j” is an index identifying the map tasks that produced the intermediate files.
+Each worker process 308 sorts the intermediate data values in the subset of the intermediate files read by that worker process in accordance with the key of the key/value pairs in the intermediate data. The sorting of the key/value pairs is an application independent function of the reduce threads in the worker processes 308. Each worker process 308 also merges or otherwise combines the sorted intermediate data values having the same key, and writes the key and combined values to one or more output files 310. The merging or other combining operation performed on the sorted intermediate data is performed by an application-specific reduce( ) operator. In some embodiments, the output files 310 are stored in a File System, which is accessible to other systems via a distributed network. When a worker process 308 completes its assigned reduce task, it informs the master process 320 of the task status (e.g., complete or error). If the reduce task was completed successfully, the worker process's status report is treated by the master process 320 as a request for another task. If the reduce task failed, the master process 320 reassigns the reduce task to another worker process 308.
+In some embodiments, the master process 320 is configured to detect task and processor failures. When a task failure is detected, the master process 320 reassigns the task to another process. In some embodiments, the master process 320 redistributes the work of the failed task over a larger number of tasks so as to complete that task more quickly than by simply re-executing the task on another process. The master process subdivides the work assigned to the failed task to a plurality of newly mini-tasks, and then resumes normal operation by assigning the mini-tasks to available processes. The number of mini-tasks may be a predefined number, such as a number between 8 and 32, or it may be dynamically determined based on the number of idle processes available to the master process. In the case of a failed map task, division of the work assigned to the failed task means assigning smaller data blocks to the mini-tasks. In the case of a failed reduce task, division of the work assigned to the failed task may mean assigning the data sorting portion of the reduce task to a larger number of worker processes, thereby performing a distributed sort and merge. The resulting sorted data may, in some embodiments, be divided into a number of files or portions, each of which is then processed using the reduce( ) operator to produce output data. By detecting such failures and taking these remedial actions, the amount of delay in completing the entire data processing operation is significantly reduced.
+When a processor failure is detected by the master process 320, it may be necessary to re-execute all the tasks that the failed processor completed as well as any tasks that were in process when the processor failed, because the intermediate results produced by map tasks are stored locally, and the failure of the processor will in many cases make those results unavailable. Using the status tables, described above, the master process 320 determines all the tasks that ran on the processor, and also determines which of those tasks need to be re-executed (e.g., because the results of the tasks are unavailable and are still needed). The master process 320 then updates its status tables to indicate that these identified tasks are waiting for assignment to worker tasks. Thereafter, re-execution of the identified tasks is automatically handled using the processes and mechanisms described elsewhere in this document.
+In some embodiments, an additional mechanism, herein called backup tasks, is used to guard against task failures as well as task slow downs. One of the main problems that lengthens the total time taken for a map-reduce operation to complete is the occurrence of “straggler” tasks or machines. A straggler is a process or machine that takes an unusually long time to complete one of the last few map or reduce tasks in the computation. Stragglers can arise for many reasons, including both hardware and software errors or conditions. When a large map-reduce operation is divided into thousands of map and reduce tasks executed by thousands of processes, the risk of a straggler task occurring is significant. The use of backup tasks, as described next, effectively guards against stragglers, without regard to the cause of the problem causing a process or machine to run slowly. In these embodiments, the master process determines when the map-reduce operation is close to completion. In one embodiment, the criteria for being close to completion is that the percentage of map tasks that have completed is above a threshold. In another embodiment, the criteria for being close to completion is that the percentage of map and reduce tasks, taken together, that have completed is above a threshold. The threshold can be any reasonably number, such as 95, 98, or 99 percent, or any percentage above 90 percent. Once the master process determines that the map-reduce operation is close to completion, the master process schedules backup executions of all remaining tasks. These duplicate tasks may be called backup map tasks and backup reduce tasks. FIG. 7A shows an exemplary backup task, Map103b, in the task status table. Each task is marked as completed when either the primary or backup execution completes. This mechanism obviously increases the computational resources, and thus in some embodiments the criteria for invoking this mechanism are selected so as to increase the computational resources by no more than a few percent (e.g., five percent). The use of backup tasks significantly reduces the time to complete large map-reduce operations, often by more than twenty-five percent.
+The master process 320 is responsible for assigning tasks to the worker processes 304 and 308 and for tracking their status and output. Periodically, the master process 320 solicits a report from each worker process assigned a task to determine its task status. In some embodiments, the report can be solicited using a polling scheme (e.g., round-robin). If the task status indicates that the worker process has failed, then the task is put back in the appropriate task queue to be reassigned to another worker process. In some embodiments, the master process 320 maintains status tables 326 for managing tasks, as described with respect to FIGS. 7A and 7B .
+In one embodiment in which more than one master process 320 is used, a locking mechanism is used to ensure that each of the entries of the status tables is modified by only one of the master processes at any one time. Whenever a master process 320 attempts to assign a map or reduce task to a process, or perform any other management of a map or reduce task, the master process first acquires (or attempts to acquire) a lock on the corresponding status table entry. If the lock is refused, the master process concludes that the map/reduce task is being managed by another master process and therefore the master process looks for another map/reduce task to manage. In another embodiment, the task status table is divided into portions, with each master process being given ownership of a corresponding portion of the task status table, and responsibility for managing the map/reduce tasks in that portion of the task status table. Each master process can read other portions of the task status table, but only uses information in entries indicating that the corresponding task has been completed.
+The system 300 provides several advantages over other systems and methods by using one or more master processes to assign and manage tasks, together with local databases to store intermediate results produced by the tasks. For example, by distributing file reads over multiple local databases more machines can be used to complete tasks faster. Moreover, since smaller tasks are spread across many machines, a machine failure will result in less lost work and a reduction in the latency introduced by such failure. For example, the FS load for system 200 is O(M*R) file opens and the FS load for system 300 is O(M) input file opens+O(R) output file opens, where M is the number of map tasks and R is the number of reduce tasks. Thus, the system 200 requires significantly more file system file open operations than the system 300.
+The memory 412 stores an operating system 416 (e.g., Linux or Unix), a network communication module 418, a system initialization module 420, application software 422 and a library 430. The operating system 416 generally includes procedures for handling various basic system services and for performing hardware dependent tasks. The network communication module 418 is used for connecting the system 400 to a file system (FS) 446, servers or other computing devices via one or more communication networks, such as the Internet, other wide area networks, local area networks, metropolitan area networks, and the like. The system initialization module 420 initializes other modules and data structures stored in memory 414 required for the appropriate operation of the system 400. In some embodiments, the application software 422 includes a map operator 424, a reduce operator 426 and a partition operator 428, and the library 430 includes application-independent map functions 432, reduce functions 434, and partition functions 436. As discussed above, the application software 422 may also include a combiner operator 425 when the map-reduce operation meets certain conditions. The functions, procedures or instructions in the library 430 handle the application independent aspects of large scaled data processing jobs, while the application software 422 provides the application-specific functions for producing output data. The application software 422 may include source programs for the map, combiner, reduce and partition operators as well as the corresponding compiled programs, represented by binary files 212 and 312 in FIGS. 2 and 3 , respectively.
+One or more status tables 444 are also included to track tasks and processes, as described with respect to FIGS. 7A and 7B . In some embodiments, the computer system 400 includes worker processes 438, intermediate files 440, and one or more master process(es) 442. The interaction of worker processes 438 and master processes 442 were described with respect to FIG. 3 .
+Referring to FIGS. 2, 3 and 4 , an application programmer can create a script or program using the application software 422, which includes one or more operators 424, 426 and 428. The script or program is processed into binary files 212, 312 and provided to the work queue master 214, 314.
+For the embodiment shown in FIG. 2 , input files 202 are split into multiple data blocks and assigned by the work queue master 214 to individual, application independent map and reduce processes 204 and 208. The processes 204 invoke map functions 432 to process the input data (e.g., counting the number of occurrences of a term) to provide intermediate data values. In some embodiments, the input data is structured in the form of key-value pairs. The partition function 436 partitions the map output into one or more intermediate files 440, which are stored on the FS 446. The intermediate data values are processed by the map and reduce processes 204 and 208, which invoke reduce functions 208 for sorting and combining intermediate data values having the same key, and for storing the key and values in one or more output files 210 located on the FS 446. The work queue master 214 manages the map and reduce processes 204 and 208 with the assistance of status tables 444, as described with respect to FIGS. 7A and 7B .
+For the embodiment shown in FIG. 3 , input files 302 are split into multiple data blocks and assigned by the master process 442 to individual, application independent worker processes 438. The worker processes 438 invoke map functions 432 for operating on blocks of input data (e.g., counting the number of occurrences of a term) to provide intermediate data values. The partition function 436 partitions the map output into one or more intermediate files 440, which are stored locally in memory 412. The intermediate data values are processed by application independent worker processes 438, which invoke reduce functions 434 for sorting and combining intermediate data values having the same key, and for storing the resulting output data in one or more output files 310 located on the file system 446. The master process 442 manages the worker processes 436 with the assistance of status tables 444, as described with respect to FIGS. 7A and 7B .
+The foregoing description, for purpose of explanation, has been described with reference to specific embodiments. However, the illustrative discussions above are not intended to be exhaustive or to limit the invention to the precise forms disclosed. Many modifications and variations are possible in view of the above teachings. The embodiments were chosen and described in order to best explain the principles of the invention and its practical applications, to thereby enable others skilled in the art to best utilize the invention and various embodiments with various modifications as are suited to the particular use contemplated.
+Claims (16)
+1. A system for large-scale processing of data in a distributed and parallel processing environment, comprising:
+a set of interconnected computing systems, each having one or more processors and memory, the set of interconnected computing systems including:
+a plurality of worker processes executing on the set of interconnected computing systems;
+an application-independent supervisory process executing on the set of interconnected computing systems, for:
+determining, for input files, a plurality of data processing tasks including a plurality of map tasks specifying data from the input files to be processed into intermediate data values and a plurality of reduce tasks specifying intermediate data values to be processed into final output data; and
+assigning the data processing tasks to idle ones of the worker processes;
+a set of application-independent map functions, executed by a first subset of the plurality of worker processes, for reading portions of the input files containing data, and for producing intermediate data values by applying at least one user-specified, application-specific map operation to the data, wherein the set of application-independent map functions are independent of the at least one user-specified, application-specific map operation;
+a set of intermediate data structures distributed among a plurality of the interconnected computing systems for storing the intermediate data values; and
+a set of application-independent reduce functions, distinct from the set of application-independent map functions, the set of application-independent reduce functions executed by a second subset of the plurality of worker processes for producing the final output data by applying at least one user-specified, application-specific reduce operation to the intermediate data values, wherein the set of application-independent reduce functions are independent of the at least one user-specified, application-specific reduce operation.
+2. The system of claim 1 , wherein at least one of the map and reduce operations is automatically parallelized across multiple processors in the distributed and parallel processing environment using an application-independent methodology.
+3. The system of claim 1 , wherein the set of interconnected computing systems applies a partition operation to at least a subset of the intermediate data values, and for each respective intermediate data value in the at least a subset of the intermediate data values, the partition operation specifies a respective intermediate data structure of the set of intermediate data structures in which to store the respective intermediate data value.
+4. The system of claim 1 , wherein a respective application-specific map operation includes an application-specific combiner operation for combining initial values produced by the respective application-specific map operation so as to produce the intermediate data values.
+5. The system of claim 1 , wherein:
+the number of map tasks exceeds in number the plurality of processes to which the supervisory process can assign map tasks; and
+the supervisory process maintains status information with respect to map tasks awaiting assignment to a worker process.
+6. The system of claim 1 , wherein:
+the set of interconnected computer systems are grouped into a plurality of datacenters;
+when assigning the data processing tasks to idle ones of the worker processes, the supervisory process preferentially assigns data processing tasks for data stored on computer systems in a respective datacenter to worker processes that are running on computer systems in the respective datacenter.
+7. The system of claim 1 , wherein the map and reduce operations are implemented on different processors coupled to a distributed network.
+8. The system of claim 7 , wherein the final output data is written to a file system on the distributed network.
+9. A method of performing large-scale processing of data in a distributed and parallel processing environment, comprising:
+at a set of interconnected computing systems, each having one or more processors and memory:
+executing a plurality of worker processes;
+executing an application-independent supervisory process on the set of interconnected computing systems, for:
+determining, for input files, a plurality of data processing tasks including a plurality of map tasks specifying data from the input files to be processed into intermediate data values and a plurality of reduce tasks specifying intermediate data values to be processed into final output data; and
+assigning the data processing tasks to idle ones of the worker processes: using a set of application-independent map functions, executed by a first subset of the plurality of worker processes, to read portions of the input files containing data and produce intermediate data values by applying at least one user-specified, application-specific map operation to the data;
+storing the intermediate data values in a set of intermediate data structures distributed among a plurality of the interconnected computing systems; and
+using a set of application-independent reduce functions, distinct from the set of application-independent map functions, to produce the final output data by applying at least one user-specified, application-specific reduce operation to the intermediate data values, wherein the set of application-independent reduce functions are executed by a second subset of the plurality of worker processes;
+wherein the set of application-independent map functions and the set of application-independent reduce functions are independent of application-specific operators and operations including the at least one user-specified, application-specific map operation and the at least one user-specified, application-specific reduce operation.
+10. The method of claim 9 , including applying a partition operation to at least a subset of the intermediate data values, wherein for each respective intermediate data value in the at least a subset of the intermediate data values, the partition operation specifies a respective intermediate data structure of the set of intermediate data structures in which to store the respective intermediate data value.
+11. The method of claim 9 , wherein a respective application-specific map operation includes an application-specific combiner operation for combining initial values produced by the respective application-specific map operation so as to produce the intermediate data values.
+12. The method of claim 9 , wherein:
+the number of map tasks exceeds in number the plurality of processes to which the supervisory process can assign map tasks; and
+the supervisory process maintains status information with respect to map tasks awaiting assignment to a worker process.
+13. A non-transitory computer readable storage medium storing one or more programs configured for execution by a plurality processors of a set of interconnected computing systems, the one or more programs comprising instructions to be executed by the plurality of processors so as to:
+execute a plurality of worker processes on the set of interconnected computing systems;
+execute an application-independent supervisory process on the set of interconnected computing systems, for:
+determining, for input files, a plurality of data processing tasks including a plurality of map tasks specifying data from the input files to be processed into intermediate data values and a plurality of reduce tasks specifying intermediate data values to be processed into final output data; and
+assigning the data processing tasks to idle ones of the worker processes;
+use a set of application-independent map functions, executed by a first subset of the plurality of worker processes, to read portions of the input files containing data and produce intermediate data values by applying at least one user-specified, application-specific map operation to the data;
+store the intermediate data values in a set of intermediate data structures distributed among a plurality of the interconnected computing systems; and
+use a set of application-independent reduce functions, distinct from the set of application-independent map functions, to produce the final output data by applying at least one user-specified, application-specific reduce operation to the intermediate data values, wherein the set of application-independent reduce functions are executed by a second subset of the plurality of worker processes;
+wherein the set of application-independent map functions and the set of application-independent reduce functions are independent of application-specific operators and operations, including the at least one user-specified, application-specific map operation and the at least one user-specified, application-specific reduce operation.
+14. The non-transitory computer readable storage medium of claim 13 , wherein one or more programs further comprise instructions to be executed by the plurality of processors so as to apply a partition operation to at least a subset of the intermediate data values, wherein for each respective intermediate data value in the at least a subset of the intermediate data values, the partition operation specifies a respective intermediate data structure of the set of intermediate data structures in which to store the respective intermediate data value.
+15. The non-transitory computer readable storage medium of claim 13 , wherein a respective application-specific map operation includes an application-specific combiner operation for combining initial values produced by the respective application-specific map operation so as to produce the intermediate data values.
+16. The non-transitory computer readable storage medium of claim 13 , wherein:
+the number of map tasks exceeds in number the plurality of processes to which the supervisory process can assign map tasks; and
+the supervisory process maintains status information with respect to map tasks awaiting assignment to a worker process.
+Priority Applications (6)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US14/099,806 US9612883B2 (en) | 2004-06-18 | 2013-12-06 | System and method for large-scale data processing using an application-independent framework |
+US15/479,228 US10296500B2 (en) | 2004-06-18 | 2017-04-04 | System and method for large-scale data processing using an application-independent framework |
+US16/417,126 US10885012B2 (en) | 2004-06-18 | 2019-05-20 | System and method for large-scale data processing using an application-independent framework |
+US17/134,862 US11366797B2 (en) | 2004-06-18 | 2020-12-28 | System and method for large-scale data processing using an application-independent framework |
+US17/834,316 US11650971B2 (en) | 2004-06-18 | 2022-06-07 | System and method for large-scale data processing using an application-independent framework |
+US18/137,695 US20230385262A1 (en) | 2004-06-18 | 2023-04-21 | System And Method For Large-Scale Data Processing Using An Application-Independent Framework |
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/871,245 US7756919B1 (en) | 2004-06-18 | 2004-06-18 | Large-scale data processing in a distributed and parallel processing enviornment |
+US12/686,292 US8612510B2 (en) | 2004-06-18 | 2010-01-12 | System and method for large-scale data processing using an application-independent framework |
+US14/099,806 US9612883B2 (en) | 2004-06-18 | 2013-12-06 | System and method for large-scale data processing using an application-independent framework |
+Related Parent Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US12/686,292 Continuation US8612510B2 (en) | 2004-06-18 | 2010-01-12 | System and method for large-scale data processing using an application-independent framework |
+Related Child Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/479,228 Continuation US10296500B2 (en) | 2004-06-18 | 2017-04-04 | System and method for large-scale data processing using an application-independent framework |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20140096138A1 US20140096138A1 (en) | 2014-04-03 |
+US9612883B2 true US9612883B2 (en) | 2017-04-04 |
+Family
+ID=42166251
+Family Applications (8)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/871,245 Active 2029-04-29 US7756919B1 (en) | 2004-06-18 | 2004-06-18 | Large-scale data processing in a distributed and parallel processing enviornment |
+US12/686,292 Active 2025-10-08 US8612510B2 (en) | 2004-06-18 | 2010-01-12 | System and method for large-scale data processing using an application-independent framework |
+US14/099,806 Active US9612883B2 (en) | 2004-06-18 | 2013-12-06 | System and method for large-scale data processing using an application-independent framework |
+US15/479,228 Active US10296500B2 (en) | 2004-06-18 | 2017-04-04 | System and method for large-scale data processing using an application-independent framework |
+US16/417,126 Active US10885012B2 (en) | 2004-06-18 | 2019-05-20 | System and method for large-scale data processing using an application-independent framework |
+US17/134,862 Active US11366797B2 (en) | 2004-06-18 | 2020-12-28 | System and method for large-scale data processing using an application-independent framework |
+US17/834,316 Active US11650971B2 (en) | 2004-06-18 | 2022-06-07 | System and method for large-scale data processing using an application-independent framework |
+US18/137,695 Pending US20230385262A1 (en) | 2004-06-18 | 2023-04-21 | System And Method For Large-Scale Data Processing Using An Application-Independent Framework |
+Family Applications Before (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/871,245 Active 2029-04-29 US7756919B1 (en) | 2004-06-18 | 2004-06-18 | Large-scale data processing in a distributed and parallel processing enviornment |
+US12/686,292 Active 2025-10-08 US8612510B2 (en) | 2004-06-18 | 2010-01-12 | System and method for large-scale data processing using an application-independent framework |
+Family Applications After (5)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/479,228 Active US10296500B2 (en) | 2004-06-18 | 2017-04-04 | System and method for large-scale data processing using an application-independent framework |
+US16/417,126 Active US10885012B2 (en) | 2004-06-18 | 2019-05-20 | System and method for large-scale data processing using an application-independent framework |
+US17/134,862 Active US11366797B2 (en) | 2004-06-18 | 2020-12-28 | System and method for large-scale data processing using an application-independent framework |
+US17/834,316 Active US11650971B2 (en) | 2004-06-18 | 2022-06-07 | System and method for large-scale data processing using an application-independent framework |
+US18/137,695 Pending US20230385262A1 (en) | 2004-06-18 | 2023-04-21 | System And Method For Large-Scale Data Processing Using An Application-Independent Framework |
+Country Status (1)
+Country | Link |
+---|---|
+US (8) | US7756919B1 (en) |
+Cited By (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20180365382A1 (en) * | 2017-06-20 | 2018-12-20 | International Business Machines Corporation | Power-efficient health affliction classification |
+RU2685018C1 (en) * | 2018-04-24 | 2019-04-16 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Program multi-sequencing method in the computer system |
+RU2691860C1 (en) * | 2018-06-25 | 2019-06-18 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for parallelizing programs in a logical programming environment in a computer system |
+RU2704533C1 (en) * | 2019-01-28 | 2019-10-29 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for paralleling programs in an agent-based programming environment in a computer system |
+US11675841B1 (en) | 2008-06-25 | 2023-06-13 | Richard Paiz | Search engine optimizer |
+US11741090B1 (en) | 2013-02-26 | 2023-08-29 | Richard Paiz | Site rank codex search patterns |
+US11809506B1 (en) | 2013-02-26 | 2023-11-07 | Richard Paiz | Multivariant analyzing replicating intelligent ambience evolving system |
+Families Citing this family (107)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7590620B1 (en) * | 2004-06-18 | 2009-09-15 | Google Inc. | System and method for analyzing data records |
+US7756919B1 (en) * | 2004-06-18 | 2010-07-13 | Google Inc. | Large-scale data processing in a distributed and parallel processing enviornment |
+US9935919B2 (en) * | 2008-02-25 | 2018-04-03 | Ca, Inc. | Directory partitioned system and method |
+US9727373B2 (en) * | 2008-03-27 | 2017-08-08 | Apple Inc. | Providing resumption data in a distributed processing system |
+US8726290B2 (en) * | 2008-06-12 | 2014-05-13 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US8682998B2 (en) * | 2008-10-31 | 2014-03-25 | Software Ag | Method and server cluster for map reducing flow services and large documents |
+US8819106B1 (en) | 2008-12-12 | 2014-08-26 | Amazon Technologies, Inc. | Managing distributed execution of programs |
+US8370493B2 (en) * | 2008-12-12 | 2013-02-05 | Amazon Technologies, Inc. | Saving program execution state |
+US20100162230A1 (en) * | 2008-12-24 | 2010-06-24 | Yahoo! Inc. | Distributed computing system for large-scale data handling |
+US8832173B2 (en) * | 2009-01-20 | 2014-09-09 | Sap Ag | System and method of multithreaded processing across multiple servers |
+US8239847B2 (en) * | 2009-03-18 | 2012-08-07 | Microsoft Corporation | General distributed reduction for data parallel computing |
+US8296419B1 (en) | 2009-03-31 | 2012-10-23 | Amazon Technologies, Inc. | Dynamically modifying a cluster of computing nodes used for distributed execution of a program |
+US8321558B1 (en) * | 2009-03-31 | 2012-11-27 | Amazon Technologies, Inc. | Dynamically monitoring and modifying distributed execution of programs |
+US8510538B1 (en) | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+KR101572879B1 (en) * | 2009-04-29 | 2015-12-01 | 삼성전자주식회사 | Dynamic parallel system and method for parallel application program |
+US8321873B2 (en) * | 2009-06-09 | 2012-11-27 | Yahoo! Inc. | System and method for offline data generation for online system analysis |
+EP2325762A1 (en) * | 2009-10-27 | 2011-05-25 | Exalead | Method and system for processing information of a stream of information |
+JP5408442B2 (en) * | 2010-01-21 | 2014-02-05 | 株式会社日立製作所 | Parallel and distributed processing method and computer system |
+US9805101B2 (en) | 2010-02-26 | 2017-10-31 | Ebay Inc. | Parallel data stream processing system |
+CN102236581B (en) | 2010-04-30 | 2013-08-14 | 国际商业机器公司 | Mapping reduction method and system thereof for data center |
+US8555265B2 (en) * | 2010-05-04 | 2013-10-08 | Google Inc. | Parallel processing of data |
+US8442863B2 (en) * | 2010-06-17 | 2013-05-14 | Microsoft Corporation | Real-time-ready behavioral targeting in a large-scale advertisement system |
+US8418074B2 (en) * | 2010-06-29 | 2013-04-09 | Sap Ag | Shared user interface services framework |
+US9367359B2 (en) * | 2010-06-30 | 2016-06-14 | International Business Machines Corporation | Optimized resource management for map/reduce computing |
+US8381015B2 (en) * | 2010-06-30 | 2013-02-19 | International Business Machines Corporation | Fault tolerance for map/reduce computing |
+EP2629198A4 (en) * | 2010-10-14 | 2014-04-16 | Nec Corp | Distributed processing device and distributed processing system |
+JP6138701B2 (en) * | 2011-03-04 | 2017-05-31 | 富士通株式会社 | Distributed calculation method and distributed calculation system |
+US9170846B2 (en) * | 2011-03-29 | 2015-10-27 | Daniel Delling | Distributed data-parallel execution engines for user-defined serial problems using branch-and-bound algorithm |
+CN102722412A (en) | 2011-03-31 | 2012-10-10 | 国际商业机器公司 | Combined computational device and method |
+US9798831B2 (en) * | 2011-04-01 | 2017-10-24 | Google Inc. | Processing data in a MapReduce framework |
+US9922046B2 (en) * | 2011-04-26 | 2018-03-20 | Zettaset, Inc. | Scalable distributed metadata file-system using key-value stores |
+US8924426B2 (en) | 2011-04-29 | 2014-12-30 | Google Inc. | Joining tables in a mapreduce procedure |
+US9104477B2 (en) | 2011-05-05 | 2015-08-11 | Alcatel Lucent | Scheduling in MapReduce-like systems for fast completion time |
+US9053067B2 (en) | 2011-09-30 | 2015-06-09 | International Business Machines Corporation | Distributed data scalable adaptive map-reduce framework |
+US9269054B1 (en) * | 2011-11-09 | 2016-02-23 | BigML, Inc. | Methods for building regression trees in a distributed computing environment |
+US9747128B1 (en) * | 2011-12-21 | 2017-08-29 | EMC IP Holding Company LLC | Worldwide distributed file system model |
+US8732720B2 (en) | 2011-12-22 | 2014-05-20 | Hewlett-Packard Development Company, L.P. | Job scheduling based on map stage and reduce stage duration |
+US8712994B2 (en) | 2011-12-29 | 2014-04-29 | Teradata US. Inc. | Techniques for accessing a parallel database system via external programs using vertical and/or horizontal partitioning |
+US8949308B2 (en) * | 2012-01-23 | 2015-02-03 | Microsoft Corporation | Building large scale infrastructure using hybrid clusters |
+US9747127B1 (en) * | 2012-03-30 | 2017-08-29 | EMC IP Holding Company LLC | Worldwide distributed job and tasks computational model |
+US9280381B1 (en) * | 2012-03-30 | 2016-03-08 | Emc Corporation | Execution framework for a distributed file system |
+US9489233B1 (en) * | 2012-03-30 | 2016-11-08 | EMC IP Holding Company, LLC | Parallel modeling and execution framework for distributed computation and file system access |
+US8984515B2 (en) | 2012-05-31 | 2015-03-17 | International Business Machines Corporation | System and method for shared execution of mixed data flows |
+WO2013179451A1 (en) | 2012-05-31 | 2013-12-05 | 国立大学法人東京大学 | Parallel data processing system, computer, and parallel data processing method |
+CN102750353B (en) * | 2012-06-08 | 2014-04-16 | 清华大学 | Method for analyzing distributed data in key value library |
+US8954972B2 (en) * | 2012-06-26 | 2015-02-10 | Wal-Mart Stores, Inc. | Systems and methods for event stream processing |
+GB2504738A (en) * | 2012-08-08 | 2014-02-12 | Basis Technologies Internat Ltd | SAP (RTM) system with partitioning of data in SAP memory into data intervals |
+US9152458B1 (en) * | 2012-08-30 | 2015-10-06 | Google Inc. | Mirrored stateful workers |
+CN103729257B (en) * | 2012-10-16 | 2017-04-12 | 阿里巴巴集团控股有限公司 | Distributed parallel computing method and system |
+US9146830B2 (en) * | 2012-10-26 | 2015-09-29 | Jsmapreduce Corporation | Hybrid local/remote infrastructure for data processing with lightweight setup, powerful debuggability, controllability, integration, and productivity features |
+US9336024B1 (en) | 2012-12-27 | 2016-05-10 | Google Inc. | Clustering for parallel processing |
+US9256460B2 (en) | 2013-03-15 | 2016-02-09 | International Business Machines Corporation | Selective checkpointing of links in a data flow based on a set of predefined criteria |
+US9401835B2 (en) | 2013-03-15 | 2016-07-26 | International Business Machines Corporation | Data integration on retargetable engines in a networked environment |
+US9323619B2 (en) | 2013-03-15 | 2016-04-26 | International Business Machines Corporation | Deploying parallel data integration applications to distributed computing environments |
+US20150205633A1 (en) * | 2013-05-24 | 2015-07-23 | Google Inc. | Task management in single-threaded environments |
+US9244652B1 (en) * | 2013-06-03 | 2016-01-26 | The Mathworks, Inc. | State management for task queues |
+JP6069503B2 (en) * | 2013-07-01 | 2017-02-01 | 株式会社日立製作所 | Parallel analysis platform for serial data and parallel distributed processing method |
+US9424074B1 (en) * | 2013-07-01 | 2016-08-23 | Google Inc. | Method for learning backup policies for large-scale distributed computing |
+US9477511B2 (en) | 2013-08-14 | 2016-10-25 | International Business Machines Corporation | Task-based modeling for parallel data integration |
+US9898501B2 (en) * | 2013-09-12 | 2018-02-20 | Neustar, Inc. | Method and system for performing transactional updates in a key-value store |
+US9578091B2 (en) | 2013-12-30 | 2017-02-21 | Microsoft Technology Licensing, Llc | Seamless cluster servicing |
+CN104978228B (en) * | 2014-04-09 | 2019-08-30 | 腾讯科技（深圳）有限公司 | A kind of dispatching method and device of distributed computing system |
+US9594696B1 (en) * | 2014-12-09 | 2017-03-14 | Parallel Machines Ltd. | Systems and methods for automatic generation of parallel data processing code |
+US10291696B2 (en) * | 2014-04-28 | 2019-05-14 | Arizona Board Of Regents On Behalf Of Arizona State University | Peer-to-peer architecture for processing big data |
+US9613127B1 (en) * | 2014-06-30 | 2017-04-04 | Quantcast Corporation | Automated load-balancing of partitions in arbitrarily imbalanced distributed mapreduce computations |
+US9600342B2 (en) * | 2014-07-10 | 2017-03-21 | Oracle International Corporation | Managing parallel processes for application-level partitions |
+US9965323B2 (en) | 2015-03-11 | 2018-05-08 | Western Digital Technologies, Inc. | Task queues |
+US10496926B2 (en) | 2015-04-06 | 2019-12-03 | EMC IP Holding Company LLC | Analytics platform for scalable distributed computations |
+US10505863B1 (en) | 2015-04-06 | 2019-12-10 | EMC IP Holding Company LLC | Multi-framework distributed computation |
+US10791063B1 (en) | 2015-04-06 | 2020-09-29 | EMC IP Holding Company LLC | Scalable edge computing using devices with limited resources |
+US10425350B1 (en) | 2015-04-06 | 2019-09-24 | EMC IP Holding Company LLC | Distributed catalog service for data processing platform |
+US10404787B1 (en) | 2015-04-06 | 2019-09-03 | EMC IP Holding Company LLC | Scalable distributed data streaming computations across multiple data processing clusters |
+US10776404B2 (en) | 2015-04-06 | 2020-09-15 | EMC IP Holding Company LLC | Scalable distributed computations utilizing multiple distinct computational frameworks |
+US10860622B1 (en) | 2015-04-06 | 2020-12-08 | EMC IP Holding Company LLC | Scalable recursive computation for pattern identification across distributed data processing nodes |
+US10812341B1 (en) | 2015-04-06 | 2020-10-20 | EMC IP Holding Company LLC | Scalable recursive computation across distributed data processing nodes |
+US10706970B1 (en) | 2015-04-06 | 2020-07-07 | EMC IP Holding Company LLC | Distributed data analytics |
+US10015106B1 (en) | 2015-04-06 | 2018-07-03 | EMC IP Holding Company LLC | Multi-cluster distributed data processing platform |
+US10515097B2 (en) | 2015-04-06 | 2019-12-24 | EMC IP Holding Company LLC | Analytics platform for scalable distributed computations |
+US10541936B1 (en) | 2015-04-06 | 2020-01-21 | EMC IP Holding Company LLC | Method and system for distributed analysis |
+US10509684B2 (en) | 2015-04-06 | 2019-12-17 | EMC IP Holding Company LLC | Blockchain integration for scalable distributed computations |
+US10541938B1 (en) | 2015-04-06 | 2020-01-21 | EMC IP Holding Company LLC | Integration of distributed data processing platform with one or more distinct supporting platforms |
+US10528875B1 (en) | 2015-04-06 | 2020-01-07 | EMC IP Holding Company LLC | Methods and apparatus implementing data model for disease monitoring, characterization and investigation |
+US10511659B1 (en) | 2015-04-06 | 2019-12-17 | EMC IP Holding Company LLC | Global benchmarking and statistical analysis at scale |
+CN106202092B (en) | 2015-05-04 | 2020-03-06 | 阿里巴巴集团控股有限公司 | Data processing method and system |
+US10356167B1 (en) * | 2015-06-09 | 2019-07-16 | Hortonworks, Inc. | Workload profiling |
+US20170031724A1 (en) * | 2015-07-31 | 2017-02-02 | Futurewei Technologies, Inc. | Apparatus, method, and computer program for utilizing secondary threads to assist primary threads in performing application tasks |
+US9946635B2 (en) * | 2015-09-29 | 2018-04-17 | International Business Machines Corporation | Synchronizing multi-system program instruction sequences |
+US10656861B1 (en) * | 2015-12-29 | 2020-05-19 | EMC IP Holding Company LLC | Scalable distributed in-memory computation |
+KR102592611B1 (en) * | 2016-02-18 | 2023-10-23 | 한국전자통신연구원 | Map reduce apparatus, controller for map reduce and method thereof |
+US10275287B2 (en) | 2016-06-07 | 2019-04-30 | Oracle International Corporation | Concurrent distributed graph processing system with self-balance |
+US11146613B2 (en) | 2016-07-29 | 2021-10-12 | International Business Machines Corporation | Distributed computing on document formats |
+US10374968B1 (en) | 2016-12-30 | 2019-08-06 | EMC IP Holding Company LLC | Data-driven automation mechanism for analytics workload distribution |
+US10318355B2 (en) | 2017-01-24 | 2019-06-11 | Oracle International Corporation | Distributed graph processing system featuring interactive remote control mechanism including task cancellation |
+US10402388B1 (en) * | 2017-01-31 | 2019-09-03 | Levyx, Inc. | Partition-based analytic systems and methods |
+JP2018136614A (en) * | 2017-02-20 | 2018-08-30 | 株式会社日立製作所 | Data distributed processing system, data distributed processing method and data distributed processing program |
+US10803023B2 (en) * | 2017-04-02 | 2020-10-13 | Sas Institute Inc. | Techniques for reading from and writing to distributed data stores |
+US10534657B2 (en) | 2017-05-30 | 2020-01-14 | Oracle International Corporation | Distributed graph processing system that adopts a faster data loading technique that requires low degree of communication |
+US10644981B2 (en) * | 2017-06-16 | 2020-05-05 | Hewlett Packard Enterprise Development Lp | Scaling processing systems |
+CN107993696B (en) * | 2017-12-25 | 2020-11-17 | 东软集团股份有限公司 | Data acquisition method, device, client and system |
+US11870840B2 (en) * | 2018-01-12 | 2024-01-09 | Workday, Inc. | Distributed partitioned map reduce using a data fabric |
+US10990595B2 (en) | 2018-05-18 | 2021-04-27 | Oracle International Corporation | Fast distributed graph query engine |
+CN110968407A (en) * | 2018-09-30 | 2020-04-07 | 北京国双科技有限公司 | Task execution method and device, storage medium and electronic device |
+US11372871B1 (en) | 2020-02-21 | 2022-06-28 | Rapid7, Inc. | Programmable framework for distributed computation of statistical functions over time-based data |
+US11461130B2 (en) | 2020-05-26 | 2022-10-04 | Oracle International Corporation | Methodology for fast and seamless task cancelation and error handling in distributed processing of large graph data |
+US11645109B2 (en) * | 2020-10-25 | 2023-05-09 | International Business Machines Corporation | Managing failures in edge computing environments |
+CN113254466B (en) * | 2021-06-18 | 2022-03-01 | 腾讯科技（深圳）有限公司 | Data processing method and device, electronic equipment and storage medium |
+US20230185682A1 (en) * | 2021-12-09 | 2023-06-15 | Microsoft Technology Licensing, Llc | Resilient and adaptive cloud processing of parallel computing workloads |
+Citations (48)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US3905023A (en) | 1973-08-15 | 1975-09-09 | Burroughs Corp | Large scale multi-level information processing system employing improved failsaft techniques |
+US5850547A (en) * | 1997-01-08 | 1998-12-15 | Oracle Corporation | Method and apparatus for parallel processing aggregates using intermediate aggregate values |
+US5854938A (en) * | 1995-06-14 | 1998-12-29 | Fujitsu Limited | Parallel processor apparatus in which data is divided in sequential stages |
+US5872904A (en) | 1991-05-01 | 1999-02-16 | Ncr Corporation | Computer system using a master processor to automatically reconfigure faulty switch node that is detected and reported by diagnostic processor without causing communications interruption |
+US5872981A (en) | 1997-05-30 | 1999-02-16 | Oracle Corporation | Method for managing termination of a lock-holding process using a waiting lock |
+US5937201A (en) | 1995-09-28 | 1999-08-10 | Hitachi, Ltd. | Management system and method for parallel computer system |
+US6041384A (en) * | 1997-05-30 | 2000-03-21 | Oracle Corporation | Method for managing shared resources in a multiprocessing computer system |
+US6088511A (en) | 1998-05-13 | 2000-07-11 | Microsoft Corporation | Nested parallel 2D Delaunay triangulation method |
+US6169989B1 (en) | 1998-05-21 | 2001-01-02 | International Business Machines Corporation | Method and apparatus for parallel profile matching in a large scale webcasting system |
+US6182061B1 (en) | 1997-04-09 | 2001-01-30 | International Business Machines Corporation | Method for executing aggregate queries, and computer system |
+US6192359B1 (en) | 1993-11-16 | 2001-02-20 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US6292822B1 (en) | 1998-05-13 | 2001-09-18 | Microsoft Corporation | Dynamic load balancing among processors in a parallel computer |
+US6321373B1 (en) | 1995-08-07 | 2001-11-20 | International Business Machines Corporation | Method for resource control in parallel environments using program organization and run-time support |
+US6351749B1 (en) | 1999-09-30 | 2002-02-26 | Ncr Corporation | Multi-threading, multi-tasking architecture for a relational database management system |
+US20020095260A1 (en) | 2000-11-28 | 2002-07-18 | Surromed, Inc. | Methods for efficiently mining broad data sets for biological markers |
+US20020099716A1 (en) * | 2001-01-25 | 2002-07-25 | Thompson Chad Grey | Technique and apparatus to process data |
+US6453360B1 (en) | 1999-03-01 | 2002-09-17 | Sun Microsystems, Inc. | High performance network interface |
+US6493797B1 (en) | 2000-03-31 | 2002-12-10 | Intel Corporation | Multi-tag system and method for cache read/write |
+US20020196799A1 (en) | 2001-06-26 | 2002-12-26 | Remer Eric B. | Throttling queue |
+US20030115439A1 (en) | 2001-12-19 | 2003-06-19 | Hewlett Packard Company | Updating references to a migrated object in a partition-based distributed file system |
+US20030120708A1 (en) | 2001-12-20 | 2003-06-26 | Darren Pulsipher | Mechanism for managing parallel execution of processes in a distributed computing environment |
+US20030120709A1 (en) | 2001-12-20 | 2003-06-26 | Darren Pulsipher | Mechanism for managing execution of interdependent aggregated processes |
+US6622301B1 (en) | 1909-02-09 | 2003-09-16 | Hitachi, Ltd. | Parallel program generating method |
+US20030177240A1 (en) | 2001-12-04 | 2003-09-18 | Powerllel Corporation | Parallel computing system, method and architecture |
+US20030195931A1 (en) | 2002-04-16 | 2003-10-16 | Dean Dauger | Method and system for parallel operation and control of legacy computer clusters |
+US20030204703A1 (en) | 2002-04-25 | 2003-10-30 | Priya Rajagopal | Multi-pass hierarchical pattern matching |
+US20030233370A1 (en) | 2000-10-13 | 2003-12-18 | Miosoft Corporation, A Delaware Corporation | Maintaining a relationship between two different items of data |
+US20040139193A1 (en) * | 2003-01-09 | 2004-07-15 | Refai Khaled F. | Network management programmable configuration management framework |
+US20040148273A1 (en) | 2003-01-27 | 2004-07-29 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US20040205057A1 (en) | 2003-04-08 | 2004-10-14 | International Business Machines Corporation | Method and system for executing a database query |
+US20040226013A1 (en) | 2003-05-09 | 2004-11-11 | Andrea Mariotti | Managing tasks in a data processing environment |
+US20040236761A1 (en) | 2003-05-23 | 2004-11-25 | Hans-Joachim Both | File system storage |
+US20040267807A1 (en) | 2000-10-13 | 2004-12-30 | Miosoft Corporation, A Delaware Corporation | Persistent data storage techniques |
+US20050044067A1 (en) | 2003-08-22 | 2005-02-24 | Jameson Kevin Wade | Collection processing system |
+US20050234985A1 (en) | 2004-04-09 | 2005-10-20 | Nexjenn Media, Inc. | System, method and computer program product for extracting metadata faster than real-time |
+US20080005525A1 (en) | 2006-06-29 | 2008-01-03 | Rosenbluth Mark B | Partitioning program memory |
+US7356762B2 (en) | 2002-07-08 | 2008-04-08 | Asm International Nv | Method for the automatic generation of an interactive electronic equipment documentation package |
+US7386849B2 (en) | 1999-09-27 | 2008-06-10 | Oracle International Corporation | Managing parallel execution of work granules according to their affinity |
+US7392320B2 (en) | 1999-06-18 | 2008-06-24 | International Business Machines Corporation | Segmentation and processing of continuous data streams using transactional semantics |
+US20080270436A1 (en) | 2007-04-27 | 2008-10-30 | Fineberg Samuel A | Storing chunks within a file system |
+US20090089544A1 (en) | 2007-10-01 | 2009-04-02 | Accenture Global Services Gmbh | Infrastructure for parallel programming of clusters of machines |
+US20090313635A1 (en) | 2008-06-12 | 2009-12-17 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US20090327668A1 (en) | 2008-06-27 | 2009-12-31 | Microsoft Corporation | Multi-Threaded Processes For Opening And Saving Documents |
+US7650331B1 (en) | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+US7756919B1 (en) | 2004-06-18 | 2010-07-13 | Google Inc. | Large-scale data processing in a distributed and parallel processing enviornment |
+US20110208947A1 (en) | 2010-01-29 | 2011-08-25 | International Business Machines Corporation | System and Method for Simplifying Transmission in Parallel Computing System |
+US20120166448A1 (en) | 2010-12-28 | 2012-06-28 | Microsoft Corporation | Adaptive Index for Data Deduplication |
+US8510538B1 (en) | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+Family Cites Families (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5530802A (en) * | 1994-06-22 | 1996-06-25 | At&T Corp. | Input sequence reordering method for software failure recovery |
+US5867704A (en) * | 1995-02-24 | 1999-02-02 | Matsushita Electric Industrial Co., Ltd. | Multiprocessor system shaving processor based idle state detection and method of executing tasks in such a multiprocessor system |
+JP2001167060A (en) * | 1999-12-07 | 2001-06-22 | Hitachi Ltd | Task paralleling method |
+US6741928B2 (en) | 2000-03-07 | 2004-05-25 | Magellan Dis, Inc. | Navigation system with figure of merit determination |
+US7089561B2 (en) * | 2001-06-01 | 2006-08-08 | Microsoft Corporation | Methods and systems for creating and communicating with computer processes |
+US7093004B2 (en) | 2002-02-04 | 2006-08-15 | Datasynapse, Inc. | Using execution statistics to select tasks for redundant assignment in a distributed computing platform |
+US7739314B2 (en) | 2005-08-15 | 2010-06-15 | Google Inc. | Scalable user clustering based on set similarity |
+US9170848B1 (en) * | 2010-07-27 | 2015-10-27 | Google Inc. | Parallel processing of data |
+IN2013CH05422A (en) * | 2013-11-26 | 2015-05-29 | Inmobi Pte Ltd |
+-
+2004
+- 2004-06-18 US US10/871,245 patent/US7756919B1/en active Active
+-
+2010
+- 2010-01-12 US US12/686,292 patent/US8612510B2/en active Active
+-
+2013
+- 2013-12-06 US US14/099,806 patent/US9612883B2/en active Active
+-
+2017
+- 2017-04-04 US US15/479,228 patent/US10296500B2/en active Active
+-
+2019
+- 2019-05-20 US US16/417,126 patent/US10885012B2/en active Active
+-
+2020
+- 2020-12-28 US US17/134,862 patent/US11366797B2/en active Active
+-
+2022
+- 2022-06-07 US US17/834,316 patent/US11650971B2/en active Active
+-
+2023
+- 2023-04-21 US US18/137,695 patent/US20230385262A1/en active Pending
+Patent Citations (54)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6622301B1 (en) | 1909-02-09 | 2003-09-16 | Hitachi, Ltd. | Parallel program generating method |
+US3905023A (en) | 1973-08-15 | 1975-09-09 | Burroughs Corp | Large scale multi-level information processing system employing improved failsaft techniques |
+US5872904A (en) | 1991-05-01 | 1999-02-16 | Ncr Corporation | Computer system using a master processor to automatically reconfigure faulty switch node that is detected and reported by diagnostic processor without causing communications interruption |
+US6192359B1 (en) | 1993-11-16 | 2001-02-20 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US5854938A (en) * | 1995-06-14 | 1998-12-29 | Fujitsu Limited | Parallel processor apparatus in which data is divided in sequential stages |
+US6321373B1 (en) | 1995-08-07 | 2001-11-20 | International Business Machines Corporation | Method for resource control in parallel environments using program organization and run-time support |
+US5937201A (en) | 1995-09-28 | 1999-08-10 | Hitachi, Ltd. | Management system and method for parallel computer system |
+US5850547A (en) * | 1997-01-08 | 1998-12-15 | Oracle Corporation | Method and apparatus for parallel processing aggregates using intermediate aggregate values |
+US6182061B1 (en) | 1997-04-09 | 2001-01-30 | International Business Machines Corporation | Method for executing aggregate queries, and computer system |
+US6041384A (en) * | 1997-05-30 | 2000-03-21 | Oracle Corporation | Method for managing shared resources in a multiprocessing computer system |
+US5872981A (en) | 1997-05-30 | 1999-02-16 | Oracle Corporation | Method for managing termination of a lock-holding process using a waiting lock |
+US6088511A (en) | 1998-05-13 | 2000-07-11 | Microsoft Corporation | Nested parallel 2D Delaunay triangulation method |
+US6292822B1 (en) | 1998-05-13 | 2001-09-18 | Microsoft Corporation | Dynamic load balancing among processors in a parallel computer |
+US6169989B1 (en) | 1998-05-21 | 2001-01-02 | International Business Machines Corporation | Method and apparatus for parallel profile matching in a large scale webcasting system |
+US6453360B1 (en) | 1999-03-01 | 2002-09-17 | Sun Microsystems, Inc. | High performance network interface |
+US7392320B2 (en) | 1999-06-18 | 2008-06-24 | International Business Machines Corporation | Segmentation and processing of continuous data streams using transactional semantics |
+US7386849B2 (en) | 1999-09-27 | 2008-06-10 | Oracle International Corporation | Managing parallel execution of work granules according to their affinity |
+US6351749B1 (en) | 1999-09-30 | 2002-02-26 | Ncr Corporation | Multi-threading, multi-tasking architecture for a relational database management system |
+US6493797B1 (en) | 2000-03-31 | 2002-12-10 | Intel Corporation | Multi-tag system and method for cache read/write |
+US20040267807A1 (en) | 2000-10-13 | 2004-12-30 | Miosoft Corporation, A Delaware Corporation | Persistent data storage techniques |
+US20030233370A1 (en) | 2000-10-13 | 2003-12-18 | Miosoft Corporation, A Delaware Corporation | Maintaining a relationship between two different items of data |
+US20020095260A1 (en) | 2000-11-28 | 2002-07-18 | Surromed, Inc. | Methods for efficiently mining broad data sets for biological markers |
+US20060259246A1 (en) | 2000-11-28 | 2006-11-16 | Ppd Biomarker Discovery Sciences, Llc | Methods for efficiently mining broad data sets for biological markers |
+US20020099716A1 (en) * | 2001-01-25 | 2002-07-25 | Thompson Chad Grey | Technique and apparatus to process data |
+US20020196799A1 (en) | 2001-06-26 | 2002-12-26 | Remer Eric B. | Throttling queue |
+US20030177240A1 (en) | 2001-12-04 | 2003-09-18 | Powerllel Corporation | Parallel computing system, method and architecture |
+US7174381B2 (en) | 2001-12-04 | 2007-02-06 | Aspeed Software Corporation | Parallel computing system, method and architecture |
+US20030115439A1 (en) | 2001-12-19 | 2003-06-19 | Hewlett Packard Company | Updating references to a migrated object in a partition-based distributed file system |
+US20030120709A1 (en) | 2001-12-20 | 2003-06-26 | Darren Pulsipher | Mechanism for managing execution of interdependent aggregated processes |
+US20030120708A1 (en) | 2001-12-20 | 2003-06-26 | Darren Pulsipher | Mechanism for managing parallel execution of processes in a distributed computing environment |
+US20030195931A1 (en) | 2002-04-16 | 2003-10-16 | Dean Dauger | Method and system for parallel operation and control of legacy computer clusters |
+US20030204703A1 (en) | 2002-04-25 | 2003-10-30 | Priya Rajagopal | Multi-pass hierarchical pattern matching |
+US7356762B2 (en) | 2002-07-08 | 2008-04-08 | Asm International Nv | Method for the automatic generation of an interactive electronic equipment documentation package |
+US20040139193A1 (en) * | 2003-01-09 | 2004-07-15 | Refai Khaled F. | Network management programmable configuration management framework |
+US7146365B2 (en) | 2003-01-27 | 2006-12-05 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US20040148273A1 (en) | 2003-01-27 | 2004-07-29 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US20040205057A1 (en) | 2003-04-08 | 2004-10-14 | International Business Machines Corporation | Method and system for executing a database query |
+US20040226013A1 (en) | 2003-05-09 | 2004-11-11 | Andrea Mariotti | Managing tasks in a data processing environment |
+US20040236761A1 (en) | 2003-05-23 | 2004-11-25 | Hans-Joachim Both | File system storage |
+US20050044067A1 (en) | 2003-08-22 | 2005-02-24 | Jameson Kevin Wade | Collection processing system |
+US20050234985A1 (en) | 2004-04-09 | 2005-10-20 | Nexjenn Media, Inc. | System, method and computer program product for extracting metadata faster than real-time |
+US7756919B1 (en) | 2004-06-18 | 2010-07-13 | Google Inc. | Large-scale data processing in a distributed and parallel processing enviornment |
+US7650331B1 (en) | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+US8612510B2 (en) * | 2004-06-18 | 2013-12-17 | Google Inc. | System and method for large-scale data processing using an application-independent framework |
+US20080005525A1 (en) | 2006-06-29 | 2008-01-03 | Rosenbluth Mark B | Partitioning program memory |
+US20080270436A1 (en) | 2007-04-27 | 2008-10-30 | Fineberg Samuel A | Storing chunks within a file system |
+US20090089544A1 (en) | 2007-10-01 | 2009-04-02 | Accenture Global Services Gmbh | Infrastructure for parallel programming of clusters of machines |
+US7917574B2 (en) | 2007-10-01 | 2011-03-29 | Accenture Global Services Limited | Infrastructure for parallel programming of clusters of machines |
+US20090313635A1 (en) | 2008-06-12 | 2009-12-17 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US20090327668A1 (en) | 2008-06-27 | 2009-12-31 | Microsoft Corporation | Multi-Threaded Processes For Opening And Saving Documents |
+US8255905B2 (en) | 2008-06-27 | 2012-08-28 | Microsoft Corporation | Multi-threaded processes for opening and saving documents |
+US8510538B1 (en) | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US20110208947A1 (en) | 2010-01-29 | 2011-08-25 | International Business Machines Corporation | System and Method for Simplifying Transmission in Parallel Computing System |
+US20120166448A1 (en) | 2010-12-28 | 2012-06-28 | Microsoft Corporation | Adaptive Index for Data Deduplication |
+Non-Patent Citations (7)
+Title |
+---|
+Barroso, Web search for a planet: the Google cluster architecture, Apr. 2003, 7 pgs. |
+Ghemawat, The Google file system, 2003, 15 pgs. |
+Petrini, System-Level Fault-Tolerance in Large-Scale Parallel Machines with Buffered Coscheduling, IPDS'04, 2004, 8 pgs. |
+Rabin, Efficient dispersal of information for security, load balancing and fault tolerance, Apr. 1989, 14 pgs. |
+Riedel, Active disk for large-scale data processing, Jun. 2001, 7 pgs. |
+Thain, Distributed computing in practice: the condor experience, 2004, 34 pgs. |
+Valiant, A bridging model for parallel computation, Aug. 1990, 9 pgs. |
+Cited By (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US11675841B1 (en) | 2008-06-25 | 2023-06-13 | Richard Paiz | Search engine optimizer |
+US11941058B1 (en) | 2008-06-25 | 2024-03-26 | Richard Paiz | Search engine optimizer |
+US11741090B1 (en) | 2013-02-26 | 2023-08-29 | Richard Paiz | Site rank codex search patterns |
+US11809506B1 (en) | 2013-02-26 | 2023-11-07 | Richard Paiz | Multivariant analyzing replicating intelligent ambience evolving system |
+US20180365382A1 (en) * | 2017-06-20 | 2018-12-20 | International Business Machines Corporation | Power-efficient health affliction classification |
+US10978203B2 (en) * | 2017-06-20 | 2021-04-13 | International Business Machines Corporation | Power-efficient health affliction classification |
+RU2685018C1 (en) * | 2018-04-24 | 2019-04-16 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Program multi-sequencing method in the computer system |
+RU2691860C1 (en) * | 2018-06-25 | 2019-06-18 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for parallelizing programs in a logical programming environment in a computer system |
+RU2704533C1 (en) * | 2019-01-28 | 2019-10-29 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for paralleling programs in an agent-based programming environment in a computer system |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20230385262A1 (en) | 2023-11-30 |
+US20170206232A1 (en) | 2017-07-20 |
+US11366797B2 (en) | 2022-06-21 |
+US20220405264A1 (en) | 2022-12-22 |
+US8612510B2 (en) | 2013-12-17 |
+US7756919B1 (en) | 2010-07-13 |
+US20140096138A1 (en) | 2014-04-03 |
+US10885012B2 (en) | 2021-01-05 |
+US11650971B2 (en) | 2023-05-16 |
+US20190272264A1 (en) | 2019-09-05 |
+US10296500B2 (en) | 2019-05-21 |
+US20100122065A1 (en) | 2010-05-13 |
+US20210117401A1 (en) | 2021-04-22 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11650971B2 (en) | System and method for large-scale data processing using an application-independent framework | |
+US7650331B1 (en) | System and method for efficient large-scale data processing | |
+US9886325B2 (en) | System and method for limiting the impact of stragglers in large-scale parallel data processing | |
+US20220171781A1 (en) | System And Method For Analyzing Data Records | |
+US9760595B1 (en) | Parallel processing of data | |
+US9977689B2 (en) | Dynamic scaling of management infrastructure in virtual environments | |
+US8417991B2 (en) | Mitigating reduction in availability level during maintenance of nodes in a cluster | |
+US7647590B2 (en) | Parallel computing system using coordinator and master nodes for load balancing and distributing work | |
+CN112753022A (en) | Automatic query retry in a database environment | |
+CN116302574B (en) | Concurrent processing method based on MapReduce | |
+Bhatt | Performance Evaluation of Load Balancing Algorithms in Hadoop | |
+Bindschaedler | An Architecture for Load Balance in Computer Cluster Applications | |
+Vijayasherly et al. | Implementation of Load Balancing Algorithm for Data Intensive Applications using MPI | |
+Sammulal et al. | Performance Improvement in a Multi Cluster using a Modified Scheduling and Global Memory Management with a Novel Load Balancing Mechanism | |
+Chung et al. | Parallel Distributive Join Algorithm on the Intel Paragon |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+CC | Certificate of correction | ||
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044695/0115Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 4 |

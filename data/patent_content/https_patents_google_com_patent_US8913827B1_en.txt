@@ -1,0 +1,413 @@
+US8913827B1 - Image color correction with machine learning - Google Patents
+Image color correction with machine learning Download PDFInfo
+- Publication number
+- US8913827B1 US8913827B1 US13/104,625 US201113104625A US8913827B1 US 8913827 B1 US8913827 B1 US 8913827B1 US 201113104625 A US201113104625 A US 201113104625A US 8913827 B1 US8913827 B1 US 8913827B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- image
+- color
+- metric
+- colors
+- classifier
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06T—IMAGE DATA PROCESSING OR GENERATION, IN GENERAL
+- G06T5/00—Image enhancement or restoration
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F18/00—Pattern recognition
+- G06F18/20—Analysing
+- G06F18/22—Matching criteria, e.g. proximity measures
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06T—IMAGE DATA PROCESSING OR GENERATION, IN GENERAL
+- G06T11/00—2D [Two Dimensional] image generation
+- G06T11/001—Texturing; Colouring; Generation of texture or colour
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06V—IMAGE OR VIDEO RECOGNITION OR UNDERSTANDING
+- G06V10/00—Arrangements for image or video recognition or understanding
+- G06V10/70—Arrangements for image or video recognition or understanding using pattern recognition or machine learning
+- G06V10/74—Image or video pattern matching; Proximity measures in feature spaces
+- G06V10/761—Proximity, similarity or dissimilarity measures
+-
+- H—ELECTRICITY
+- H04—ELECTRIC COMMUNICATION TECHNIQUE
+- H04N—PICTORIAL COMMUNICATION, e.g. TELEVISION
+- H04N1/00—Scanning, transmission or reproduction of documents or the like, e.g. facsimile transmission; Details thereof
+- H04N1/46—Colour picture communication systems
+- H04N1/56—Processing of colour picture signals
+- H04N1/60—Colour correction or control
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06T—IMAGE DATA PROCESSING OR GENERATION, IN GENERAL
+- G06T2207/00—Indexing scheme for image analysis or image enhancement
+- G06T2207/10—Image acquisition modality
+- G06T2207/10024—Color image
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06T—IMAGE DATA PROCESSING OR GENERATION, IN GENERAL
+- G06T2207/00—Indexing scheme for image analysis or image enhancement
+- G06T2207/20—Special algorithmic details
+- G06T2207/20081—Training; Learning
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06V—IMAGE OR VIDEO RECOGNITION OR UNDERSTANDING
+- G06V10/00—Arrangements for image or video recognition or understanding
+- G06V10/40—Extraction of image or video features
+- G06V10/56—Extraction of image or video features relating to colour
+-
+- H—ELECTRICITY
+- H04—ELECTRIC COMMUNICATION TECHNIQUE
+- H04N—PICTORIAL COMMUNICATION, e.g. TELEVISION
+- H04N1/00—Scanning, transmission or reproduction of documents or the like, e.g. facsimile transmission; Details thereof
+- H04N1/387—Composing, repositioning or otherwise geometrically modifying originals
+- H04N1/3876—Recombination of partial images to recreate the original image
+Definitions
+- Embodiments generally relate to image processing, and particularly to color correction.
+- Digital image editing can include color transfer scenarios, where a user wants to impart color characteristics of one image to another image.
+- users may want to merge partially overlapping satellite imagery from different providers to generate a large digital map. Images included in this imagery may have different exposure and color balance values. For example, the images may have been taken at different times of a day. Furthermore, real world objects in the images may have changed due to changing seasons or even human construction. Without proper pre-processing, merging imagery from multiple sources may lead to a ‘patchy’ result, where images have different and/or inconsistent color characteristics.
+- users may want to enhance user captured digital images by looking at examples of other images. Given images capturing a similar scene, a user may want to process an image captured by the user so that the image appears as a professionally captured and a more aesthetically pleasing image. Such processing can be significantly harder than the previous exemplary application because it does not have the benefit of spatially overlapping information, which can serve as an important heuristic on how to correspond colors between two different images.
+- Transferring colors from one image to another can be a challenging task. This is partly because a metric that can measure the likeliness of a “color mood” in an image, while tolerating image variations, is difficult to define explicitly.
+- a very simple approach to accomplish color transfer is to match an average color and its standard deviation of two images. This approach works well when two images contain similar portions or proportions of colors. However, limitations of this approach become evident when the proportions of color between the images are varied. For example, there may be two images, each of the ocean and a beach, where one image's colors are to be used to enhance the other image's colors. A first image may contain a 70% ocean region and a 30% beach region, while a second image may contain a 30% ocean region and a 70% beach region. Using the conventional approach just described, matching the colors would yield a new image on which the average color shifts the blue color of the ocean in the first image into an undesirable yellow-ish blue color because of the varying color proportions between the images. Equalizing an image color histogram also leads to similar artifacts.
+- Embodiments relate to image color correction with machine learning.
+- An embodiment includes identifying color candidates of mean color correspondences between a first image having desired color characteristics and a second image to which the desired color characteristics are to be applied, training a classifier to provide a metric that corresponds to a degree of difference between the first image and the second image, and iteratively determining optimal mean color correspondences between the first image and the second image using the metric as an objective function.
+- the embodiment further includes recursively re-training the classifier to obtain updated metrics that correspond to a degree of difference between the first image and one or more color-corrected candidates of the second image, and selecting a candidate image having the desired color characteristics after a pre-determined number of re-training recursions, the candidate image corresponding to a desired metric score.
+- Embodiments also include generating a transformation field in color space to transform one or more mean colors in the second image and generating a color-corrected image having the desired color characteristics of the first image using the transformed colors.
+- FIG. 1A illustrates components for performing image color correction with machine learning, according to an embodiment.
+- FIG. 1B is a flowchart illustrating an exemplary overall operation for performing image color correction with machine learning, according to an example embodiment.
+- FIG. 1C is a flowchart illustrating an exemplary overall operation of an optimizer, according to an embodiment.
+- FIG. 1D is a flowchart illustrating an exemplary overall operation of a color transfer module, according to an embodiment.
+- FIG. 2 illustrates transfer of color between color images, according to an embodiment.
+- FIG. 3 illustrates color transfer attempts with incremental scores during optimization, according to an embodiment.
+- FIG. 4 illustrates variations from recursive training to image 208 of FIG. 2 , according to an embodiment.
+- FIG. 5 illustrates an over-saturation effect on a color transferred correctible image and effects of Poisson image editing on the color transferred correctible image.
+- FIG. 6 illustrates exemplary reference images, according to an embodiment.
+- FIG. 7 includes exemplary color transfer results to image 602 of FIG. 6 , according to an embodiment.
+- FIG. 8 includes exemplary color transfer results to image 604 of FIG. 6 , according to an embodiment.
+- FIG. 9 illustrates an example computer device useful for implementing components of the embodiments.
+- color candidates of mean color correspondences between a first image having desired color characteristics and a second image to which the desired color characteristics are to be applied may be identified.
+- a classifier may be trained to provide a metric that corresponds to a degree of difference between the first image and the second image.
+- Optimal mean color correspondences may be iteratively determined between the first image and the second image using the metric as an objective function.
+- a color candidate identifier identifies color candidates of mean color correspondences between a first image having desired color characteristics and a correctible image to which the desired color characteristics are to be applied.
+- a classifier provides a metric that corresponds a degree of difference between the first image and the second image.
+- An optimizer iteratively determines optimal mean color correspondences between the first image and the second image using the metric as an objective function, and a color transfer module generates a transformation field in color space to transform one or more mean colors in the second image and generate a color-corrected image having the desired color characteristics of the first image using the transformed colors.
+- FIG. 1A illustrates components for performing image color correction with machine learning, according to an example embodiment.
+- the components of FIG. 1A may be used to enhance the colors of a second image based on the colors occurring in a first image.
+- the first image may include a reference image 104 that includes one or more similar objects for which the colors and/or attributes or characteristics of the colors are more desirable to a user.
+- the second image may include a correctible image 102 of one or more objects, in which the colors and/or attributes or characteristics of the colors (e.g., brightness, intensity, hue, etc.) are less than desirable to the user.
+- the components may then enhance the colors and/or attributes or characteristics of the colors of the correctible image 102 based on reference image 104 .
+- the components then produce color-corrected image 106 that includes the objects as appearing in correctible image 102 with one or more colors corrected based on reference image 104 .
+- operations of ‘correcting the color’ of the correctible image, ‘correcting the color’ or ‘enhancing the color’ are used interchangeably and refer to correcting, changing, enhancing or otherwise modifying the color(s) and/or attributes or characteristics of the colors of correctible image 102 .
+- color candidate identifier 110 identifies colors from objects (or portions) of reference image 104 that correspond to color correctible objects (or portions) of correctible image 102 .
+- the components illustrated in FIG. 1A may not only determine which colors of correctible image 102 to enhance, but also which combinations of colors will appear most appropriate in the resulting color-corrected image 106 .
+- Color candidate identifier 110 receives correctible image 102 and reference image 104 , and determines color candidates 112 from each image.
+- Color candidates 112 may include one or more colors as identified from each image that correspond to each other. For example, candidate identifier 110 may determine one or more correctible colors from correctible image 102 , and then for each correctible color, may determine one or more corresponding candidate colors from reference image 104 . Color candidates 112 may then include the correctible colors and the candidate colors as determined by color candidate identifier 110 .
+- color candidate identifier 110 is configured to identify color candidates of mean color correspondences between reference image 104 having desired color characteristics and correctible image 102 to which the desired color characteristics are to be applied.
+- color candidate identifier 110 may use or apply a standard k-means algorithm or clustering to find mean colors from each image.
+- the k-means algorithm is an unsupervised learning algorithm known to those skilled in the art.
+- color candidate identifier 110 may find multiple mean or candidate colors in reference image 104 as possible colors to match to those mean colors from correctible image 102 . It is to be appreciated that the embodiments are not limited to mean color values and the k-means algorithm and can be applied to any other color values or functions of the embodiments.
+- Color candidate identifier 110 may define or determine an affinity matrix to find multiple mean colors in reference image 104 as possible colors to match to those in correctible image 102 .
+- Spectral correspondence operations are known to those skilled in the art and may be used to find correspondences between two sets of features given an adjacency or affinity matrix of their pairwise agreements.
+- a second order spectral correspondence technique, according to an embodiment, label is discussed below with respect to affinity matrix M.
+- Color candidate identifier 110 may pick n mean colors for both images, ⁇ c p ⁇ from reference image 104 and ⁇ c u ⁇ from correctible image 102 .
+- a candidate e.g., candidate color 112
+- a (i, i′) matches c pi to c ui′ .
+- the affinity matrix M may be n 2 by n 2 where:
+- M ⁇ ( a , b ) 1 n Consist (a, b) ⁇ Neighboring(a, b), measures how well two matches agree with other.
+- Consist( a,b ) Match( a,b ) ⁇ Range( a,b ) ⁇ coef (1)
+- Match (a,b) is a non-negative value on consistency of direction between two matches
+- Range ⁇ ⁇ ( a , b ) ⁇ dif u dif p , ⁇ dif p ⁇ ⁇ ⁇ dif u ⁇ dif p dif u , ⁇ dif p ⁇ ⁇ ⁇ dif u ⁇ ( 3 )
+- Range (a,b) penalizes different magnitudes of two matches.
+- the coefficient “coef” penalizes on a larger difference between two undesirable colors, because their correlation becomes less relevant. Furthermore, the value of coef floors at zero.
+- Neighboring may measure neighboring information between colors. Intuitively, if two preferred colors neighbor each other substantially in reference image 104 , they are preferred to color neighboring segments in correctible image 102 too, and vice-versa.
+- n ij as ratio of pixels from c pi among all pixels neighboring c pj in the image.
+- Neighboring ⁇ ( a , b ) 1 - 1 2 ⁇ ( ⁇ ni j - n i ′ ⁇ j ′ ⁇ + ⁇ n ji - n j ′ ⁇ i ′ ⁇ ) ( 5 )
+- 1/n in M(a, b) is a normalization term such that for each column of M, the sum of M(a, b) is comparable to that of M(a, a).
+- the principal eigenvector of M ranks all possible color pair candidates 112 by likelihood.
+- Eigenvectors are known to those skilled in the art.
+- eigenvectors of a square matrix may be non-zero vectors that, after being multiplied by the matrix, remain proportional to the original vector.
+- color candidate identifier 110 may pick a top percentage (e.g., top 40%) of candidates while retaining a few candidates (e.g., three candidates) for each c u from correctible image 102 .
+- the percentage and/or number of candidates, as selected by color candidate identifier 110 may vary.
+- the second-order term M(a, b) plays a regularization role in robust color pair matching as may be performed by color candidate identifier 110 .
+- color candidate identifier 110 may degenerate to a greedy approach of simply matching closest colors.
+- the affinity matrix M discussed above may have a size of n 4 .
+- color candidate identifier 110 may make the affinity matrix sparse by selectively considering color pairs suitable as candidates 112 .
+- color candidate identifier 110 imposes a restriction on color pairs with varying attributes (e.g., restrictions such as hue difference ⁇ 45 and hsv color difference ⁇ 100).
+- Color candidate identifier 110 outputs a mean color count (for candidates 112 ) that is sufficient for color transfer purposes. As a purely illustrative non-limiting example, thirty or less mean colors may be sufficient in an example embodiment.
+- Classifier 120 may determine or provide metric 122 that indicates a degree of difference between correctible image 102 and reference image 104 . It may be that multiple candidates of preferred colors from reference image 104 for each undesirable or correctible color from correctible image 102 may lead to numerous combinations, each of which generates a possible color transfer result. Thus, metric 122 may indicate a level of difference between colors of an image (e.g., an enhanced or corrected image or version of correctible image 102 ) and the colors of reference image 104 . Classifier 120 may then use metric 122 to pick the best color combination.
+- metric 122 may indicate a level of difference between colors of an image (e.g., an enhanced or corrected image or version of correctible image 102 ) and the colors of reference image 104 . Classifier 120 may then use metric 122 to pick the best color combination.
+- classifier 120 may utilize a machine learning algorithm such as AdaBoost to learn metric 122 from images.
+- AdaBoost a machine learning algorithm
+- classifier 120 may include a machine learning classifier, such that classifier 120 can, for example, return a higher score on a feature of an image whose color characteristics are less different from the color characteristics of reference image 104 . Classifier 120 may return a low score for correctible image 102 (before it has been color corrected or enhanced), but a high score once correctible image 102 is modified or corrected to (better) match the colors of reference image 104 .
+- classifier 120 need not be based on the spatial layout of reference image 104 because the spatial layout between reference image 104 and correctible image 102 may vary and may, for example, produce less than desirable color corrected image 106 .
+- classifier 120 uses a feature based on a spatial pyramid matching kernel (SPMK) of LAB color.
+- SPMK of LAB color is a feature that is known to those skilled in the art.
+- a LAB color space for example, is a color-opponent space with dimension L for lightness, and A and B for the color-opponent dimensions.
+- both images i.e., reference image 104 and correctable image 102
+- both images are resolved or sub-divided into a virtual pyramid of overlapping patches.
+- the images are decomposed into image patches (e.g., 1 by 1, 2 by 2, . . . , 10 by 10 pixel patches), with an overlapping (e.g., 20% overlapping) between patches.
+- Each patch may be further down-sampled (e.g., down sampled to 50 by 50 pixels), by classifier 120 , if necessary, for fast feature finding.
+- patches from reference image 104 are labeled positive, and those from correctible image 102 are labeled negative, accompanied by their respective SPMK features.
+- Other example embodiments may include variations in the implementation of classifier 120 as just specified, for example, a varying number of patches, pixel values or percentages may be used.
+- the specific examples provided here are intended to be exemplary and not limiting to the example embodiments of the components of FIG. 1A .
+- a standard AdaBoost training may be performed on features in the image patches to yield classifier 120 with a plurality of decision stumps (e.g., 300 decision stumps).
+- AdaBoost is a machine learning algorithm that is well known to persons skilled in the art.
+- optimizer 130 may find features on image patches of a color-transferred correctible image in a similar way, and apply classifier 120 on each of the images.
+- Classifier 120 may use the average score or metric 122 for the images to which classifier 120 has been applied.
+- AdaBoost thresholds may be scored to return a binary decision, or classifier 120 may use the score or metric 122 directly as an optimization objective function for optimizer 130 .
+- Optimizer 130 determines which color combinations to use for enhancing correctible image 102 based on reference image 104 . As combinations of multiple preferred colors (from reference image 104 ) for each correctible color (from correctible image 102 ) may be exponential for a brute force search, optimizer 130 may iteratively parse through and score the combinations to determine the best color combinations by which to enhance or correct correctible image 102 colors. According to an example embodiment, optimizer 130 begins by selecting a first candidate match for each correctible color. At each iteration, optimizer 130 may try the correctible colors one by one, loop through its candidates, and pick a candidate color match yielding the best or highest scoring metric 122 . It maybe, for example, be the case that optimizer 130 iterates through candidates 112 multiple times before determining the optimal color matches.
+- Training 135 may include a recursive and/or iterative training as taking place between classifier 120 and optimizer 130 .
+- I 0 may lie between the color scheme of preferred or reference image 104 I p and the un-preferred or correctible image 102 I u .
+- classifier 120 may have been initially trained using I p and I u . As such, classifier 120 may not have been fine-tuned to determine the smaller difference(s) between I 0 and I p , and thus may not be able to further improve the results of optimizer 130 . To remedy this, in an embodiment, training 135 may repeat optimization (and other operations) using image patches from both I u and I 0 as negative examples to obtain another color-corrected image I 1 . In this way, classifier 120 may utilize and account for more subtle differences between I 0 and I p , so color-corrected image I 1 is likely a better color correction result.
+- Training 135 may cause classifier 120 to perform refinement recursively, where each recursive iteration uses correctible image 102 and all previously generated color transferred or color-corrected images as negative examples.
+- recursion may be performed a fixed or variable number of times to prevent quality oscillation during this recursive approach.
+- Quality oscillation refers to a situation in which, assuming image I k is actually the optimal color-corrected result, oscillation in color-corrected image quality occurs above a certain number of recursions in which the quality of further color-corrected image I k+1 starts to get worse.
+- classifier 120 completes a fixed number of recursions with a collection of images ⁇ I k ⁇ , and trains another classifier 120 with images ⁇ I k ⁇ as negative examples against image I p . An image a with highest score among images ⁇ I k ⁇ may then be picked as an output color transfer result.
+- metric 122 may, for example, not favor images matching the entirety of a preferred image over those matching a part.
+- optimizer 120 may apply regularization on the variations it attempts. For example, such regularization may be obtained by setting a limit on hue variations of matching candidates.
+- Color transfer module 140 transfers colors from reference image 104 to correctible image 102 .
+- Color transfer module 140 may, for example, receive a matched color pair from optimizer 130 , where the matched color pair may include a correctible color from correctible image 102 and a matched corresponding preferred or reference color from reference image 104 .
+- Color transfer module 140 may then enhance the correctible color based on the preferred or reference color by replacing the correctible color with the reference color and/or blending the two colors to produce color-corrected image 106 .
+- mean colors ⁇ c p ⁇ in reference image 104 and mean colors ⁇ c u ⁇ in correctible image 102 are used to generate a transformation field in color-space.
+- mean colors ⁇ c p ⁇ in reference image 104 and mean colors ⁇ c u ⁇ in correctible image 102 their correspondence, ⁇ (c pi , c ui ) ⁇ , has been discussed above.
+- classifier 120 may detect a situation that may cause artificial noise by measuring color distance between each pair of (c pi , c ui ) and (c pj , c uj ).
+- color transfer module 140 may selectively abandon either (c pi , c uj ) or (c pj , c uj ). To pick which color pair to abandon, color transfer module 140 may find for each match in ⁇ (c pi , c ui ) ⁇ the classifier score difference on the color-transferred image with and without (c pi , c ui ), and abandon the color pair that leads to a lesser classifier score drop. In this way, classifier 120 corrects for artificial noise that may be generated in color-corrected image 106 .
+- artifacts may occur at some locations in color-corrected image 106 where features are unnaturally enhanced or removed due to specific color combinations.
+- the transferred color instead of outputting color-corrected image 106 in its entirety, the transferred color may be applied at sparse pixel locations on correctible image 102 (or a copy of correctible image 102 ), to preserve color gradients and details occurring in correctible image 102 .
+- New colors may then be propagated to the rest of the image 106 using, for example, Poisson image editing.
+- Poisson image editing is known to those skilled in the art. Poisson image editing may be used to fix details, for example, by adding a back gradient from the original correctible image 102 in or to color-corrected image 106 .
+- the components of FIG. 1A may be used in any number of varying applications.
+- the components may be used to color correct satellite images (obtained from one or more satellite imaging sources) against each other, and color correct building facade textures under different lighting angles so that they appear consistent. Artificial shading may also be applied to building textures.
+- the components may be used in other forms of image processing and editing applications to color correct images against each other.
+- the components of FIG. 1A have been described in reference to a single correctible image 102 and a single reference image 104 , one skilled in the art will recognize that the components may be used to perform color correction on multiple reference images 104 and/or multiple correctible images 102 .
+- FIG. 1B is a flowchart illustrating an operation 150 , which is an exemplary overall operation of the components of FIG. 1A .
+- Operation 150 begins with identifying color candidates of mean color correspondences between a first image having desired color characteristics and a second image to which the desired color characteristics are to be applied (stage 152 ). Such identifying may be performed for example, by color candidate identifier 110 . A metric that corresponds to a degree of difference between the first image and the second image is then provided (stage 154 ). The metric may be, for example, provided by classifier 120 . Optimal mean color correspondences between the first image and the second image using the metric as an objective function are iteratively determined (stage 156 ). As an example, optimizer 130 may determine optimal mean color correspondences between the first image and the second image.
+- a generate a transformation field is generated in color space to transform one or more mean colors in the second image and generate a color-corrected image having the desired color characteristics of the first image using the transformed colors (stage 158 ).
+- color transfer module 140 may generate a transformation field.
+- FIG. 1C is a flowchart illustrating an operation 160 , which is an exemplary overall operation of optimizer 130 .
+- Operation 160 begins with recursively re-training a classifier to obtain updated metrics that correspond to a degree of difference between the first image and one or more color-corrected candidates of the second image (stage 162 ).
+- optimizer 130 recursively re-trains classifier 120 to obtain updated metrics that correspond to a degree of difference between the first image and one or more color-corrected candidates of the second image.
+- a candidate image having the desired color characteristics is selected after a pre-determined number of re-training recursions, where the candidate image corresponds to a desired metric score (stage 164 ).
+- optimizer 130 selects a candidate image having the desired color characteristics after a pre-determined number of re-training recursions, the candidate image corresponding to a desired metric score.
+- FIG. 1D is a flowchart illustrating an operation 170 , which is an exemplary overall operation of color transfer module 140 as described above.
+- Operation 170 begins with generating a transformation field in color space to transform one or more mean colors in the second image (stage 172 ).
+- color transfer module 140 generates a transformation field in color space to transform one or more mean colors in the second image.
+- a color-corrected image having the desired color characteristics of the first image is generated using the transformed colors (stage 174 ).
+- color transfer module 140 generates a color-corrected image having the desired color characteristics of the first image using the transformed colors.
+- FIG. 2 illustrates transfer of color between color images, according to an embodiment.
+- image 202 is a reference image 104 and image 204 is a correctible image 102 .
+- a conventional approach to color correction may include matching average and standard deviation of pixel colors in both images. The result of such a conventional approach may be seen in image 206 . As seen in image 206 , because the yellow plains are the dominant portion of image 202 , the sky may turn a yellowish color, while the trees, though still red, may now have a yellowish hue.
+- Color correcting image 204 based on image 202 via the components of FIG. 1A as discussed above may result in a color-corrected image such as image 208 .
+- FIG. 3 illustrates color transfer attempts with incremental scores during optimization, according to an embodiment.
+- image 204 is to be enhanced or corrected based on image 202
+- the example of FIG. 3 shows exemplary intermediate attempts to correct the image 204 and increase metric 122 score.
+- image 302 may be the first attempt at color correcting, and successively, image 308 may be the final attempt where metric 122 score is highest.
+- Image 304 may have a higher metric 122 score than image 302 , because for example, when viewing the images, it may be seen that much of the darkness surrounding the objects of image 302 are lightened in image 304 .
+- optimizer 130 may recursively or iteratively train 135 with classifier 120 to yield image 304 , for which there is a significantly visible improvement over image 302 (and corresponding metric 122 score improvement).
+- Classifier 120 may then again recursively train 135 itself using images 304 and 302 as negative samples, and image 202 as a positive sample to yield the further color-corrected image 306 . Repeating the process one more time may yield the color-corrected image 308 , which may have the highest metric 122 score of the all images 302 - 306 .
+- FIG. 4 illustrates variations from recursive training to image 108 of FIG. 1 , according to an embodiment.
+- each time optimizer 130 performs a recursive optimization on an image a new color-corrected image associated with a new metric score may be produced.
+- images 402 , 404 , 406 and 408 of FIG. 4 show four example images that may be produced as a result of recursive training 135 by classifier 120 . When viewed closely it may be seen that color differences between the images 402 - 408 exist in the sky and the trees as depicted by the images.
+- FIG. 5 illustrates an over-saturation effect on a color transferred correctible image and effects of Poisson image editing on the color transferred correctible image.
+- Image 502 shows an example correctible image where there has been a color over-saturation on the grass, especially visible on the top-half of image 502 .
+- Image 504 shows how image 502 may change if a gradient from an original (correctible) image is applied to optimize image 502 . As may be seen in the corresponding grass, especially in the top-half of image 504 , less color saturation is visible.
+- FIG. 6 illustrates exemplary reference images, according to an embodiment.
+- Images 602 and 604 are example reference images 104 that may be used by the components of FIG. 1A . As may be seen, the vibrant colors in the images are good examples of how an image should look. It should be understood that images 602 and 604 are merely exemplary, and use are a reference image 104 is based on a user's preferences and/or goals.
+- FIG. 7 includes exemplary color transfer results to image 602 of FIG. 6 , according to an embodiment.
+- FIG. 7 includes 3 columns of images.
+- the first column of images 702 , 708 and 714 includes original or correctible images 102 with correctible colors that are to be improved.
+- the second column of images 704 , 710 and 716 includes representations of the first column of images that have been color corrected using a conventional or average color and standard deviation technique.
+- the third column of images 706 , 712 and 718 includes representations of the first column of images that have been color corrected using the components of FIG. 1A . Images 706 , 712 and 718 have been color corrected based on image 602 of FIG. 6 .
+- FIG. 8 includes exemplary color transfer results to image 604 of FIG. 6 , according to an embodiment.
+- FIG. 8 includes 3 columns of images.
+- the first column of images 802 , 808 and 814 includes original or correctible images 102 , taken at the same geo-location as the image 604 of FIG. 6 , with correctible colors that are to be improved.
+- the second column of images 804 , 810 and 816 includes representations of the first column of images that have been color corrected using a conventional or average color and standard deviation technique.
+- the third column of images 806 , 812 and 818 includes representations of the first column of images that have been color corrected using the components of FIG. 1A . Images 806 , 812 and 818 have been color corrected based on the image 604 of FIG. 6 .
+- FIG. 9 illustrates an example computer device useful for implementing components of the embodiments.
+- color candidate identifier 110 , classifier 120 , optimizer 130 and color transfer module 140 may be implemented using one or more computers, such as example computer 902 shown in FIG. 9 .
+- Computer 902 can be any commercially available and well known computer capable of performing the functions described here, such as computers available from International Business Machines, Apple, Sun, HP, Dell, Compaq, Cray, etc.
+- Computer 902 includes one or more processors (also called central processing units, or CPUs), such as a processor 906 .
+- processors also called central processing units, or CPUs
+- Processor 906 is connected to a communication infrastructure 904 .
+- Computer 902 may also include a main or primary memory 908 , such as random access memory (RAM).
+- Control logic 968 A (computer software), and data may be stored in primary memory 908 .
+- Computer 902 also includes one or more secondary storage devices 910 .
+- Secondary storage devices 910 include, for example, a hard disk drive 912 and/or a removable storage device or drive 914 , as well as other types of storage devices, such as memory cards and memory sticks.
+- Removable storage drive 914 represents a floppy disk drive, a magnetic tape drive, a compact disk drive, an optical storage device, tape backup, etc.
+- Removable storage drive 914 may interact with a removable storage unit 916 .
+- Removable storage unit 916 includes a computer useable or readable storage medium 964 A.
+- Computer software 968 B (control logic) and/or data may be stored in computer useable or readable storage medium 964 A.
+- Removable storage unit 916 represents a floppy disk, magnetic tape, compact disk, DVD, optical storage disk, flash memory drive, or any other computer data storage device.
+- Removable storage drive 914 reads from and/or writes to removable storage unit 916 in a well known manner.
+- Computer 902 also includes input/output/display devices 966 , such as monitors, keyboards, pointing devices, Bluetooth devices, etc.
+- Computer 902 further includes a communication or network interface 918 .
+- Network interface 918 enables computer 902 to communicate with remote devices.
+- network interface 918 allows computer 902 to communicate over communication networks or mediums 964 B (representing a form of a computer readable medium), such as LANs, WANs, the Internet, etc.
+- Network interface 918 may interface with remote sites or networks via wired or wireless connections.
+- Control logic 968 C may be transmitted to and from computer 902 via communication medium 964 B.
+- Any tangible apparatus or article of manufacture that includes a computer useable or readable medium having control logic (software) stored in the apparatus or article of manufacture is referred to here as a computer program product or program storage device.
+- Embodiments described here may work with software, firmware, hardware, and/or operating device implementations other than those described here. Any software, hardware, and operating device implementations suitable for performing the functions described here can be used. Embodiments are applicable to both a client and to a server or a combination of both.
+Abstract
+Description
+-
+- 1. M(a, a)=1.0−∥a∥, measures how well cpi matches cui′, where ∥a∥, is normalized color distance between cpi and cui′.
+- 2.
+Consist (a, b)×Neighboring(a, b), measures how well two matches agree with other. Here a=(i, i′) and b=(j, j′).
+Consist(a,b)=Match(a,b)×Range(a,b)×coef (1)
+where
+where,
+Claims (21)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/104,625 US8913827B1 (en) | 2010-05-10 | 2011-05-10 | Image color correction with machine learning |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US33319610P | 2010-05-10 | 2010-05-10 | |
+US13/104,625 US8913827B1 (en) | 2010-05-10 | 2011-05-10 | Image color correction with machine learning |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US8913827B1 true US8913827B1 (en) | 2014-12-16 |
+Family
+ID=52015309
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/104,625 Active 2033-06-07 US8913827B1 (en) | 2010-05-10 | 2011-05-10 | Image color correction with machine learning |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US8913827B1 (en) |
+Cited By (17)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+CN104700353A (en) * | 2015-02-11 | 2015-06-10 | 小米科技有限责任公司 | Image filter generating method and device |
+US20150185017A1 (en) * | 2013-12-28 | 2015-07-02 | Gregory L. Kreider | Image-based geo-hunt |
+US20160132997A1 (en) * | 2014-11-10 | 2016-05-12 | Arizona Board Of Regents On Behalf Of Arizona State University | Systems and methods for a content-adaptive photo-enhancement recommender |
+US9558428B1 (en) * | 2014-07-18 | 2017-01-31 | Samuel B. Green | Inductive image editing based on learned stylistic preferences |
+US9865226B2 (en) | 2014-09-05 | 2018-01-09 | International Business Machines Corporation | Image color correction for electronic displays |
+US10497105B2 (en) | 2017-11-01 | 2019-12-03 | Google Llc | Digital image auto exposure adjustment |
+US10699719B1 (en) * | 2011-12-31 | 2020-06-30 | Reality Analytics, Inc. | System and method for taxonomically distinguishing unconstrained signal data segments |
+US10825138B2 (en) | 2016-03-14 | 2020-11-03 | Magic Pony Technology Limited | Super resolution using fidelity transfer |
+US10884769B2 (en) * | 2018-02-17 | 2021-01-05 | Adobe Inc. | Photo-editing application recommendations |
+CN112634143A (en) * | 2019-09-24 | 2021-04-09 | 北京地平线机器人技术研发有限公司 | Image color correction model training method and device and electronic equipment |
+US11036811B2 (en) | 2018-03-16 | 2021-06-15 | Adobe Inc. | Categorical data transformation and clustering for machine learning using data repository systems |
+US11158091B2 (en) | 2016-09-07 | 2021-10-26 | Trustees Of Tufts College | Methods and systems for human imperceptible computerized color transfer |
+US11263783B2 (en) | 2019-06-27 | 2022-03-01 | Greg BORKMAN | Color prediction using machine learning |
+WO2022060088A1 (en) * | 2020-09-15 | 2022-03-24 | Samsung Electronics Co., Ltd. | A method and an electronic device for detecting and removing artifacts/degradations in media |
+US11350070B2 (en) * | 2018-06-04 | 2022-05-31 | Michael Scott Brown | Systems, methods and computer programs for colorimetric mapping |
+US20230156349A1 (en) * | 2020-02-10 | 2023-05-18 | Samsung Electronics Co., Ltd. | Method for generating image and electronic device therefor |
+US11869127B2 (en) | 2019-05-17 | 2024-01-09 | Samsung Electronics Co., Ltd. | Image manipulation method and apparatus |
+-
+2011
+- 2011-05-10 US US13/104,625 patent/US8913827B1/en active Active
+Non-Patent Citations (12)
+Title |
+---|
+Chang et al "Example Based Color Transformation of Image and Video Using basic Color Categories" IEEE transactions on Image Processing Feb. 2007. * |
+Chang et al., "Example-Based Color Transformation for Image and Video", 2005, pp. 347-353. |
+Freund et al., "A Decision-Theoretic Generalization of On-Line Learning and an Application to Boosting", Journal of Computer and System Sciences 55, 119-139, 1997. |
+Gagalowicz et al., "Computer Vision/ Computer Graphics Collaboration Techniques", Third International Conference, Mirage 2007, Mar. 28-30, 2007 (reference is provided in four parts as it is too large to submit in one file.). |
+Hasler et al., "Measuring colourfulness in natural images", In Proc. IST/SPIE Electronic Imaging 2003: Human Vision and Electronic Imaging VIII, vol. 5007, 2003. |
+Lazebnik et al., "Beyond Bags of Features: Spatial Pyramid Matching for Recognizing Natural Scene Categories", Proceeding of the 2006 IEEE Computer Society Conference on Computer Vision and Pattern Recognition, 2006. |
+Leordeanu et al., "A Spectral Technique for Correspondence Problems Using Pairwise Constraints", In ICCV '05: Proceedings of the Tenth IEEE International Conference on Computer Vision, IEEE Computer Society, 2005. |
+Perez et al., "Poisson Image Editing", 2003, 22, 3, pp. 313-318. |
+Reinhard, et al., "Color Transfer between Images", IEEE Computer Graphics and Applications, vol. 21, Issue 5, Sep./Oct. 2001, pp. 2-9. |
+Tai et al Local Color transfer via probabilistic segmentation by Expectation-Maximization Computer Vision and Pattern Recognition, 2005. CVPR 2005. IEEE Computer Society Conference on. * |
+Tai et al., "Local Color Transfer via Probabilistic Segmentation by Expectation-Maximization", Published in Computer Vision and Pattern Recognition, 2005. CVPR 2005. IEEE Computer Society Conference on (vol. 1 ), 8 pages. |
+Xiang et al., "Multi-Source Color Transfer for Natural Images", 2008, pp. 469-472. |
+Cited By (27)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US10699719B1 (en) * | 2011-12-31 | 2020-06-30 | Reality Analytics, Inc. | System and method for taxonomically distinguishing unconstrained signal data segments |
+US20150185017A1 (en) * | 2013-12-28 | 2015-07-02 | Gregory L. Kreider | Image-based geo-hunt |
+US9558428B1 (en) * | 2014-07-18 | 2017-01-31 | Samuel B. Green | Inductive image editing based on learned stylistic preferences |
+US9865226B2 (en) | 2014-09-05 | 2018-01-09 | International Business Machines Corporation | Image color correction for electronic displays |
+US20160132997A1 (en) * | 2014-11-10 | 2016-05-12 | Arizona Board Of Regents On Behalf Of Arizona State University | Systems and methods for a content-adaptive photo-enhancement recommender |
+US9576343B2 (en) * | 2014-11-10 | 2017-02-21 | Arizona Board Of Regents On Behalf Of Arizona State University | Systems and methods for a content-adaptive photo-enhancement recommender |
+US9959484B2 (en) * | 2015-02-11 | 2018-05-01 | Xiaomi Inc. | Method and apparatus for generating image filter |
+US20160232426A1 (en) * | 2015-02-11 | 2016-08-11 | Xiaomi Inc. | Method and apparatus for generating image filter |
+KR101727169B1 (en) | 2015-02-11 | 2017-04-14 | 시아오미 아이엔씨. | Method and apparatus for generating image filter |
+JP2017513075A (en) * | 2015-02-11 | 2017-05-25 | シャオミ・インコーポレイテッド | Method and apparatus for generating an image filter |
+CN104700353B (en) * | 2015-02-11 | 2017-12-05 | 小米科技有限责任公司 | Image filters generation method and device |
+EP3057304A1 (en) * | 2015-02-11 | 2016-08-17 | Xiaomi Inc. | Method and apparatus for generating image filter |
+CN104700353A (en) * | 2015-02-11 | 2015-06-10 | 小米科技有限责任公司 | Image filter generating method and device |
+KR20160108827A (en) * | 2015-02-11 | 2016-09-20 | 시아오미 아이엔씨. | Method and apparatus for generating image filter |
+US10825138B2 (en) | 2016-03-14 | 2020-11-03 | Magic Pony Technology Limited | Super resolution using fidelity transfer |
+US11615559B2 (en) | 2016-09-07 | 2023-03-28 | Trustees Of Tufts College | Methods and systems for human imperceptible computerized color transfer |
+US11158091B2 (en) | 2016-09-07 | 2021-10-26 | Trustees Of Tufts College | Methods and systems for human imperceptible computerized color transfer |
+US10497105B2 (en) | 2017-11-01 | 2019-12-03 | Google Llc | Digital image auto exposure adjustment |
+US11210768B2 (en) | 2017-11-01 | 2021-12-28 | Google Llc | Digital image auto exposure adjustment |
+US10884769B2 (en) * | 2018-02-17 | 2021-01-05 | Adobe Inc. | Photo-editing application recommendations |
+US11036811B2 (en) | 2018-03-16 | 2021-06-15 | Adobe Inc. | Categorical data transformation and clustering for machine learning using data repository systems |
+US11350070B2 (en) * | 2018-06-04 | 2022-05-31 | Michael Scott Brown | Systems, methods and computer programs for colorimetric mapping |
+US11869127B2 (en) | 2019-05-17 | 2024-01-09 | Samsung Electronics Co., Ltd. | Image manipulation method and apparatus |
+US11263783B2 (en) | 2019-06-27 | 2022-03-01 | Greg BORKMAN | Color prediction using machine learning |
+CN112634143A (en) * | 2019-09-24 | 2021-04-09 | 北京地平线机器人技术研发有限公司 | Image color correction model training method and device and electronic equipment |
+US20230156349A1 (en) * | 2020-02-10 | 2023-05-18 | Samsung Electronics Co., Ltd. | Method for generating image and electronic device therefor |
+WO2022060088A1 (en) * | 2020-09-15 | 2022-03-24 | Samsung Electronics Co., Ltd. | A method and an electronic device for detecting and removing artifacts/degradations in media |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US8913827B1 (en) | Image color correction with machine learning | |
+Deng et al. | Aesthetic-driven image enhancement by adversarial learning | |
+US11514261B2 (en) | Image colorization based on reference information | |
+US8553045B2 (en) | System and method for image color transfer based on target concepts | |
+Dale et al. | Image restoration using online photo collections | |
+US20180359416A1 (en) | Extrapolating lighting conditions from a single digital image | |
+US7352898B2 (en) | Image processing apparatus, image processing method and program product therefor | |
+Nguyen et al. | Illuminant aware gamut‐based color transfer | |
+Hwang et al. | Context-based automatic local image enhancement | |
+US11663707B2 (en) | Method and system for image enhancement | |
+US11610433B2 (en) | Skin tone assisted digital image color matching | |
+US20110206282A1 (en) | Device, Method, and Program for Image Processing | |
+US8787659B2 (en) | Automatic adaptation to image processing pipeline | |
+US20140212037A1 (en) | Image processing apparatus, image processing method, and computer readable medium | |
+CN114444558A (en) | Training method and training device for neural network for object recognition | |
+Fang et al. | Variational single image dehazing for enhanced visualization | |
+US20220292635A1 (en) | Method and apparatus with image correction | |
+Abebe et al. | Towards an automatic correction of over-exposure in photographs: Application to tone-mapping | |
+Gao et al. | Improving color constancy by selecting suitable set of training images | |
+Liu et al. | Progressive complex illumination image appearance transfer based on CNN | |
+Mandal et al. | FuzzyCIE: fuzzy colour image enhancement for low-exposure images | |
+US20150186373A1 (en) | Method for sorting a group of images of a database and method for color correcting an image, corresponding devices, computer program and non-transitory computer readable medium | |
+Wang et al. | A new single image dehazing method with MSRCR algorithm | |
+Liu | Two decades of colorization and decolorization for images and videos | |
+US20230186446A1 (en) | Image processing methods and systems for low-light image enhancement using machine learning models |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:FANG, HUI;REEL/FRAME:026608/0578Effective date: 20110715 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+CC | Certificate of correction | ||
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044277/0001Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551)Year of fee payment: 4 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

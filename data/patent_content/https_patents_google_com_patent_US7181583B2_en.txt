@@ -1,0 +1,357 @@
+US7181583B2 - Method and program for creating a snapshot, and storage system - Google Patents
+Method and program for creating a snapshot, and storage system Download PDFInfo
+- Publication number
+- US7181583B2 US7181583B2 US10/979,186 US97918604A US7181583B2 US 7181583 B2 US7181583 B2 US 7181583B2 US 97918604 A US97918604 A US 97918604A US 7181583 B2 US7181583 B2 US 7181583B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- volume
+- snapshot
+- update
+- user
+- differential
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F11/00—Error detection; Error correction; Monitoring
+- G06F11/07—Responding to the occurrence of a fault, e.g. fault tolerance
+- G06F11/14—Error detection or correction of the data by redundancy in operation
+- G06F11/1402—Saving, restoring, recovering or retrying
+- G06F11/1446—Point-in-time backing up or restoration of persistent data
+- G06F11/1448—Management of the data involved in backup or backup restore
+- G06F11/1451—Management of the data involved in backup or backup restore by selection of backup contents
+Definitions
+- This invention relates to a data backup method. More specifically, this invention relates to a data backup method that uses differential snapshots.
+- Snapshot which is a known method to preserve original data while maintaining consistency of the data at one point in time, is employed in computer systems for backup of data stored in storage systems and for other uses.
+- volume snapshot in which a snapshot is taken by creating a copy of a primary volume which stores original data in a separate differential volume.
+- Another type of snapshot is differential snapshot, in which the consistency between a primary volume which stores original data and a secondary volume which stores copy data at one point in time is maintained throughout the subsequent updates to the original data to keep the original data available for reference after the updates.
+- data at a time point whose consistency is to be kept intact is stored in a separate differential volume in the case where a later update to the original data is planned.
+- data at a time point whose consistency is to be kept intact is stored in a separate storage volume whereas the original data is not copied without an update expected (see JP 2002-278819, for example).
+- volume copying (volume snapshot) described above needs as many secondary volumes as the number of snapshots to be taken, and accordingly could increase the storage system in size.
+- Differential snapshot described above needs smaller storage volume capacity than volume copying but, when differential snapshots created are left undeleted, the differential volume could overflow with differential information causing loss of earlier differential information stored.
+- This invention has been made in view of the above problems, and it is therefore an object of this invention to economically use a differential volume by monitoring how much of the differential volume is used and the differential snapshot utilization status and by using differential snapshot in combination with volume snapshot.
+- An embodiment of this invention includes the steps of: receiving a snapshot creation request from a client computer; obtaining, upon reception of the snapshot creation request, a usage ratio of a second volume, which stores update differences of a first volume, by the update differences; identifying a user who has made the snapshot creation request from an account set in advance to the user; obtaining a use history of the update differences in the second volume of the user; choosing, based on the usage ratio and the use history, one from differential snapshot in which the update differences of the first volume are written in the second volume and volume snapshot in which a third volume is synchronized with the first volume; and executing the chosen one of differential snapshot and volume snapshot.
+- differential snapshot is chosen.
+- volume snapshot is chosen.
+- differential snapshot or volume snapshot is chosen based on user's second volume use history.
+- the usage ratio of the second volume which stores differential snapshots is monitored to switch between differential snapshot and volume snapshot depending on the usage ratio as snapshot to be executed, and therefore it is possible to economically use the second volume which stores differential snapshots.
+- Switching snapshot to be executed depending on user's second volume use history also makes it possible to keep necessary differential snapshots while suppressing increase of unnecessary differential snapshots.
+- FIG. 1 is a block diagram showing the overall configuration of a system.
+- FIG. 2 is a block diagram showing the configuration of software executed by a controller of NAS.
+- FIG. 3 is a block diagram showing a software configuration of a snapshot obtainment control module.
+- FIG. 4 is an explanatory diagram showing a list of data read by a snapshot request reception processing module.
+- FIG. 5 is an explanatory diagram showing an example of a request log.
+- FIG. 6 is an explanatory diagram showing an example of a differential snapshot utilization log.
+- FIG. 7 is a flow chart showing an example of processing performed by the snapshot request reception processing module.
+- FIG. 8 is a flow chart showing an example of differential snapshot utilization status obtaining processing carried out by a differential snapshot utilization status obtaining module.
+- FIG. 9 is an explanatory diagram of a table tabulated by the differential snapshot utilization status obtaining module.
+- FIG. 10 is a block diagram showing the overall configuration of a system that uses a SAN according to a second embodiment of this invention.
+- FIG. 1 is a block diagram showing the overall configuration of a computer system for when this invention is applied to NAS (Network Attached Storage) 1
+- FIG. 2 is a block diagram showing a software configuration of the NAS 1 .
+- the NAS 1 is comprised of disk drives 31 , 32 and 33 , a disk subsystem 20 , which is composed of the disk drives 31 , 32 and 33 , a backup system (tape system, for example) 5 , and a controller 10 , which controls the disk subsystem 20 and the backup system 5 .
+- the NAS 1 is connected, via a network 6 , to an NFS client computer 7 and a CIFS client computer 8 , which request data write (update) and read (reference) from the NAS 1 .
+- the NFS client computer 7 has as its OS UNIX and makes a request through the NFS (Network File System) to refer to and update data stored in the NAS 1 .
+- the CIFS client computer 8 has as its OS Windows and makes a request through the CIFS (Common Internet File System) to refer to and update data stored in the NAS 1 .
+- the NFS client computer 7 and the CIFS client computer 8 can access the NAS 1 by administrator rights to set an access right to a user who accesses (for reference or update) data (file) stored in the NAS 1 , to set an access right for each file or directory of the NAS 1 , and to set the policy in switching snapshot described later.
+- Preset file systems are built in the disk drives 31 , 32 and 33 .
+- a primary volume 21 and a secondary volume 22 which stores a copy of the primary volume 21 , are set in a storage area constituted of the disk drives 31 , 32 , and 33 .
+- a P (Primary) volume 23 which is shown in FIG. 2 and which receives a file read request and a file update request from the NFS client computer 7 and from the CIFS client computer 8 , and a differential volume 24 , which stores differential snapshots of the P volume 23 , are set in the primary volume 21 .
+- differential snapshot data in the P volume 23 which is a primary volume is stored first prior to an update as update differential information in the differential volume 24 . Then the data in the P volume 23 is updated for copy-on-write.
+- a differential snapshot function which will be described later, a logical volume obtained by logically coupling the P volume 23 and the differential volume 24 is provided to one of the client computers (the NFS client computer 7 or the CIFS client computer 8 , the same applies to the description below), thereby enabling the client computer to refer to the data before the update and the data after the update.
+- An S (Secondary) volume 25 which is shown in FIG. 2 and which stores a copy of the P volume 23 (volume copy), is set in the secondary volume 22 .
+- Data of the secondary volume 22 (S volume 25 ) is backed up to the backup system 5 at a given timing (for instance, when an update is made to the data of the secondary volume 22 ).
+- the NFS client computer 7 and the CIFS client computer 8 each have a CPU, a memory, an interface connected to the network 6 , a display device, and an input device though those components are not shown in the drawing.
+- the controller 10 of the NAS 1 uses control programs, which will be described later, to control data input/output to and from the disk subsystem 20 in accordance with a file read request and a file update request from one of the client computers, and creates a snapshot.
+- the controller 10 of the NAS 1 has a CPU 11 , a memory 12 , a data transfer controller 13 , a network interface 14 , and a storage interface 15 .
+- the memory 12 may have a data cache (omitted from the drawing) or the data transfer controller 13 may have a data cache.
+- Control programs shown in FIG. 2 are loaded onto the memory 12 .
+- the CPU 11 loads and executes the control programs to implement various processing, which will be described later.
+- the data transfer controller 13 transfers data between the CPU 11 , the network interface 14 , the storage interface 15 , and the memory 12 .
+- FIG. 2 shows function blocks of the control programs executed by the controller 10 .
+- a NAS_OS 55 manages execution of each control program. For instance, the NAS_OS 55 manages execution of an NFS/CIFS file server 50 , which receives file access from one of the client computers, a snapshot obtainment control module 51 , which selectively switches between the differential snapshot function and a volume snapshot (volume copy) function, a volume snapshot request module 52 , which creates a copy of the P volume 23 in the S volume 25 , a file system 53 , which accesses the P volume 23 based on file access from the NFS/CIFS file server 50 , and a differential snapshot module 54 , which creates an update difference of the P volume 23 in the differential volume 24 .
+- NFS/CIFS file server 50 receives file access from one of the client computers
+- a snapshot obtainment control module 51 which selectively switches between the differential snapshot function and a volume snapshot (volume copy) function
+- a volume snapshot request module 52 which creates a copy of the P volume 23
+- a volume snapshot module 26 which selectively copies the contents of the P volume 23 to the S volume 25 , functions in the disk subsystem 20 of the NAS 1 .
+- the volume snapshot module 26 is for putting the P volume 23 and the S volume 25 into a state in which the volumes are in sync with each other or a state in which the volumes are out of sync with each other.
+- the volume snapshot module 26 synchronizes the S volume 25 with the P volume 23 and writes a copy of the P volume 23 in the S volume 25 to create a volume snapshot.
+- the volume snapshot module 26 sets the P volume 23 and the S volume 25 out of sync with each other, so that the contents of the S volume 25 are kept whereas the P volume 23 is updated.
+- Hardware or firmware of the NAS 1 serves as the volume snapshot module 26 .
+- the NFS/CIFS file server 50 checks the authenticity of an account ID of a user to be authenticated and a preset user account ID based on passwords.
+- the server 50 refers to or updates the P volume 23 which is a primary volume (file access reception processing).
+- User information including user's account ID, password, and the like is stored in an arbitrary disk drive selected from the disk drives 31 and 32 (volumes excluding the primary volume (P volume 23 ) and volumes for keeping snapshots), and is set through the client computer 7 or 8 authenticated by administrator rights.
+- FIG. 3 shows details of the snapshot obtainment control module 51 .
+- the snapshot obtainment control module 51 is composed of a snapshot request reception processing module 511 , which receives a snapshot creating or deletion request from the client computer 7 or 8 or from others and which determines the type of snapshot to be employed, and a differential snapshot utilization status obtaining module 512 , which obtains the utilization status of differential snapshots stored in the differential volume 24 to create a differential snapshot utilization log 61 .
+- the snapshot request reception processing module 511 On receiving a snapshot creation request from the client computer 7 or 8 , the snapshot request reception processing module 511 reads, as will be described later, a request log 60 , which shows what snapshot request is made, and the differential snapshot utilization log 61 , which shows the utilization status of differential snapshots, to determine which of differential snapshot and volume snapshot is to be employed. In the case where the determination is to employ differential snapshot, the snapshot request reception processing module 511 sends a differential snapshot creation request to the differential snapshot module 54 whereas a volume snapshot creation request is sent to the volume snapshot module 26 in the case where the determination is to employ volume snapshot. Then the S volume 25 is synchronized with the P volume 23 , to execute creation of a snapshot.
+- the request log 60 is created by the snapshot request reception processing module 511 upon reception of a snapshot creation request.
+- An example of the request log 60 which is shown in FIG. 5 is composed of a date and time 601 indicative of when a snapshot creating or deletion request is made, an account ID 602 of the user who has made the request, a file system name 603 to which the snapshot creating or deletion request is addressed, a processing classification 604 indicating whether the request made is a creation request or deletion request, and a processing method 605 indicating whether the determined snapshot processing is differential snapshot or volume snapshot, all of which are registered as one record.
+- the differential snapshot utilization log 61 has a record entered for each file system name 611 .
+- the log 61 holds differential snapshot utilization status (use history) 612 for each of user account IDs, which correspond to the respective file system names. For instance, “7/10” is registered in FIG. 6 as the utilization status 612 for the account ID “account 1 ” which corresponds to the file system name 611 of fs 1 .
+- the entry indicates that seven differential snapshots created by this user are left in the differential volume 24 and that there have been ten snapshot creation requests.
+- the number of differential snapshots remaining in the differential volume 24 (remaining SS number) and the number of times a snapshot request is made (SS request count) are similarly recorded for users of accounts 2 and 3 .
+- recorded in the log 61 may be the ratio of the number of remaining snapshots (remaining SS number) to the number of times a snapshot request is made (SS request count) (remaining SS number/SS request count).
+- the differential snapshot utilization log 61 has the differential snapshot utilization status recorded for the user account ID 612 of each of plural users in association with each file system name 611 , and has as many fields for holding user account IDs as the number of users ( 612 n in FIG. 6 ).
+- the differential snapshot utilization log 61 is updated periodically (every few hours or every other day) by the differential snapshot utilization status obtaining module 512 through batch processing or the like.
+- the snapshot request reception processing module 511 reads preset policy information 62 to determine the type of snapshot to be created in a manner described below.
+- An example of the policy information 62 is comprised of a judgment condition 1 and a judgment condition 2 as shown in FIG. 4 .
+- the policy information 62 , the request log 60 , and the differential snapshot utilization log 61 are stored in an arbitrary disk drive selected from the disk drives 31 and 32 .
+- snapshot creation request processing implemented by the snapshot request reception processing module 511 will be described next.
+- the flow chart is of processing executed upon reception of a snapshot creation request from the client computer 7 or 8 .
+- a step S 1 the account ID and file system name of a user who has made a snapshot creation request are read and the judgment conditions 1 and 2 are read from the policy information 62 .
+- a step S 2 the account ID and file system name read in the step S 1 are used as keys to search the differential snapshot utilization log 61 for the differential snapshot utilization status (remaining number/request count) of the account ID and file system name in question. Then the ratio of the number of remaining differential snapshots to the number of times a differential snapshot creation request is made is obtained for the file system name of this user.
+- a step S 3 the ratio of how much of the total capacity of the differential volume 24 is used up by current differential snapshots is obtained.
+- a step S 4 the obtained usage ratio is compared against the judgment condition 1 of the policy information 62 which has been read in the step S 1 and, when a) or c) of the judgment condition 1 is met, the processing proceeds to a step S 5 .
+- the processing proceeds to a step S 8 where the obtained usage ratio is compared against the judgment condition 2.
+- step S 5 which of a) and c) of the judgment condition 1 is met is judged and, when a) of the judgment condition 1 is met, the processing proceeds to a step S 6 where the differential snapshot module 54 is instructed to write update differences of the P volume 23 in the differential volume 24 .
+- step S 7 the volume snapshot module 26 is instructed to synchronize the S volume 25 with the P volume 23 .
+- step S 8 which of d) and e) of the judgment condition 2 is met is judged and, when d) is met, the processing proceeds to the step S 6 where the differential snapshot module 54 is instructed to write update differences of the P volume 23 in the differential volume 24 .
+- step S 7 the volume snapshot module 26 is instructed to write the contents of the P volume 23 in the S volume 25 and to write update differences of the P volume 23 in the differential volume 24 .
+- step S 9 After creation of a snapshot is instructed in the step S 6 or S 7 , the processing proceeds a step S 9 where the current date and time, the account ID, the file system name, the processing classification, and the processing method determined through this processing are written in the request log 60 as shown in FIG. 5 .
+- creation of a differential snapshot is permitted in the case where the usage ratio of the differential volume 24 at a time point when a user makes a snapshot creation request is less than a preset first threshold (30% in this example) whereas creation of a differential snapshot is prohibited and a volume snapshot is created instead in the case where the usage ratio of the differential volume 24 is less than a present second threshold (70% in this example).
+- a differential snapshot is created in response to every snapshot creation request from users and new data can be written in the P volume 23 for update while keeping past data.
+- the judging condition 2 is used to determine whether differential snapshot or volume snapshot is to be employed based on the use history which is recorded by file system names of users in the differential snapshot utilization log 61 .
+- the differential snapshot utilization log 61 is searched with the use of the account ID and file system name of a user who has made the request and, when the ratio of the number of remaining differential snapshots to the number of times a snapshot creation request is made is less than a preset third threshold, the use of differential snapshot is permitted. On the other hand, when the ratio of the number of remaining differential snapshots to the number of times a snapshot creation request is made is equal to or more than the preset third threshold, the use of differential snapshot is prohibited and volume snapshot is employed instead.
+- the usage ratio of the differential volume is at an intermediate level (when the usage ratio is equal to or more than the first threshold and is less than the second threshold)
+- a user whose ratio of the remaining differential snapshot number (remaining SS number/SS request count) is low (less than the third threshold) is allowed to create a differential snapshot
+- a user whose ratio of the remaining differential snapshot number (remaining SS number/SS request count) is high is allowed to create volume snapshot but not a differential snapshot.
+- a user who is diligent in maintenance by frequently deleting differential snapshots as occasion demands is always allowed to create a differential snapshot as long as the usage ratio of the differential volume 24 is less than the second threshold whereas a user who infrequently deletes differential snapshots that the user has created is restricted in newly creating differential snapshots.
+- the snapshot request reception processing module 511 performs the following processing (not shown in the drawing) in response to a snapshot deletion request.
+- a differential snapshot in the differential volume 24 which is associated with the account ID and file system name of a user who has made the deletion request is deleted.
+- the processing is completed by writing the date and time the request is made, the account ID and the file system name, and “deletion” and “differential” in the request log 60 shown in FIG. 5 .
+- the description given next with reference to a flow chart of FIG. 8 is about how the differential snapshot utilization log 61 used in the step S 2 is created.
+- the flow chart in FIG. 8 is of processing executed by the differential snapshot utilization status obtaining module 512 at the given timing described above through batch processing or the like.
+- a step S 11 the differential snapshot utilization log 61 shown in FIG. 6 is read first.
+- a step S 12 the differential snapshot utilization log 61 read is developed and tabulated to obtain the table shown in FIG. 9 .
+- the table is developed in the memory 12 , and provides in the row direction an account ID 711 , a file system name 712 , the number of remaining differential snapshots, and the number of times a snapshot creation request is made, whereas numbers associated with account IDs and file system names are given in the column direction. For instance, for an account ID of user 001 whose index i is n ⁇ 1 has fs 1 set as the file system name 712 .
+- the table stores the remaining differential snapshot number, 5 , and the snapshot creation request count, 10 , for the file system fs 1 of the user whose account ID is user 001 .
+- entries in the request log 60 are read one record at a time starting from the head to carry out the following processing:
+- a step S 14 whether the end (End Of File) of the request log 60 has been reached or not is judged and, when the end has not been reached, the processing proceeds to a step S 15 whereas the processing proceeds to a step S 24 when the end has already been reached.
+- step S 15 the account ID, the file system name, the processing classification, and the processing method are extracted from the request log 60 read.
+- a step S 16 the table shown in FIG. 9 is searched with the account ID and the file system name as keys.
+- step S 17 whether or not the corresponding account ID and file system name are found as a result of the search is checked.
+- the processing proceeds to a step S 18 whereas the processing proceeds to a step S 22 when the corresponding data is not found.
+- step S 18 whether or not the processing classification is “creation” and whether or not the processing method is “differential” are judged.
+- the processing proceeds to a step S 19 where the table is updated by adding 1 is to each of the remaining SS number and the creation request count in the table.
+- step S 18 When the conditions are not met in the step S 18 , the processing proceeds to a step S 20 in which whether or not the processing classification is “deletion” and whether or not the processing method is “differential” are judged. When both of the conditions are met, the processing proceeds to a step S 21 to update the table by subtracting 1 from the remaining SS number in the table. When the conditions are not met in the step S 20 , the processing returns to the step S 13 .
+- step S 17 When it is judged in the step S 17 that there is no corresponding data, the processing proceeds to a step S 22 to judge whether or not the processing classification is “creation” and whether or not the processing method is “differential”. When both of the conditions are met, the processing proceeds to a step S 23 in which the table is updated by storing, in an unused storage area of the table, the account ID, the file system, 1 as the remaining SS number, and 1 as the creation request count. When the conditions are not met, the processing returns to the step S 13 .
+- the steps S 13 through S 19 , S 21 , and S 23 are repeatedly executed until the end of the request log 60 is reached. Then the processing proceeds to the step S 24 where the updated table is written in the differential snapshot utilization log 61 .
+- the differential snapshot utilization status obtaining module 512 reads the request log 60 periodically to manage creation or deletion of differential snapshots on the basis of a combination of user account ID and file system name and to sum up increase and decrease in differential snapshot number and differential snapshot request count.
+- the snapshot request reception processing module 511 consults the differential snapshot utilization log 61 updated in FIG. 8 to obtain accurate understanding of the differential snapshot maintenance status for each user and file system.
+- the differential snapshot maintenance status of each user and file system is obtained from the number of snapshots remaining in the differential volume 24 and the snapshot creation request count.
+- a queue holding services that are not deleted may be provided for each user and file system, with a snapshot creation request taken as reception of a service and deletion of a snapshot as completion of a snapshot, so that permission to use differential snapshot is given in accordance with the size of the queue.
+- the remaining number in the flow chart of FIG. 8 is replaced with the queue and one service is added to the queue in the steps S 19 and S 23 whereas one service is deleted from the queue in the step S 20 .
+- differential snapshot is employed in the case where the number of queues is smaller than a preset fourth threshold whereas volume snapshot is employed in the case where the number of queues is equal to or larger than the fourth threshold.
+- FIG. 10 shows a second embodiment of this invention as applied to a SAN (Storage Area Network) instead of the NAS 1 of the first embodiment.
+- SAN Storage Area Network
+- a storage system 3 Connected to a SAN 6 a composed of an FC (Fiber Channel) and others are a storage system 3 , which has plural disk drives, a primary host computer 2 , which requests data reference or update from the storage system 3 and which creates or deletes a snapshot, and a backup system 5 , which backs up data of the storage system 3 .
+- a management host computer 4 is also connected to the SAN 6 a to set storage areas such as a, P volume 23 , a differential volume 24 , and an S volume 25 in the storage system 3 and to allot the storage areas to the primary host computer 2 .
+- An application 500 , a snapshot obtainment control module 51 , a volume snapshot request module 52 , a file system 53 , and a differential snapshot module 54 are executed on an OS 55 ′ of the primary host computer 2 .
+- the application 500 refers to and updates the P volume 23 of the storage system 3 .
+- the snapshot obtainment control module 51 selectively switches between differential snapshot and volume snapshot (volume copying).
+- the volume snapshot request module 52 issues an instruction to create a copy of the P volume 23 in the S volume 25 .
+- the file system 53 accesses the P volume 23 based on file access from the application 500 .
+- the differential snapshot module 54 creates update differences of the P volume 23 in the differential volume 24 .
+- a volume snapshot module 26 which selectively copies the contents of the P volume 23 to the S volume 25 functions in the storage system 3 .
+- the snapshot obtainment control module 51 , the snapshot request module 52 , the file system 53 , the differential snapshot module 54 , and the volume snapshot module 26 are structured in a manner similar to those in the first embodiment.
+- the differential snapshot maintenance status for each user and file system is obtained from a request log 60 and a differential snapshot utilization log 61 , which are stored in the storage system 3 or the like. The obtained status is used to judge whether differential snapshot can be employed or not. A switch is made between differential snapshot and volume snapshot depending on the result of the judgment to create a snapshot.
+- the backup system 5 backs up, at a given timing, the contents of the S volume 25 which stores volume snapshots.
+- the invention applied to the SAN is capable of keeping copies of data using volume snapshot while preventing the differential volume 24 from overflowing with snapshots by selectively permitting the use of differential snapshot in accordance with the differential snapshot maintenance status obtained for each user and file system when the usage ratio of the differential snapshot volume 24 is less than the second threshold.
+Abstract
+Description
+Claims (20)
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+JP2004248215A JP4545529B2 (en) | 2004-08-27 | 2004-08-27 | Snapshot creation method and program, and storage system |
+JP2004-248215 | 2004-08-27 |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20060047931A1 US20060047931A1 (en) | 2006-03-02 |
+US7181583B2 true US7181583B2 (en) | 2007-02-20 |
+Family
+ID=35944832
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/979,186 Active 2025-09-15 US7181583B2 (en) | 2004-08-27 | 2004-11-03 | Method and program for creating a snapshot, and storage system |
+Country Status (2)
+Country | Link |
+---|---|
+US (1) | US7181583B2 (en) |
+JP (1) | JP4545529B2 (en) |
+Cited By (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20060075200A1 (en) * | 2004-10-06 | 2006-04-06 | Ai Satoyama | Snapshot system |
+US20070174567A1 (en) * | 2006-01-25 | 2007-07-26 | Makoto Deguchi | Storage apparatus and control method thereof |
+US20090055593A1 (en) * | 2007-08-21 | 2009-02-26 | Ai Satoyama | Storage system comprising function for changing data storage mode using logical volume pair |
+US20090144518A1 (en) * | 2007-08-23 | 2009-06-04 | Ubs Ag | System and method for storage management |
+US20100198793A1 (en) * | 2009-02-03 | 2010-08-05 | Ofer Elrom | Methods of multi-server application synchronization without stopping i/o |
+US7779472B1 (en) | 2005-10-11 | 2010-08-17 | Trend Micro, Inc. | Application behavior based malware detection |
+US7784098B1 (en) * | 2005-07-14 | 2010-08-24 | Trend Micro, Inc. | Snapshot and restore technique for computer system recovery |
+US7840958B1 (en) | 2006-02-17 | 2010-11-23 | Trend Micro, Inc. | Preventing spyware installation |
+US8161548B1 (en) | 2005-08-15 | 2012-04-17 | Trend Micro, Inc. | Malware detection using pattern classification |
+Families Citing this family (42)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7343459B2 (en) | 2004-04-30 | 2008-03-11 | Commvault Systems, Inc. | Systems and methods for detecting & mitigating storage risks |
+US8266406B2 (en) | 2004-04-30 | 2012-09-11 | Commvault Systems, Inc. | System and method for allocation of organizational resources |
+JP4583150B2 (en) * | 2004-12-06 | 2010-11-17 | 株式会社日立製作所 | Storage system and snapshot data creation method in storage system |
+EP1949010B1 (en) * | 2005-10-27 | 2017-08-23 | LG Electronics Inc. | Refrigerator |
+US7651593B2 (en) | 2005-12-19 | 2010-01-26 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US20110010518A1 (en) | 2005-12-19 | 2011-01-13 | Srinivas Kavuri | Systems and Methods for Migrating Components in a Hierarchical Storage Network |
+US7606844B2 (en) | 2005-12-19 | 2009-10-20 | Commvault Systems, Inc. | System and method for performing replication copy storage operations |
+US8572330B2 (en) | 2005-12-19 | 2013-10-29 | Commvault Systems, Inc. | Systems and methods for granular resource management in a storage network |
+US8661216B2 (en) * | 2005-12-19 | 2014-02-25 | Commvault Systems, Inc. | Systems and methods for migrating components in a hierarchical storage network |
+CA2632935C (en) | 2005-12-19 | 2014-02-04 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8726242B2 (en) | 2006-07-27 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for continuous data replication |
+JP5031341B2 (en) * | 2006-11-30 | 2012-09-19 | 株式会社日立製作所 | Storage system and data management method |
+US20080147878A1 (en) * | 2006-12-15 | 2008-06-19 | Rajiv Kottomtharayil | System and methods for granular resource management in a storage network |
+US8489830B2 (en) | 2007-03-30 | 2013-07-16 | Symantec Corporation | Implementing read/write, multi-versioned file system on top of backup data |
+US7930499B2 (en) * | 2007-08-15 | 2011-04-19 | Digi-Data Corporation | Method to accelerate block level snapshots in archiving storage systems |
+US7991972B2 (en) * | 2007-12-06 | 2011-08-02 | International Business Machines Corporation | Determining whether to use a full volume or repository for a logical copy backup space |
+CN101241456B (en) * | 2008-02-28 | 2011-07-06 | 成都市华为赛门铁克科技有限公司 | Data protection method and device |
+CN100570575C (en) * | 2008-04-18 | 2009-12-16 | 成都市华为赛门铁克科技有限公司 | A kind of method of data backup and device |
+CN101359301A (en) * | 2008-08-19 | 2009-02-04 | 成都市华为赛门铁克科技有限公司 | Auto snapshot method and device |
+US8204859B2 (en) | 2008-12-10 | 2012-06-19 | Commvault Systems, Inc. | Systems and methods for managing replicated database data |
+US9495382B2 (en) | 2008-12-10 | 2016-11-15 | Commvault Systems, Inc. | Systems and methods for performing discrete data replication |
+US8307154B2 (en) * | 2009-03-03 | 2012-11-06 | Kove Corporation | System and method for performing rapid data snapshots |
+US8751523B2 (en) * | 2009-06-05 | 2014-06-10 | Apple Inc. | Snapshot based search |
+US20110196825A1 (en) * | 2009-09-29 | 2011-08-11 | Hitachi, Ltd. | Storage system and data duplication method in the same |
+US8504517B2 (en) | 2010-03-29 | 2013-08-06 | Commvault Systems, Inc. | Systems and methods for selective data replication |
+US8504515B2 (en) | 2010-03-30 | 2013-08-06 | Commvault Systems, Inc. | Stubbing systems and methods in a data replication environment |
+US8725698B2 (en) | 2010-03-30 | 2014-05-13 | Commvault Systems, Inc. | Stub file prioritization in a data replication system |
+US8788770B2 (en) * | 2010-05-25 | 2014-07-22 | International Business Machines Corporation | Multiple cascaded backup process |
+US8572038B2 (en) | 2010-05-28 | 2013-10-29 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US9747300B2 (en) | 2011-06-15 | 2017-08-29 | Amazon Technologies, Inc. | Local networked storage linked to remote networked storage system |
+JP5092046B1 (en) * | 2011-07-29 | 2012-12-05 | 株式会社東芝 | Information processing apparatus and program |
+US10379988B2 (en) | 2012-12-21 | 2019-08-13 | Commvault Systems, Inc. | Systems and methods for performance monitoring |
+US10275320B2 (en) | 2015-06-26 | 2019-04-30 | Commvault Systems, Inc. | Incrementally accumulating in-process performance data and hierarchical reporting thereof for a data stream in a secondary copy operation |
+US10176036B2 (en) | 2015-10-29 | 2019-01-08 | Commvault Systems, Inc. | Monitoring, diagnosing, and repairing a management database in a data storage management system |
+US10754844B1 (en) * | 2017-09-27 | 2020-08-25 | Amazon Technologies, Inc. | Efficient database snapshot generation |
+US11182372B1 (en) * | 2017-11-08 | 2021-11-23 | Amazon Technologies, Inc. | Tracking database partition change log dependencies |
+US10831591B2 (en) | 2018-01-11 | 2020-11-10 | Commvault Systems, Inc. | Remedial action based on maintaining process awareness in data storage management |
+US10691551B2 (en) * | 2018-07-24 | 2020-06-23 | EMC IP Holding Company LLC | Storage system with snapshot generation control utilizing monitored differentials of respective storage volumes |
+US11599423B1 (en) * | 2018-09-04 | 2023-03-07 | EMC IP Holding Company LLC | Managing backup copies in a right-to-delete personal data environment |
+US20200192572A1 (en) | 2018-12-14 | 2020-06-18 | Commvault Systems, Inc. | Disk usage growth prediction system |
+US11042318B2 (en) | 2019-07-29 | 2021-06-22 | Commvault Systems, Inc. | Block-level data replication |
+US11809285B2 (en) | 2022-02-09 | 2023-11-07 | Commvault Systems, Inc. | Protecting a management database of a data storage management system to meet a recovery point objective (RPO) |
+Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JP2002278819A (en) | 2001-03-21 | 2002-09-27 | Toshiba Corp | Generation management method for snap shot image, storage medium and generation management system |
+US20040250033A1 (en) * | 2002-10-07 | 2004-12-09 | Anand Prahlad | System and method for managing stored data |
+US20060047926A1 (en) * | 2004-08-25 | 2006-03-02 | Zheng Calvin G | Managing multiple snapshot copies of data |
+Family Cites Families (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH0594353A (en) * | 1991-10-02 | 1993-04-16 | Hokkaido Nippon Denki Software Kk | Database management system |
+JP3260923B2 (en) * | 1993-09-20 | 2002-02-25 | 富士通株式会社 | Backup control apparatus and method for data processing system |
+JP2003280964A (en) * | 2002-03-22 | 2003-10-03 | Hitachi Ltd | Method for acquiring snapshot, storage system and disk device |
+JP4454342B2 (en) * | 2004-03-02 | 2010-04-21 | 株式会社日立製作所 | Storage system and storage system control method |
+-
+2004
+- 2004-08-27 JP JP2004248215A patent/JP4545529B2/en not_active Expired - Fee Related
+- 2004-11-03 US US10/979,186 patent/US7181583B2/en active Active
+Patent Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JP2002278819A (en) | 2001-03-21 | 2002-09-27 | Toshiba Corp | Generation management method for snap shot image, storage medium and generation management system |
+US20040250033A1 (en) * | 2002-10-07 | 2004-12-09 | Anand Prahlad | System and method for managing stored data |
+US20060047926A1 (en) * | 2004-08-25 | 2006-03-02 | Zheng Calvin G | Managing multiple snapshot copies of data |
+Cited By (21)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7890720B2 (en) | 2004-10-06 | 2011-02-15 | Hitachi, Ltd. | Snapshot system |
+US7356658B2 (en) * | 2004-10-06 | 2008-04-08 | Hitachi, Ltd. | Snapshot system |
+US8103843B2 (en) | 2004-10-06 | 2012-01-24 | Hitachi, Ltd. | Snapshot system |
+US7606990B2 (en) | 2004-10-06 | 2009-10-20 | Hitachi, Ltd. | Snapshot system |
+US20110119459A1 (en) * | 2004-10-06 | 2011-05-19 | Ai Satoyama | Snapshot system |
+US20060075200A1 (en) * | 2004-10-06 | 2006-04-06 | Ai Satoyama | Snapshot system |
+US7784098B1 (en) * | 2005-07-14 | 2010-08-24 | Trend Micro, Inc. | Snapshot and restore technique for computer system recovery |
+US8161548B1 (en) | 2005-08-15 | 2012-04-17 | Trend Micro, Inc. | Malware detection using pattern classification |
+US7779472B1 (en) | 2005-10-11 | 2010-08-17 | Trend Micro, Inc. | Application behavior based malware detection |
+US20070174567A1 (en) * | 2006-01-25 | 2007-07-26 | Makoto Deguchi | Storage apparatus and control method thereof |
+US7529899B2 (en) * | 2006-01-25 | 2009-05-05 | Hitachi, Ltd. | Storage apparatus and control method thereof |
+US7840958B1 (en) | 2006-02-17 | 2010-11-23 | Trend Micro, Inc. | Preventing spyware installation |
+US20090055593A1 (en) * | 2007-08-21 | 2009-02-26 | Ai Satoyama | Storage system comprising function for changing data storage mode using logical volume pair |
+US8495293B2 (en) | 2007-08-21 | 2013-07-23 | Hitachi, Ltd. | Storage system comprising function for changing data storage mode using logical volume pair |
+US9122410B2 (en) | 2007-08-21 | 2015-09-01 | Hitachi, Ltd. | Storage system comprising function for changing data storage mode using logical volume pair |
+US20090144518A1 (en) * | 2007-08-23 | 2009-06-04 | Ubs Ag | System and method for storage management |
+US8209410B2 (en) * | 2007-08-23 | 2012-06-26 | Ubs Ag | System and method for storage management |
+US20100198793A1 (en) * | 2009-02-03 | 2010-08-05 | Ofer Elrom | Methods of multi-server application synchronization without stopping i/o |
+US8108575B2 (en) | 2009-02-03 | 2012-01-31 | International Business Machines Corporation | Methods of multi-server application synchronization without stopping I/O |
+US8321610B2 (en) | 2009-02-03 | 2012-11-27 | International Business Machines Corporation | Methods of multi-server application synchronization without stopping I/O |
+US8656073B2 (en) | 2009-02-03 | 2014-02-18 | International Business Machines Corporation | Methods of multi-server application synchronization without stopping I/O |
+Also Published As
+Publication number | Publication date |
+---|---|
+JP4545529B2 (en) | 2010-09-15 |
+JP2006065622A (en) | 2006-03-09 |
+US20060047931A1 (en) | 2006-03-02 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7181583B2 (en) | Method and program for creating a snapshot, and storage system | |
+US10997035B2 (en) | Using a snapshot as a data source | |
+US11392542B2 (en) | Image level copy or restore, such as image level restore without knowledge of data object metadata | |
+US8209498B2 (en) | Method and system for transferring duplicate files in hierarchical storage management system | |
+US10547678B2 (en) | Data transfer techniques within data storage devices, such as network attached storage performing data migration | |
+US8171246B2 (en) | Ranking and prioritizing point in time snapshots | |
+JP5586892B2 (en) | Hierarchical storage system and file copy control method in hierarchical storage system | |
+US7610511B2 (en) | Journal migration method and data recovery management method | |
+US7103713B2 (en) | Storage system, device and method using copy-on-write for synchronous remote copy | |
+US8364645B2 (en) | Data management system and data management method | |
+JP4977565B2 (en) | An access controller that controls access to files using an access control list | |
+EP1148416B1 (en) | Computer system and snapshot data management method | |
+US8352426B2 (en) | Computing system and data management method | |
+US20090216973A1 (en) | Computer system, storage subsystem, and data management method | |
+US8489739B2 (en) | Method, computer system and management computer for managing performance of a storage network | |
+US20080215836A1 (en) | Method of managing time-based differential snapshot | |
+US20130212070A1 (en) | Management apparatus and management method for hierarchical storage system | |
+US7921093B2 (en) | Information processing apparatus and information processing method | |
+US7836145B2 (en) | Computer system, management method, and management computer for managing data archiving storage extents based on server performance management information and storage utilization information | |
+Coyne et al. | IBM System Storage N Series Data Compression and Deduplication: Data ONTAP 8.1 Operating in 7-mode | |
+Kishi | The IBM virtual tape server: Making tape controllers more autonomic | |
+Kuhn et al. | Configuring the Rman Environment |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: HITACHI, LTD., JAPANFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:SAIKA, NOBUYUKI;REEL/FRAME:015955/0536Effective date: 20041021 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYER NUMBER DE-ASSIGNED (ORIGINAL EVENT CODE: RMPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:HITACHI, LTD.;REEL/FRAME:030555/0554Effective date: 20121016 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 12 |

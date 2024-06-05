@@ -1,0 +1,651 @@
+US5992737A - Information search method and apparatus, and medium for storing information searching program - Google Patents
+Information search method and apparatus, and medium for storing information searching program Download PDFInfo
+- Publication number
+- US5992737A US5992737A US08/805,846 US80584697A US5992737A US 5992737 A US5992737 A US 5992737A US 80584697 A US80584697 A US 80584697A US 5992737 A US5992737 A US 5992737A
+- Authority
+- US
+- United States
+- Prior art keywords
+- character string
+- variable length
+- document
+- length chain
+- chain
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/90—Details of database functions independent of the retrieved data types
+- G06F16/903—Querying
+- G06F16/90335—Query processing
+- G06F16/90344—Query processing by using string matching techniques
+Definitions
+- the present invention relates to a system and method for searching a large volume of data stored in a disk in, for example, document file format at a high speed while allowing desired ambiguity.
+- Keyword search scheme This scheme previously indexes individual document and keywords indicating contents of the document. At the moment, methods for determining the keywords include automatic keyword extraction by the morphemic analysis, manual appending of keywords, and a combination of them. However, this scheme can only search character strings indexed as keywords. In addition, because the accuracy of automatic keyword extraction by the morphemic analysis depends on the accuracy of a dictionary, there is a disadvantage that it requires much manpower for maintaining the dictionary.
+- Full text search scheme without index This is a scheme not to use an index, but to scan all documents to be searched every time a character string which is wanted to be searched is designated.
+- Some systems use special hardware to increase the search speed. However, a system employing special hardware increases cost, and may impose restrictions on the type of machine which can be used in a client/server environment.
+- Full text search scheme with index The present invention relates to a scheme for searching full document with index.
+- Known techniques intending to increase the speed of full text search with use of index include the following.
+- Japanese Published Unexamined Patent Application (PUPA) No. 4-205560 discloses creating a search file by dividing a character string to be searched into search units, each of which is a unit for performing the search; appending ascending codes for every search unit; appending attribute codes to the divided search units, the attribute code indicating a logical partition for the search unit; and appending character position sequence codes to every characters in the character string to be searched, the sequence codes indicating the position of character in the search unit, whereby character position information consisting of a search unit identification code, the character position sequence code, and the attribute code is created and stored in areas by character type.
+- Japanese PUPA No. 4-215181 discloses creating a search file for reducing the number of collation for character strings for search processing and for enabling a general purpose information processing system to perform high speed collation, in which search file character set position information is grouped by character set type, the character set position information indicating at which position in the character string each character set constituting the character string to be searched is positioned.
+- a typical method for designating a partial character string in the prior art is to use regular expression. According to such method, it is possible to designate repetition of any character zero or more times, repetition of any character one or more times, the end of a line, the top of a line, or any character within a range of specific character codes.
+- Japanese PUPA No. 63-99830 discloses a system having a function for partial matching between search character string data and character string data to be searched, the system comprising a table which accumulates data on synonym relationship in the search character string data, and data indicating whether the search character string data appears in any character string data to be searched.
+- Japanese PUPA No. 62-221027 discloses, when a character string taken out from the top of a character string for partial search is not retrieved from a dictionary, reducing the number of invalid searches by performing forward search for a next taken-out character string the length of which is incremented by one, whereby a word can be taken out at a relatively high speed and efficiently.
+- Japanese PUPA Nos. 4-326164 and 5-174067 disclose a database search system comprising search means which stores self-correlation information for every articles to be searched, finds the degree of matching between the self-correlation information of search keys and the self-correlation information of the articles to be searched, and outputs the number of articles in the descending order of the degree of matching.
+- a purpose of the present invention is to provide a character string search scheme which enables a user to optionally designate the degree of ambiguity for a character string to be searched.
+- Another purpose of the present invention is to provide an index structure for implementing a character string search scheme which enables it to optionally designate the degree of ambiguity for a character string to be searched.
+- Still another purpose of the present invention is to provide a character string search scheme which enables the scheme to perform searches in a manner close to human feeling by ambiguity search.
+- FIG. 1 is a block diagram showing a hardware configuration
+- FIG. 2 is a block diagram of process elements
+- FIG. 3 is a structure of index file
+- FIG. 4 is a structure of index file
+- FIG. 5 is a flowchart showing an index file creation process
+- FIG. 6 is a flowchart showing an index file creation process
+- FIG. 7 is a flowchart showing a character string search process using an index file
+- FIG. 8 is a flowchart showing an ambiguity search process using an index file.
+- FIG. 9 is a flowchart showing an ambiguity search process using an index file.
+- a preferred embodiment of the present invention enables it to search any consecutive N characters in a document, or any consecutive N' characters in a word (word in English or the like) at a high speed so that it is possible to search by using the index file at a high speed how many consecutive characters match between a character string to be searched and the document, and how many characters are interposed in them.
+- a preferred embodiment of the present invention can attain high speed search for a document written in both a language which has many kinds of characters, but does not have explicit word delimiter in representation such as Japanese and Chinese (non-delimiter language), and a language which has relatively small kinds of characters, and is expressed with explicit word delimiters such as English (delimiter language).
+- unique numbers are appended to individual document, an index file being arranged to store a sequence of characters belonging to suitably determined character set C (hereinafter called a "variable length chain”) in each document, individual consecutive N characters not belonging to the character set C (hereinafter called a "fixed length chain”), and the number of document in which both of them appear and position information in the document.
+- the variable length chain is appended with a unique number.
+- the index file is arranged to store individual N' characters of the variable length chain (hereinafter called an "extended fixed length chain”), and the number of variable length chain in which these N' characters appear and the position information in the variable length chain.
+- the index file comprises four files, a character chain file, a position information file, an extended character chain file, and an extended position information file.
+- the character chain file stores the variable length chain, the fixed length chain, a delimiter pattern, and where in the position information file the document number corresponding to them and the position number in document are positioned.
+- the position information file stores the document number and the position number in document.
+- the extended character chain file stores the extended character chain, and where in the extended portion information file the variable length chain number corresponding to it and the position number in the variable length chain are positioned.
+- the extended position information file stores the variable length chain number and the position number in the variable length chain.
+- the present invention proposes a scheme for searching at a high speed a document containing a character string which has an arrangement of characters similar to a designated character string by using such an index file.
+- This scheme makes it possible to designate a character string to be searched and search accuracy (larger than zero, but one or less) so that a document containing a "similar character string” with a "similarity factor” to the character string to be searched equal to or larger than the designated search accuracy and the position in the document of the "similar character string” can be identified.
+- This processing proceeds by selecting a character string to be searched and a "similar character string” from a document, and digitizing a "similarity factor” from two viewpoints of how many characters are consecutively matched, and how many extra characters are interposed in it.
+- the "similarity factor” is at its maximum value of 1, it means that the character strings are fully matched. Or, if the character strings are fully matched, the “similarity factor” is always at 1. If one or more extra characters which do not exist in a character string to be searched are interposed in a similar character string, or only a part of the character string to be searched appears in the similar character string, the "similarity factor” is a value smaller than 1. However, according to the present invention, such "similarity factor” becomes a reasonable value considerably matching to normal human feeling.
+- a method for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising the steps of associating document character string identifying information for identifying a document character string in which said variable length chain document character string exists and document character string position information for indicating the position in the document character string at which the variable length chain document character string exists with the variable length chain document character string; extracting and storing a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string; associating variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists and variable length chain document character string position information for indicating the position in the variable length chain document character string at which the partial document character string exists with the partial document character string;
+- variable length chain document character string and the “variable length search character string” mean a variable length chain in a document and search characters, respectively, and preferably correspond to one word of the a delimiter language as defined above. However, it is not necessarily a word of the delimiter language, but may be arranged by the non-delimiter language. Such arrangement may be applied to search of a set of variable length character strings such as keywords in the abstract of a patent specification.
+- the terms “equal to or higher than the certain similarity factor” means a similarity factor exceeding zero, but also includes the similarity factor of one, that is, the similarity factor for complete matching.
+- the association of the document character string identifying information and the document character string position information with the variable length chain document character string, and the association of the variable length chain document character string identifying information and the variable length chain document character string position information with the partial document character string need not to be maintained as separate files as described in the preferred embodiment of the present invention. It is sufficient that there is a link pointing to the document character string identifying information and the document character string position information to which the variable length chain document character string corresponds. Similarly, it is sufficient that there is a link allowing the scheme to point to the variable length chain document character string identifying information and the variable length chain document character string position information to which the partial document character string corresponds.
+- search character string containing the variable length chain search character string means not only a search character string containing another variable length chain search character string and a search character string containing a fixed length chain search character string, but also a search character string which is the variable length chain search character string itself.
+- the search character string is preferably entered by a user through a keyboard, but may be entered from a client or another system through a network.
+- the search string is automatically entered from the system by extracting words not existing in a dictionary.
+- the "partial document character string” and the "partial search character string” mean the extended fixed length chain in the embodiment.
+- Their length of M or N is set by the design so that it may or may not be freely set by the user.
+- an entered similarity factor a sample with an average length in the variable length chain document character string in the document
+- the length of a variable length chain search character string in extracting the "partial document character string” and the "partial search character string, " it may be possible to add a symbol such as "$” indicating the beginning of a variable length chain, and a code such as " ⁇ ” indicating the end of the variable length chain.
+- the "certain similarity factor” means a similarity factor entered by the user or one determined as a default, and may be arranged to be entered by the client or another system.
+- a method for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising the steps of associating the variable length chain document character string with document character string identifying information for identifying a document character string in which the variable length chain document character string exists; associating, from the variable length chain document character string, a partial document character string of a length of M characters (M being a predetermined integer of one or more) with variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists; searching a partial document character string which matches a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable length chain search character string; identifying from variable length chain document character string identifying information for a partial document character character
+- variable length chain document character string identifying information means the document number in the embodiment, but is sufficient to be information such as address information or a document name identifying a document character string in which the variable length chain document character string exists, and not limited to the document number.
+- variable length chain document character string identifying information correspondes to the variable length chain number in the embodiment, but is sufficient to be information such as address information or a word name identifying a variable length chain document character string in which the partial document character string exists.
+- a method for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising the steps of searching a partial document character string matching a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable length chain search character string in an index file in which the variable length chain document character string is associated with document character string identifying information for identifying a document character string in which the variable length chain document character string exists, and associated with variable length chain document character string identifying information which identifies a partial document character string of a length M characters (M being a predetermined integer of one or more) and a variable length chain document character string in which the partial document character string exists from the variable length chain document character string; identifying, from variable length chain document character string identifying information for the partial document
+- a method for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising the steps of associating document character string identifying information for identifying a document character string in which the variable length chain document character string exists and document character string position information for indicating the position in the document character string at which the variable length chain document character string exists with the variable length chain document character string; extracting and storing a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string; associating variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists and variable length chain document character string position information for indicating the position in the variable length chain document character string at which the partial document character string exists with the partial document character character
+- a method for creating a file for search by the computer from a document containing a plurality of variable length chains in a storage device accessible by a computer comprising the steps of extracting a first variable length chain from the document; storing information for the position in the document at which the first variable length chain appears; extracting a first extended fixed length chain from the first variable length chain; and storing information for identifying the first variable length chain in which the first extended fixed length chain exists and information for the position in the first variable length chain at which the first extended fixed length chain exists.
+- the "information for the position in the document at which the first variable length chain appears", “information for identifying the first variable length chain in which the first extended fixed length chain exists", and “information for the position in the first variable length chain at which the first extended fixed length chain exists” may be stored in separate storage devices as long as they can be accessed by the computer.
+- a method for creating a file for search by the computer from a document containing a plurality of variable length chains in a storage device accessible by a computer comprising the steps of extracting a plurality of variable length chains from the document and storing them in a character chain file; storing in a position information file information for the positions in the document at which the plurality of variable length chains appear; extracting extended fixed length chains of a length of M characters (M being a predetermined integer of one or more) from each of the plurality of variable length chains and storing them in an extended character chain file; and storing in an extended position information file information for identifying the variable length chains in which the extended fixed length chains exist and information for the position in the variable length chains in which the extended fixed length chains exist.
+- a method for calculating with a computer the similarity factor between a first character string containing a first variable length chain and a second character string containing a second variable length chain comprising the steps of searching the first variable length chain character string for a partial character string of a length of N characters (N being a predetermined integer of one or more) which matches in the second variable length chain; searching a partial character string of a length of N characters which is a partial character string in the first variable length chain with the start position shifted by one for a partial character string which matches in the second variable length chain; deriving variable length chain matching character identifying information for identifying characters matching the first variable length chain in the second variable length chain by repeating the step of searching the matched partial character string in the second variable length chain; calculating a variable length chain matching factor between the first variable length chain and the second variable length chain based on the variable length chain matching character identifying information and the number of characters in the first variable length chain; and calculating the similarity factor of the
+- variable length chain matched character identifying information is information for identifying matched and non-matched characters in the first or second variable length chain, and, particularly, the number of characters in valid matched character strings in the first or second variable length chain, but the matching factor may be calculated with information for identifying non-matched characters instead of the matched characters. In addition, it may be possible to weight or impose a penalty on the matching factor calculation depending on the nature of matched and non-matched characters instead of simply using the number of matched or non-matched characters.
+- a method for calculating with a computer the similarity factor between a first character string containing a first variable length chain and a second character string containing a second variable length chain comprising the steps of associating character string identifying information for identifying the second character string in which the second variable length chain character string exists and character string position information for indicating the position in the second character string at which the second variable length chain character string exists with the second variable length chain character string; extracting and storing a second partial character string of a length of M characters (M being a predetermined integer of one or more) from the second variable length chain character string; associating variable length chain character string identifying information for identifying the second variable length chain character string in which the second partial character string exists and variable length chain character string position information for indicating the position in the second variable length chain character string at which the second partial character string exists with the second partial document character string; searching a second partial document character string which matches the first partial character string of a length of N characters (N being a pre
+- a method for searching a position where a character string similar to a search character string with a predetermined similarity factor or higher appears, the search character string containing a variable length chain search character string comprising the steps of locating the start and end positions of match in the variable length chain document character string for a partial character string of a length of M characters (M being a predetermined integer of one or more) from the top of the variable length chain search character string (hereinafter the partial character string of a length of M character determined by the start and end positions being referred to a "valid matched character string"); locating the (i+i)-th valid matched character string satisfying the following conditions:
+- s(D,i) is the start position of the i-th valid matched character string in the document
+- e(D,i) is the end position of the i-th valid matched character string in the document
+- s(C,i) is the start position of the i-th valid matched character string in a character string to be searched
+- e(C,i) is the end position of the i-th valid matched character string in a character string to be searched.
+- L is a predetermined integer of one or more; continuing the step of locating the (i+i)-th valid matched character string as long as valid matched character strings can be located; calculating a similarity factor between the variable length chain search character string and a character string which exists between the start position of the first valid matched character string in the variable length chain document character string and the end position of the last valid matched character string in the variable length chain document character string based on information on existence of valid matched character strings in a character string at least between the start position of the first valid matched character string in the variable length chain document character string and the end position of the last valid matched character string in the variable length chain document character string; identifying a variable length document character string in response to the fact that the calculated similarity factor is equal to or higher than a predetermined similarity factor; and identifying a document character string containing the identified variable length chain document character string.
+- an apparatus for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher of character string, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising an input device for inputting the search character string; a storage device for storing a character chain file for storing the variable length chain document character string, a position information file for storing document character sting identifying information for identifying a document character string in which the variable length chain document character string exists and document character string position information for indicating the position in the document character string at which the variable length chain document character string exists, an extended character chain file for storing a partial document character string of a length of M character (M being a predetermined integer of one or more) extracted from the variable length chain document character string, and variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists, and
+- the "input device” is preferably a keyboard which allows a user to input characters, but the concept includes a pointing device such as a mouse and a track ball, and a touch panel for pointing a character displayed on the display device.
+- a search character string is input from another system, that other system is constituted as the input device.
+- the "storage device” can be preferably implemented by using RAM, but may include various storage devices such as a hard disk drive or cache memory.
+- the "control means” is preferably constituted by a central processing unit (CPU) having a bus, an arithmetic function and an input/output control function, a main memory for loading a program and providing a work area for the CPU, an operating system for controlling the central processing unit, and a combination of programs such as a search engine.
+- the "display device” is preferably constituted by a display device, but includes a printing device such as a printer and a plotter for displaying a character or the like through printing.
+- an apparatus for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising means for associating the variable length chain document character string with document character string identifying information for identifying a document character string in which the variable length chain document character string exists; means for associating a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string with variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists; means for searching a partial document character string matching a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable length chain search character string; means for identifying a variable length chain document character string relating to the partial document character string matching
+- an apparatus for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising means for searching a partial document character string matching a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable length chain search character string in an index file, in which index file said variable length chain document character string is associated with document character string identifying information for identifying a document character string in which the variable length chain document character string exists, and associated with variable length chain document character string identifying information for identifying a partial document character string of a length of M characters (M being a predetermined integer of one or more) and a variable length chain document character string in which the partial document character string exists from said variable length chain document character string; means for identifying a variable length chain document character string relating to the
+- an apparatus for searching a document character string which contains a variable length chain document character string, and which is similar to a search character string at a predetermined similarity factor or higher, said search character string containing a variable length chain search character string, in a document searchably stored through computer processing comprising means for associating document character string identifying information for identifying a document character string in which the variable length chain document character string exists and document character string position information indicating the position in the document character string at which the variable length chain document character string exists with the variable length chain document character string; means for extracting and storing a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string; means for associating variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists and variable length chain document character string position information for indicating the position in the variable length chain document character string at which the partial document character string exists with the partial document
+- an apparatus for creating a file for search by a computer from a document containing a plurality of variable length chains in a storage device accessible by a computer comprising means for extracting a first variable length chain from the document; means for storing position information for the position in the document at which the first variable length chain appears; means for extracting a first extended fixed length chain from the first variable length chain; and means for storing information for identifying the first variable length chain in which the first extended fixed length chain exists and position information for the position in the first variable length chain at which the first extended fixed length chain exists.
+- an apparatus for creating a file for search by a computer from a document containing a plurality of variable length chains in a storage device accessible by a computer comprising means for extracting a plurality of variable length chains from the document and storing them in a character chain file; means for storing position information for the positions in the document at which the plurality of variable length chains appear in a position information file; means for extracting an extended fixed length chain of a length of M characters (M being a predetermined integer of one or more) from each of the plurality of variable length chains, and storing it in an extended character chain file; means for storing information for identifying a variable length chain in which the extended fixed length chain exists and position information for the position in the variable length chain at which said extended fixed length chain exists in an extended position information file.
+- an apparatus for calculating with a computer a similarity factor between a first character string containing a first variable length chain and a second character string containing a second variable length chain comprising means for searching a partial character string from the first variable length chain character string, the partial character string matching in the second variable length chain for a partial character string of a length of N characters (N being a predetermined integer of one or more); means for searching a partial character string matching in the second variable length chain for a partial character string of a length of N characters the start position of which is that of a partial character string in the first variable length chain shifted by one; means for deriving variable length chain matched character identifying information for identifying characters matching the first variable length chain in the second variable length chain by repeating the means for searching the matched partial character string; means for calculating a variable length chain matching factor between the first and the second variable length chains based on the variable length chain matched character identifying information and the number of characters in the first variable length chain; and
+- an apparatus for calculating with a computer a similarity factor between a first character string containing a first variable length chain and a second character string containing a second variable length chain comprising a storage device for storing a character chain file managing the content of the second variable length chain character string, a position information file managing character string identifying information identifying the second character string in which the second variable length chain character string exists and character string position information indicating the position in the second character string at which the second variable length chain character string exists, an extended character chain file managing a second partial character string of a length of M characters (M being a predetermined integer of one or more) extracted from the second variable length chain character string, and variable length chain character string identifying information identifying a second variable length chain character string in which the second partial character string exists, and an extended position information file managing variable length chain character string position information indicating the position in the second variable length chain character string at which the second partial character string exists; means for searching a second partial character string matching a first partial character
+- s(D,i) is the start position of the i-th valid matched character string in the document
+- e(D,i) is the end position of the i-th valid matched character string in the document
+- s(C,i) is the start position of the i-th valid matched character string in a character string to be searched
+- e(C,i) is the end position of the i-th valid matched character string in a character string to be searched.
+- L is a predetermined integer of one or more; means for continuing the step of locating the (i+i)-th valid matched character string as long as the valid matched character strings can be located; means for calculating a similarity factor between the variable length chain search character string and a character string which exists between the start position of the first valid matched character string in the variable length chain document character string and the end position of the last valid matched character string in the variable length chain document character string based on information on existence of valid matched character strings in a character string at least between the start position of the first valid matched character string in the variable length chain document character string and the end position of the last valid matched character string in the variable length chain document character string; means for identifying the variable length document character string in response to the fact that the calculated similarity factor is equal to or higher than a predetermined similarity factor; and means for identifying a document character string containing the identified variable length chain document character string.
+- the program comprising program code means for directing a computer to associate the variable length chain document character string with document character string identifying information for identifying a document character string in which the variable length chain document character string exists; program code means for directing the computer to associate a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string with variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists; program code means for directing the computer to search a partial document character string matching a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable
+- the medium includes a floppy disk, a CD-ROM, an MO, a PD, and a storage device connected to a network.
+- the program codes may be divided into a plurality of segments and stored in a plurality of media.
+- the program may be compressed and stored in the medium.
+- the medium is loaded into a system through various drives such as a floppy disk drive, a modem, or a serial port, or the like.
+- the program comprising program code means for directing a computer to search a partial document character string matching a partial search character string of a length of N characters (N being a predetermined integer of one or more) extracted from the variable length chain search character string in an index file, in which index file the variable length chain document character string is associated with document character string identifying information for identifying a document character string in which the variable length chain document character string exists, and a partial document character string of a length of M characters (M being a predetermined integer of one or more) from the variable length chain document character string is associated with variable length chain document character string identifying information for identifying a variable length chain document character string in which the partial document character string exists;
+- a medium for storing a program which creates a file for computer search from a document containing a plurality of variable length chains in a storage device accessible by a computer the program comprising program code means for directing a computer to extract a first variable length chain from the document; program code means for directing the computer to store position information for the position in the document at which the first variable length chain appears; program code means for directing the computer to extract a first extended fixed length chain from the first variable length chain; and program code means for directing the computer to store information for identifying the first variable length chain in which the first extended fixed length chain exists and position information for the position in the first variable length chain at which the first extended fixed length chain exists.
+- a medium readable by a computer for storing a file for computer search, the medium comprising a character chain file for storing a plurality of variable length chains extracted from a document containing the plurality of variable length chains; a position information file for managing position information for the position in the document at which the plurality of variable length chains appear; an extended character chain file for storing an extended fixed length chain of a length of M characters (M being a predetermined integer of one or more) extracted from each of the plurality of variable length chains; and an extended position information file for storing information for identifying a variable length chain in which the extended fixed length chain exists, and position information for the position in the variable length chain at which the extended fixed length chain exists.
+- Such unique file configuration allows it to easily perform ambiguity search when it is incorporated in a computer system.
+- the size of file may be reduced than a case where documents are stored as they are.
+- overlapped character strings are not repeatedly searched, high speed search can be attained.
+- the present invention is particularly effective for a document in which a same word repeatedly appears very often. While an embodiment represents position information for the positions at which overlapped character strings appear with numerals, the size for a whole document may be reduced by coding and compressing such numerals.
+- a bus 101 is connected with a central processing unit (CPU) 102 having capabilities of arithmetic operation and input/output control, a main memory (RAM) 104 for loading a program and providing a work area for the CPU 102, a keyboard 106 for key entering commands, a character string to be searched and the like, a hard disk 108 which stores an operating system for controlling the central processing unit, a database file, a search engine, an index file and the like, a display device 110 for displaying a search result of database, and a pointing device (including a mouse, a track ball or the like) 112 for pointing any position on the screen of the display device 110 and communicating its position information to the central processing unit.
+- CPU central processing unit
+- RAM main memory
+- keyboard 106 for key entering commands, a character string to be searched and the like
+- a hard disk 108 which stores an operating system for controlling the central processing unit, a database file, a search engine, an index file and the like
+- a display device 110 for displaying
+- the present invention can be implemented on a conventional personal computer (PC), a workstation, or a combination of them.
+- a storage medium 114 for storing a program code providing instructions to the CPU or the like in cooperation with the operating system to implement the present invention.
+- the storage medium includes a floppy disk, a CD-ROM, an MO, a PD, and a storage device connected to a network.
+- the aforementioned program code may be divided into a plurality of segments, or compressed for storage in the storage medium.
+- the storage medium 114 is loaded into a system through various drives such as a floppy disk drive, a modem, or a serial port, or the like, whereby the system shown in FIG. 1 would be configured as the system of the present invention.
+- a desirable operating system is a one such as Windows (trademark of Microsoft), OS/2 (trademark of IBM), or X-window (trademark of MIT) on AIX (trademark of IBM) which supports GUI multiwindow environment as a standard feature.
+- the present invention may be implemented in a character-base environment such as PC-DOS (trademark of IBM) or MS-DOS (trademark of Microsoft), and is not limited to a specific operating system environment.
+- FIG. 1 shows a system in a stand-alone environment.
+- the database file since, in general, the database file requires a disk drive with a large capacity, it may be arranged to implement the present invention as a client/server system in which a database file and a search engine are placed on the server machine, the client machine is LAN connected to the server machine through Ethernet or Token-Ring, and only a display controller is placed on the client machine to view results of search.
+- the system configuration of the present invention will be described by referring to the block diagram of FIG. 2. It should be noted here that components indicated by individual blocks in FIG. 2 are individually or collectively stored in the hard disk 108 of FIG. 1 as data files or program files.
+- the database 202 is assumed by the present invention to be a one storing a plurality of documents such as a news article database or a patent specification database.
+- the application of the present invention is not limited to search for a database consisting of a plurality of documents, but it can be applied to search in a single document. In this case, the content of individual documents is searchably stored in the document file format.
+- individual documents are provided with unique document numbers. Preferable document numbers are sequential numbers in ascending order beginning with one.
+- the application number or laid-open number may be used as a unique document number.
+- a symbol such as "ABC” or "&XYZ” may be used to identify the individual documents instead of the sequential number.
+- more bytes are necessary to represent such identification symbol than numerals, it is preferable in practical use to identify the document with the sequential number.
+- an index file 204 is previously created by an index creation/update module 206 for the contents of all news articles stored in the database 202.
+- the thus created index file 204 comprises four files of a character chain file, a position information file, an extended character chain file, and an extended position information file.
+- the character chain file stores where in the position information file fixed length chains, variable length chains, delimiter patterns and document numbers corresponding thereto, and position numbers in the document are positioned.
+- the position information file stores document numbers and position numbers in the document.
+- the extended character chain file stores where in the extended position information file extended character chains, variable length chain numbers and position numbers in the variable length chain corresponding thereto are positioned.
+- the extended position information file stores variable length chain numbers and position numbers in the variable length chain.
+- the database 202 may be a one managing individual documents as separate files, or a one sequentially arranging all documents in a consecutive single file.
+- individual documents are provided with unique numbers, and the content of individual documents can be accessed with such unique numbers.
+- the database 202 manages a table which causes the unique numbers for individual documents to correspond to actual file names storing the documents.
+- the database 202 manages a table which causes the unique numbers for individual documents to correspond to offset in the single database file and the size of document.
+- a search engine 208 has capabilities to search the index file 204 with a search character string given by a search character input module 210 as an input, and to return a document number(s) of document containing the input search character string and a position(s) at which the input search character string appears in the document.
+- the search character input module 210 preferably consists of a dialogue box in the multiwindow environment, in the input box of which the desired character(s) to be searched is input through the keyboard 106.
+- the search character input module 210 allows it to input the similarity factor for ambiguity search in a value of 0-1 (it may be numerals of 0-100 based on percentage).
+- the search character input module 210 displays a slider or scroll bar which has a handle pointing any position between zero and one.
+- the handle of slider points one as default, and can be manipulated to point another value by dragging and moving it with the mouse 112.
+- a result display module 212 accesses the database 202 based on the document number as the result of search given by the search engine 208, and the value of position at which the search character appears in the document, and displays a line corresponding to that position in the document preferably in a separate search result display window. If the search result cannot be contained in one screen of the window, a scroll bar appears so that the user can sequentially view the search result by clicking it.
+- characters are created, which index all of continuation of characters belonging to a character set C (variable length chains), all of continuous N characters not belonging to the character set C (fixed length chains), their positions in the document, and division information in document with the document (a document chain file 302, and a position information file 304).
+- the "character set C” means a predetermined set of characters, and preferably alphabet ( ⁇ A ⁇ - ⁇ Z, ⁇ and ⁇ a ⁇ - ⁇ z ⁇ ).
+- the "division information in document” means typically a delimiter in document sentence such as ".” or ",”, and a delimiter in document in a broader sense such as "Chapter 1", “Summary”, a blank line, or a blank character(s).
+- files are created in response to the variable length chain, which index all of continuous N' characters in all variable length chains (extended fixed length chains) and their positions in the variable length chains with the variable length chains (an extended character chain file 306, and an extended position information file 308).
+- the four files of the document chain file 302, the position information file 304, the extended character chain file 306, and the extended position information file 308 are not necessarily physically different files, but are sufficient to be stored in such a manner that the content controlled by each file can be logically processed.
+- the first processing necessary for creating the index file is to normalize the character string which is processing in the following.
+- the document to be searched is particularly a Japanese document file
+- single-byte and double-byte characters may be intermixed.
+- processing is performed to, for example, replace single-byte characters with corresponding double-byte characters (or vise versa), and lowercases with uppercases (or vise versa).
+- the normalization of character string is not essential component of the present invention.
+- the detail of normalization may be changed to normalize single-byte characters to double-byte characters other than alphabet, or to only normalize non-delimiter languages, or by change of the search condition for differentiate the single-byte characters from the double-byte characters, or user specification.
+- the next step for creating the index file is, for all characters to be searched in the normalized character string and not belonging to the character set C, to extract continuous N characters starting from these characters (hereinafter called “fixed length chains”), and to store them in the index file together with the document number and the position number in document.
+- the next step to create the index file is to extract continuation of characters in the normalized character string and belonging to the character set C (variable length chains), and to store them together with the document number and the position number in document in the index file.
+- the character set C may be defined to be other than alphabet.
+- the character string may contain a plurality of variable length chains in which character strings are continuous.
+- a variable length chain can be extracted by using a blank, line feed, ", ", ". ", "!, or "?” as a delimiter. For example, in the case of "Boys be ambitious.” or "Boys (line feed) be ambitious.
+- every individual documents are divided into blocks in a manner that they are meaningful in search, and division information is stored in the index file.
+- the document may be divided into blocks by detecting line feed, a period, punctuation, "Chapter X", or "Section X", detecting a blank line, or detecting the paragraph number in a patent specification, or a certain number of characters may be incorporated in one block. These blocks are assigned a series of numbers or block numbers.
+- a specially defined delimiter pattern is stored together with the document number of the document and the position information in the document for characters at the boundaries of blocks.
+- the delimiter pattern should be defined not to overlap character chains being extracted from a normalized character string.
+- the delimiter pattern since one-byte codes are converted into two-byte codes through the normalization, if two bytes are assumed to be one word, when the value of the word is 255 or less, it is not applicable to a normal character code. Then, any word value between 0 and 255 can be individually assigned to several types of delimiter patterns.
+- the capacity of the index is not significantly increased.
+- increase of the capacity is significantly small when compared with a format to append corresponding block numbers to every position numbers in document.
+- the position number in document is unique sequential numbers in the document block assigned to all characters to be searched in the document. Then, the position number in document for the first character in a character chain is determined to be the position number in document for that character chain. If a fixed length chain is less than N at the end of continuation of characters not belonging to the character set C together with subsequent characters, predefined padding characters such as X ⁇ 00 ⁇ are padded to make the number of characters N.
+- the next step to create the index file is, for all characters in all variable length chains, to extract continuous N' characters starting from these characters (hereinafter called “extended fixed length chains”), and to store them in the index file together with the extended character chain number and the position number in extended character chain.
+- the search speed can be improved when an extended fixed length chain is extracted after appending a start mark and an end mark before and after a variable length chain, respectively. For example, when “$” and “ ⁇ “ are used as the start and end marks, respectively, extended fixed chains “$ca", “cat”, “at ⁇ ", and “t ⁇ ” are extracted from a variable length chain “cat. " Then, it becomes possible to eliminate mixing of "communication” or the like as noise in determining matching of "$ca” or the like.
+- variable length chain numbers appended to the variable length chains are sequentially 1, 2, and 3, and that the number of characters N' of the extended fixed length chain is 3, individual extended fixed length chains (length 3), variable length chain number associated thereto, and position numbers in variable length chain are as follows.
+- variable length chain numbers and position numbers in variable length chain When it is allowed to append a plurality of variable length chain numbers and position numbers in variable length chain to the extended fixed length chain, the whole capacity can be compressed, and high efficiency can be obtained particularly for a document with many overlapped words. In addition, since overlapped searches can be eliminated by putting such overlapped character strings together, high speed search can be performed.
+- the index file is composed of four files of the character chain file 302 (a file mainly storing the fixed length chain, the variable length chain, and the delimiter pattern), the position information file 304 (a file mainly storing the document number, and the position number in document), the extended character chain file 306 (a file mainly storing the extended fixed length chain), and the extended position information file 308 (a file mainly storing the variable length chain number, and the position number in variable length chain).
+- the character chain file 302 is arranged to store information on where the fixed length chain, the variable length chain, the delimiter pattern, and the document number 312 and the position number in document 314 associated to them are positioned in the position information file 304.
+- the position information file 304 is arranged to store the document number 312 and the position number in document 314.
+- the extended character chain file 306 is arranged to store information on where the extended fixed length chain, and the variable length chain number 316 and the position number in variable length chain 318 associated to it are positioned in the extended position information file 308.
+- the extended position information file 308 is arranged to store the variable length chain number 316 and the position number in the variable length chain 318.
+- entries in the character chain file 302 are the fixed length chains, the variable length chains and the delimiter patterns in all documents in the database 202.
+- the entries in the character chain file 302 are preferably sorted in ascending order in the order of code values of normalized character chains so as to enable dichotomizing search.
+- "Delimiter pattern 1,""-1,”"12" and the like are individual entries in the character chain file 302.
+- the position information file 304 of FIG. 3 stores at least one document number 312 corresponding to individual entries in the character chain file 302, and at least one position number in document 314 associated to each of the individual document numbers.
+- the individual entries in the character chain file 302 have offset from the beginning of the position information file 304 for corresponding entries in the position information file 304, and information on the size of the entries in the position information file 304. That is, in FIG. 3, for example, the character chain file 302 seeks the position information file 304 from its beginning from the information on offset stored therein with respect to "delimiter pattern 1, " and reads number of bytes specified in the size information from the sought position, whereby it is enabled to collectively read with respect to "delimiter pattern 1 " position number values in document of 16, 19, . . . in the document number 1, position number values in document relating to the document number 2, .
+- the position number values in document relating to the document number i are stored, for example, in a form of (document number i: 4 bytes), (number of position number in document k: 4 bytes), (first position number in document: 4 bytes), . . . (k-th position number in document: 4 bytes).
+- it is arranged to take 4 bytes for storing the absolute position of the document as a field for storing the position number in document, it is desirable in practice to store offset from one previous position number in document so that the number of bytes is saved to 1-3 bytes. It is also desirable to reduce the file capacity by performing compression through coding. It is true to the fields for storing the document number and the position number in document.
+- entries in the extended character chain file 306 are the extended fixed length chains in all variable length chains in the character chain file 302.
+- the entries in the extended character chain file 306 are preferably sorted in ascending order in the order of code values of normalized character chains so as to enable dichotomizing search. "dat”, "ata” and the like are the individual entries of the extended character chain file 306.
+- the extended position information file 308 of FIG. 4 stores at least one variable length chain number corresponding to the individual entries in the extended character chain file 306, and at least one position number in variable length chain associated to each of the individual variable length chain numbers.
+- This process is a one which is performed by the index creation/update module 206 of FIG. 2 when initially building the database 202, or adding or deleting a document to or from the database 202.
+- step 402 performs to ensure a memory region. This is a process to obtain a work area with a predetermined size on the RAM 104 by calling a function of the operating system.
+- step 404 one document is read from the database 202 to the memory region preferably obtained in step 402.
+- step 406 the above-mentioned normalization is performed for the document read in step 404.
+- step 408 fixed length chains, variable length chains, and delimiter patterns are created by scanning the normalized document. Then, the fixed length chains, the variable length chains, delimiter patterns, the document number of the document, as well as the position numbers in document of the fixed length chains, the variable length chains and the delimiter patterns are stored in the memory region obtained in step 402.
+- step 408 as the fixed length chains, the variable length chains, the delimiter patterns, the document number and the position numbers in document are being stored in the memory region previously obtained in step 402, the empty space in thus obtained memory region may be exhausted. Then, in step 410, a process is performed for checking whether or not the obtained memory region is full.
+- step 412 the fixed length chains, the variable length chains, and the delimiter patterns, all of which are stored in the memory region, and the document number of the document, as well as position information in document of the fixed length chains, the variable length chains and the delimiter patterns are sorted based on, for example, character code values of the fixed length chains, the variable length chains and the delimiter patterns, the document number, and the position numbers in document, and written to the disk 108 (FIG. 1) as an intermediate file, whereby the memory region in which data written in the intermediate file is stored is released for use in the subsequent process. Then, the process proceeds to step 414.
+- step 410 If it is determined in step 410 that there still remains a space in the memory region, then the process immediately proceeds to step 414.
+- step 414 it is determined that there remain documents not yet read in step 404 in the database 202. If so, the process returns to step 404.
+- step 414 If it is determined in step 414 that all documents in the database 202 have been completely read, then the fixed length chains, the variable length chains and delimiter patterns, all of which are not written to the memory region obtained in step 402 and remain, and the document number of the document, as well as the position numbers in document of the fixed length chains, the variable length chains and the delimiter patterns are also sorted based on the character code values of the fixed length chains, the variable length chains and the delimiter patterns, the document number, and the position numbers in document, and written to the disk 108 (FIG. 1) as an intermediate file.
+- step 418 performs a process to create the character chain file 302 and the position information file 304 shown in FIG. 3 from these intermediate files with a conventional merge/sort technique, and to store them on the disk 108.
+- the character chain may repeatedly appear several times in the original intermediate files, a process is performed here to put the entries of the same overlapped character chain into one, and to associate the related document number and the position number in document to it. Thereafter, the intermediate files are no longer necessary and deleted.
+- step 420 one variable length chain is read from the character chain file 302 into the memory region preferably obtained in step 402.
+- the storage position of the variable length chain in the character chain file 302 is stored in the character chain file 302 at the time it is created, it is possible to immediately access the top position of the variable length chain in the character chain file 302.
+- step 422 the extended fixed length chain is created by scanning the variable length chain. Then, the extended fixed length chain, the variable length chain number of that variable length chain, the position number in variable length chain of the extended fixed length chain are stored in the memory region obtained in step 402.
+- step 424 a process is performed for checking whether or not the obtained memory region is full. If so, in step 426, the extended fixed length chains, the variable length chain number, and the position information in variable length chain, all of which are stored in the memory region, are sorted based on, for example, character code values of the extended fixed length chains, the variable length chain number and the position number in variable length chain, and written to the disk 108 (FIG. 1) as an intermediate file, whereby the memory region in which data written in the intermediate file is stored is released for use in the subsequent process. Then, the process proceeds to step 428.
+- step 424 If it is determined in step 424 that there still remains a space in the memory region, then the process immediately proceeds to step 428.
+- step 428 it is determined that there remain variable length chains not yet read in step 420 in the character chain file 302. If so, the process returns to step 421.
+- step 428 If it is determined in step 428 that all variable length chains in the character chain file 302 have been completely read, then the extended fixed length chains which are not written to the memory region obtained in step 402 and remain, the variable length chain number, and the position number in variable length chain are also sorted based on the character code values of the extended fixed length chains, the variable length chain number and the position number in variable length chain, and written to the disk 108 (FIG. 1) as an intermediate file.
+- step 432 Since writing of the intermediate files in steps 426 and 430 causes a plurality of intermediate files to exist on the disk 108, and each of these intermediate files are previously sorted, step 432 performs a process to create the extended character chain file 306 and the position information file 308 shown in FIG. 7 from these intermediate files with a conventional merge/sort technique, and to store them on the disk 108.
+- the character chain since the character chain may repeatedly appear several times in the original intermediate files, a process is performed here to put the entries of the same overlapped character chain into one, and to associate the related variable length chain number and the position number in variable length chain to it. Thereafter, the intermediate files are no longer necessary and deleted.
+- step 502 first, a process is performed to display, for example, a dialogue box with an input box, and to prompt the user to input a search character string in the input box.
+- the search character string is normalized, if required, and then, in step 504, a fixed length chain and a variable length chain of N characters are created based on the same rule when the index file is created from that search character string.
+- step 506 the fixed length chain is searched from the character chain file.
+- step 508 if it is determined that no fixed length chain is found, a message box is preferably displayed in step 526 for indicating that the search character string cannot be found, and the process ends.
+- step 508 if it is determined that a fixed length chain is found, since the position information file returns one or more document numbers and at least one position number in document at that document number, this information is once stored in step 510 in a predetermined buffer region in the main memory or on the disk for the subsequent process.
+- step 512 it is determined whether all fixed length chains created from the search character string have been searched. If so, the process proceeds to step 514. If not, the process returns to step 506 where the search process is performed for the next fixed length chain by using the character chain file.
+- step 514 a variable length chain is searched from the extended character chain file and the extended position information file.
+- variable length chains having excess characters before or after it it is possible to avoid noise such as "cat"->"communication".
+- noise such as "cat"->"communication.
+- step 516 if it is determined that no variable length chain is found, preferably, step 526 presents a message box indicating that no search character string is found, and ends the process.
+- the message is displayed on the display device 110 of FIG. 1, it may be possible to transfer the message to another location through a network.
+- step 516 If it is determined in step 516 that a variable length chain is found, because the extended position information file 308 returns one or more variable length chain numbers 316, the position information file 304 returns in step 518 one or more document numbers 312 for subsequent processing based on this information and at least one position number in document 314 at these document numbers which are then once stored in a predetermined buffer region in the main memory or on the disk.
+- step 520 it is determined whether all variable length chains created from the search character string have been searched. If so, the process proceeds to step 522. If not, the process returns to step 514 where the search is performed with the next variable length chain by using the extended character chain file, and the extended position information file.
+- step 522 check is performed on the position information for the fixed length chains stored in the buffer in step 510 and the position information for the variable length chains stored in the buffer in step 518 to once store the document numbers containing the character strings matching the search character string and their position numbers in the buffer region. If it is determined that the search character string is found, the contents of documents in the database 202 are accessed in step 528 from these document numbers and the position numbers in document, and the applicable lines for the document in which the document search character string exists are preferably displayed in the individual windows.
+- step 524 If it is determined in step 524 that the search character string is not found, a message box indicating that the search character string is not found is preferably displayed in step 526, and the process ends.
+- the process shown in FIG. 7 is to perform so-called strict search by using the index file.
+- this scheme specifies a character string to be searched, and search accuracy (larger than zero but equal to one or less) to identify documents including "similar character strings" of which the "similarity factor" with the character string to be searched is higher than the specified search accuracy, and positions in document of the "similar character strings”.
+- English character strings in which arrangement of characters resembles, and the meaning of which resembles include:
+- a search character string consisting of only the fixed length chain on a rule for determining similar character strings and a similarity factor. It is a general rule to collect character strings as similar character strings which have the same sequential relationship with characters in an input character string and at positions close to it in a some extent from character strings continuously match each other with the input character strings over M characters or more, and to determine a similarity factor from the number of matched characters and the number of non-matched characters.
+- the longest character string is selected from those starting from a same character.
+- a valid matched character string in a search character string is called a valid matched search character string; a valid matched character string in a document is called a valid matched document character string. Since the valid matched search character string and the valid matched document character string match for their contents, they are simply called a valid matched character string unless otherwise distinction is required.
+- Non-matched characters to be contained in a similar character string should be continuous L characters.
+- L is a constant of one or more.
+- the first matched character string in the order in a document is to be the first valid matched character string, where it is expressed that
+- s(D,i) is the start position of the i-th valid matched document character string
+- e(D,i) is the end position of the i-th valid matched document character string
+- s(C,i) is the start position of the i-th valid matched search character string
+- e(C,i) is the end position of the i-th valid matched search character string.
+- the (i+1)-th valid matched document character string is determined in the following manner.
+- the first matched character string satisfying the following two conditions a) and b) (Equations 1 and 2) is made the (i+1)-th valid matched character string.
+- the first "similar character string” is determined by starting comparison from the top of document.
+- the (i+1)-th “similar character string” is determined by starting comparison from the first character which is behind a character at the top of the i-th "similar character string”, and does not belong to a valid matched character string constituting the i-th "similar character string”.
+- a "similarity factor" considerably agreeing with general human determination can be calculated on whether or not arrangement of characters resembles by setting the constants L and M to suitable values.
+- step 602 input of a search character string is prompted. Also, in step 604, input of similarity factors of 0-1 is prompted. Usually, input of the character string and the value in steps 602 and 604 is performed by using an input box and a scroll bar of a single dialogue box.
+- step 606 the number i for a valid matched character string is set to 1.
+- step 608 the valid matched character string is searched. Now, if there is a condition that the length of valid matched character string is M characters or more, it is advantageous that an index file of M-character chain is created in the process of FIG. 7. It is because, if such index file previously exists, search for any M-character chain can be performed at a high speed by the dichotomizing search for the index file. Subsequently, search for an M-character chain is performed in the index file by shifting the start position for taking the M-character chain in the index character string by one.
+- step 610 the process proceeds to step 626, where it indicates that nothing is found and ends.
+- step 610 When it is determined in step 610 that a valid matched character string is found, the process proceeds to step 612, and s(D,i) to e(D,i) in the document and s(C,i) to e(C,i) in the search character string are marked as the valid matched character string.
+- step 614 the (i+1)-th valid matched character string satisfying the conditions
+- step 612 for the (i+1)-th valid matched character string, s(D,i+1) to e(D,i+1) in the document and s(C,i+1) to e(C,i+1) in the search character string are marked as a valid character string (increment of i in step 618 indicated to pay attention on the next valid matched character string).
+- a similarity factor is calculated in step 620. It is given as explained above by, for example, Similarity factor minimum (number of characters in a character string to be searched belonging to a valid matched character string/number of characters of the character string to be searched, number of characters in a "similar character string" belonging to the valid matched character string/number of characters of the "similar character string”) [Equation 6]
+- the "similar character string” is a character string from the start position of the first valid matched character string in the document to the last position of the last valid matched character string.
+- step 622 results are selected from the similarity factor calculated in step 620 and that input in step 604. Only results with the similarity factor equal to or higher than that input in step 604 are displayed in step 624.
+- step 624 a process is performed to access contents of documents stored in the database based on the document numbers and the position numbers in document returned as the result of searches for the index file in steps 608 and 614, and to display lines containing applicable sections.
+- steps 606-622 are applied to each of such plurality of "similar character strings", and, in step 624, only those of the plurality of "similar character strings" satisfying the conditions for similarity factor are selected and displayed.
+- the third is the last valid matched character string.
+- Numerals are the number of valid matched character string.
+- the "similar character string” is "AB ⁇ CD ⁇ EF” from s(D,1) to e(D, 3).
+- the valid matched character string is only the first one.
+- the first "similar character string” is "AB” from s(D,1) to e(D,1).
+- the following extended character chain is obtained by searching for an extended character chain file, and an extended position information file.
+- the searching method is the same as the method for searching a search character string consisting of only fixed length chain from a character chain file and a position information file.
+- M' is used as a one corresponding to the constant M.
+- the first character in variable length chain is included in the matched section.
+- the first or last character in extended search character string is included in the matched section.
+- the process can be performed at a high speed by creating an extended fixed chain of "$co” and "se* ⁇ ” through use of "$" indicative of start and " ⁇ ” indicative of end in creating the extended fixed chain, and by eliminating variable length chains not matching either of them.
+- variable length chain contains non-matched characters in the number equal to or more than a predetermined number of characters such as when the first character in the extended search character string is included in the matched section (the variable length chain "data" for the extended search character string “database” being applicable to this), or when the last character in the extended search character string is included in the matched section (the variable length chain "base” for the extended search character string “database” being applicable to this), such variable length chain may be excluded from the subject for search. This enables it to increase the search speed by narrowing down the subjects for search.
+- variable length chain subject for the processes (1), (2) and (3) described above becomes the "variable length chain satisfying the conditions" in step 708.
+- the conditions may be variously changed to be (1) only, (3) only, (1)+(2) or the like through setting instead of (1)+(2)+(3).
+- a non-matched character string in the search character string is "un", while a non-matched character string in the document character string is "nu".
+- non-match caused by typographical error can be detected by determining, for example, whether or not "u” and "n" of the non-matched character string in the search character string are contained in the non-matched character string in the document character string.
+- search characters are "data communication”, and "data . . . communication”, “data comminucation”, and “daily communication” exist in a document character string. It is assumed that "data” and “communication” in “data . . . communication” are sufficiently separated.
+- a search character string "data communication" is input (step 702).
+- a similarity factor is input (step 704). It may be possible to set this similarity factor as default, and to omit its input. Here, a similarity factor 0.80 is input.
+- a fixed length chain and a variable length search character string are created from the search character string (step 706).
+- a fixed length chain and a variable length search character string are created from the search character string (step 706).
+- Variable length chains satisfying the conditions are searched from the extended character chain file and the extended position information file (step 708).
+- a process is performed for searching variable length chains of above (1), (2) and (3). That is, (1) search is performed for a variable length chain matching an extended search character string with a specified search matching factor or higher. While the search matching factor in this case may be set to the same value as similarity factor for the entire character string, it is preferable to be lower than the similarity factor for the entire document.
+- the "specified search matching factor” is set to 0.60 for "data” and 0.72 for "communication".
+- the “specified search matching factor” may be changed depending on the ratio of the number of characters in the search character string to that in the variable length chain. This is because, as shown in this example, while the similarity factor for entire character string does not become 0.80 or higher unless the variable length chain matches "communication" for 10 characters or more, there is a possibility that, for "data”, the similarity factor for entire character string becomes 0.80 or higher even if only one character matches. However, if too low matching factor is allowed for "data", the number of matched variable length chains increases and the search speed is affected so that 0.6 is set as the lower limit.
+- variable length chains not seriously affecting on the similarity factor for entire document are excluded from the subject for variable length chain searching of (1). This enables it to improve the search speed.
+- variable length chains having the search matching factor of 0.60 or higher for "data” and 0.72 or higher for “communication” "data” (100%) can be found for “data”, and “comminucation” (77%) and “communication” (100%) can be found for "communication” by a method similar to that for fixed length chain.
+- chains matching a corresponding extended search character string are the following in the extended character chains:
+- variable length chains matching the search character string "datacommunication" with a specified search matching factor or higher are searched.
+- the "specified search matching factor” may be set to the same value as the similarity factor for entire character string, it may be lower than the similarity factor for entire document.
+- the search character string is "data base system”
+- there exist three extended search character strings created by joint of "database”, “basesystem” and “databasesystem” impact of these joined search character strings on the similarity factor for entire document varies depending on the number of characters in the joined search character strings.
+- the "specified search matching factor" of (2) is set to 0.80, there is no variable length chain matching the search character string "datacommunication" with the specified search matching factor or higher.
+- variable length chains satisfying all conditions of "1. the first character of variable length chain is contained in the matched section", and "2. the first or last character of extended search character string is contained in the matched section” are searched in (3) variable length chains matching the extended search character string with the matching factor of 0 or higher.
+- the variable length chains meeting these conditions are "data”, “comminucation” and "communication” as in (1).
+- step 710 it is determined whether or not a variable length chain is found.
+- “1. data”, “3. comminucation”and “4. communication” have been found.
+- Numbers of these variable length chains are stored in a buffer (step 712).
+- the variable length chain numbers 1, 3, and 4 are stored.
+- the variable length chain character strings "data” and “communication” of the search character string "data communication” are assigned a number (variable length chain search character string number), respectively.
+- the variable length chain numbers 1, 3 and 4 are stored in connection with such numbers. Therefore, the information being stored is (1-1) and (2-3, 4). This (2-3, 4) indicates the variable length chain numbers 3 and 4 of the variable length chains in the document matching the variable length chain search character string number 2 with a certain matching factor or higher.
+- step 714 the similarity factor for the entire character string is calculated from the positional relationship between the position information of fixed length chain and the position information of variable length chain.
+- the variable length chain numbers 1, 3 and 4 in the document are stored for the variable length chain search character string number. Therefore, the variable length chains in document which may be joined are 1-3 and 1-4 ("1. "corresponds to "data”, “3. “ to “comminucation”, and “4. " to "communication”).
+- variable length chain numbers are stored in connection with the variable length chain search character string numbers.
+- storing the variable length chain search character string numbers is not an essential component of the present invention. Combinations of variable length chains can be determined without information on the variable length chain search character string numbers.
+- the character chain file is divided according to the contents of the position information file.
+- the character chain file is sorted according to the contents of the position information file.
+- variable length chain number To prevent duplicated calculation of similarity factor, they are arranged by the variable length chain number.
+- character strings less than search character string (18: including delimiter) x similarity factor (0.80) are excluded from the subject for calculation of similarity factor (in practice, it is desirable to perform before they are arranged by the variable length chain number). Accordingly, the candidates for the calculation of similarity factor become only 1-3. data comminucation 2-1.
+- the calculation of similarity factor for character string in step 714 can be reduced by storing the similarity factor of variable length chain together with the variable length chain numbers in step 712. That is, (1-1.00), (3-0.77) and (4-1.00) are stored in step 712 and utilized.
+- the similarity factor is possible to be calculated from the following equation.
+- step 716 the input similarity factor is compared to the calculated similarity factor. If there exists no character string with similarity factor higher than the input similarity factor, a display indicating that none is found is displayed on the display 110 (step 720). If it is found, applicable line(s) in applicable document(s) is displayed (step 718). However, the display indicating that none is found and the display of applicable line(s) in applicable documents are not essential component, and these information may be transmitted to another computer (including a client). In addition, the display of applicable line(s) in applicable document(s) may display all character strings with the input similarity factor or higher together with their similarity factor, document numbers, position numbers in document and the like, or to display only predetermined numerals.
+- the order of display may be the sequence of appearance in the document(s) or in the descending order of similarity factor. Moreover, in case of multiple documents, it may be possible to display predetermined numerals for character strings satisfying conditions in each document. They can be set variously in the design stage.
+- the present invention may be applied to spelling checking of words in a document.
+- a word in the document not existing in a dictionary is detected by the conventional approach.
+- the detected word not existing in the dictionary is used as a search character string, and the ambiguity search is performed for words existing in the dictionary.
+- words with a certain similarity factor or higher in the ambiguity search are displayed as candidates with correct spelling for the word not existing in the dictionary.
+- the contents of the character chain file 302 and the position information file 304 are:
+- variable length chain document character string "ASEA” similar to the variable length chain search character string "ASEAN” has been found by the above-mentioned method. For this character string, detection of a valid matched character string and calculation of similarity factor are performed in a similar manner to the method described for fixed length chain.
+- the result of calculation of similarity factor for variable length chain may be used for the calculation of similarity factor for entire character string.
+- the similarity factor becomes possible to be calculated from the following equation.
+- the similarity factor of the search character string is:
+- Similarity factor (number of characters in variable length chain 1 ⁇ matching factor of variable length chain 1 ⁇ 0.5+number of characters in valid matched character string of fixed length chain+number of characters of delimiter ⁇ 0.2)/(number of characters in search character string ⁇ 0.5+number of characters in fixed length chain in search character string+number of characters of delimiter in search character string ⁇ 0.2) [Equation 11]
+- search equation such as (computer OR system) AND communication (a search equation searching for a document containing "computer” or "system", and containing "communication")
+- search equation such as (computer OR system) AND communication (a search equation searching for a document containing "computer” or "system”, and containing "communication")
+- Ambiguity search for a "similar character string" can be attained at a considerably high speed with the structure of index according to the present invention by suitably determining the value of M.
+- N Number of characters in character chain to be stored in index
+- the ambiguity search of the second embodiment is particularly considered for equilibrium between "the more number of non-matched characters is inserted, the less similarity one feels" and "too much non-matched characters are inserted, then it cannot be felt to be one character string".
+- a character string matching an input character string, a non-matched character string and a matched character string are arranged in a document, it is unnatural that degree of similarity is lowered when the character strings up to the latter matched character string are taken as a similar character string.
+- steps 602-612 are same as before, and the process for step 614 for indicating the conditions in searching the (i+1)-th valid matched character string is changed as follows:
+- Equation 1 means that duplicatively appeared characters are allowed up to M-1 characters, otherwise character strings appearing in the same order as that of characters in the input character string are made valid.
+- Equation 2 means that valid matched character strings are not overlapped each other in the document.
+- Equation 3 means that inserted non-matched characters and duplicatively appeared characters are allowed up to L characters together.
+- the similarity factor is calculated by giving marks to similar character strings and dividing them, with the full mark (mark when it is completely matched).
+- the mark for similar character string is calculated by giving a mark to each character under the following rule, and adding them. Accordingly, the process in step 620 of FIG. 8 becomes as follows:
+- the (i+1)-th similar character string is determined by starting comparison from the first character after the top character in the i-th similar character string and not belonging to the valid matched character strings constituting the i-th similar character string.
+- Equation 5 indicates a duplicatively appeared character
+- Equation 4 indicates a simple matched character not a duplicatively appeared character. A case where a character duplicatively appears is accommodated by giving to a character expressed by Equation 5 a negative mark smaller than that for a simple non-matched character.
+- the second valid matched character string is "CD".
+- the third valid matched character string is "EF".
+- the similar character string is "AB ⁇ CD ⁇ EF" from s(D,1) to e(D,3).
+- the valid matched character string is only the first one.
+- the similar character string is "AB.”
+- the first non-valid matched character after "A” is "X”.
+- the second similar character string is searched after "X”.
+- an advantage is obtained that ambiguity search natural to the human sensation can be attained at a high speed for a document file or database by using a unique index structure.
+- search can be performed at a high speed for a database consisting of documents described by one or mixture of a plurality of languages such as Japanese, Korean, Chinese, and English with a single index structure and a single algorithm.
+Abstract
+Description
+e(D,i)+1<s(D,i+1)<e(D,i)+L+1,
+s(C,i+1)>e(C,i)-(M-1)
+e(D,i)+1<s(D,i+1)<e(D,i)+L+1,
+s(C,i+1)>e(C,i)-(M-1)
+______________________________________ Position number in document 1234 5678 9 10111213141516171819 for characters Normalized character string data base system - 1 2 3.Delimiter method 1 | ______________________________________
+______________________________________ Position number in Fixed length chain Document number document ______________________________________ -1 1 15 12 1 16 23 1 17 3. 1 18 3 1 19Delimiter pattern 1 1 19 ______________________________________
+______________________________________ Position number in Variable length chain Document number document ______________________________________data 1 1base 1 5system 1 9 ______________________________________
+______________________________________ Extended fixed Variable length Position number in variable length chain chain number length chain ______________________________________ dat 1 1ata 1 2 ta 1 3 a 1 4bas 2 1ase 2 2 se 2 3e 2 4sys 3 1yst 3 2ste 3 3tem 3 4em 3 5m 3 6 ______________________________________
+a) e(D,i)+1≦s(D,i+1)≦e(D,i)+L+1 [Equation 1]
+b) s(C,i+1)>e(C,i)-(M-1) [Equation 2]
+a) e(D,i)+1≦s(D,i+1)≦e(D,i)+L+1, [Equation 5]
+b) s(C,i)>e(C,i)-(M-1)
+______________________________________ 123456 Character string to be searched C: ABCDEF 12345678 . . . Document D: AB.CD.EF . . . ______________________________________
+s(C,1)=1 e(C,1)=2
+s(D,1)=1 e(D,1)=2.
+s(C,2)=3 e(C,2)=4
+s(D,2)=4 e(D,2)=5
+s(C,3)=5 e(C,3)=6
+s(D,3)=7 e(D,3)=8
+[TABLE 5] ______________________________________AB CD EF 1 2 3 AB · CD · EF . . . 1 2 3 ______________________________________
+[TABLE 8] ______________________________________ 1234 Character string to be searched C: ABCD ______________________________________
+[TABLE 9] ______________________________________ 1 2 3 4 5 6 7 8 9 101112131415 Document D: A B X X X X C D X X X X X X. ______________________________________
+______________________________________ First valid matched character string is "AB" s (C, 1) = 1 e (C, 1) = 2 s (D, 1) = 1 e (D, 1) = 2 ______________________________________
+TABLE 10 ______________________________________ABCD 1 ABXXXXCDXXXXX X. 1 ______________________________________
+"Similarity factor"=minimum (2/4, 2/2)=2/4=0.5
+TABLE 11 ______________________________________ABCD 1 ABXXXXCDXXXXX X. 1 ______________________________________
+TABLE 12 ______________________________________ 123 Character string to be searched C: ABC 123456789 Document D: XABBCXXXX ______________________________________
+______________________________________ First valid matched character string is "AB" s (C, 1) = 1 e (C, 1) = 2 s (D, 1) = 2 e (D, 1) = 3 ______________________________________
+______________________________________ Second valid matched character string is "BC" s (C, 2) = 2 e (C, 2) = 3 s (D, 2) = 4 e (D, 2) = 5 ______________________________________
+TABLE 13 ______________________________________ABC 1 2.sub.--XAB BCXXXX 1 2 1,1,0.5,1->3.5 ______________________________________
+TABLE 17 ______________________________________ [Example] (underline under matched section) Extended search character string Variable length chain ______________________________________ "database" -> o "data" "database" -> x "update" "database" -> o "base" ______________________________________
+TABLE 18 ______________________________________ [Example] (underline under matched section) Extended search character string Variable length chain ______________________________________ "database" -> o "data" "database" -> o "base" "database" -> x "tab" ______________________________________
+"communication"<->"commnuication"
+______________________________________ Character chain file Position information file ______________________________________ 1. data 1-1, 2-1 2. daily 3-1 3. comminucation 2-6 4. communication 1-35, 3-7 ______________________________________
+______________________________________ Extended character Extended position chain file information file ______________________________________ $da 1-1, 2-1 dat 1-2 ta¥ 1-3 a¥ 1-4 dai 2-2 ail 2-3 ily 2-4 ly¥ 2-5 y¥ 2-6 $co 3-1, 4-1 com 3-2, 4-2 omm 3-3, 4-3 mmi 3-4 min 3-5 inu 3-6 nuc 3-7 uca 3-8 cat 3-9, 4-9 ati 3-10, 4-10 tio 3-11, 4-11 ion 3-12, 4-12 on¥ 3-13, 4-13 n¥ 3-14, 4-14 mmu 4-4 mun 4-5 uni 4-6 nic 4-7 ica 4-8 ______________________________________
+______________________________________ Extended character Extended position chain file information file ______________________________________ $da 1-1-4, 2-1-5. ______________________________________
+______________________________________ Extended character Extended position chain file information file ______________________________________ $co 3-1, 4-1 com 3-2, 4-2 omm 3-3, 4-3 mmi 3-4 min 3-5 inu 3-6 nuc 3-7 uca 3-8 cat 3-9, 4-9 ati 3-10, 4-10 tio 3-11, 4-11 ion 3-12, 4-12 on¥ 3-13, 4-13 n¥ 3-14, 4-14 ______________________________________
+______________________________________ Character chain file Position information file ______________________________________ 1. data 1-1, 2-1 3. comminucation 2-6 4. communication 1-35, 3-7, ______________________________________
+______________________________________ Character chain file Position information file ______________________________________ 1. data 1-1, 2-1 3. comminucation 2-6 4. communication 1-35, 3-7 ______________________________________
+______________________________________ Character chain file Position information file ______________________________________ 1. data 1-1 1. data 2-1 3. comminucation 2-6 4. communication 1-35 4. communication 3-7 ______________________________________
+______________________________________ Character chain file Position information file ______________________________________ 1. data 1-1 4. communication 1-35 1. data 2-1 3. comminucation 2-6 4. communication 3-7 ______________________________________
+Similarity factor=(number of characters invariable length chain 1×matching factor ofvariable length chain 1+number of characters invariable length chain 2×matching factor ofvariable length chain 2+ . . . +number of characters of delimiter)/(number of characters in search character string) [Equation 9]
+______________________________________ Character chain file Position information file ______________________________________ 1. ASEA 1-1 2. 01 1-5 3. 12 1-6 ______________________________________
+TABLE 20 ______________________________________ Character string to be searched C: 12345678 ASEAN123 Document D: 1234567 ASEA012 ______________________________________
+TABLE 21 ______________________________________ ASEAN123 1 2ASEA012 1 2 ______________________________________
+Similarity factor=minimum (6/8, 6/7)=0.75
+Similarity factor=(number of characters invariable length chain 1×matching factor ofvariable length chain 1+number of characters in valid matched character string of fixed length chain+number of characters of delimiter)/number of characters in search character string[Equation 10]
+Similarity factor=minimum (0.75, 0.74)=0.74
+s(C,i+1)>e(C,i)-(M-1) (Equation 1)
+s(D,i+1)>e(D,i) (Equation 2)
+s(D,i+1)-e(D,i)-1+max (e(C,i)-s(C,i+1)+1, 0)≦L (Equation 3)
+______________________________________ Character belonging to the first valid matched . . . 1 character string point Character belonging to the i-th (i > 1) valid matched character string, and position in search character string.sub.-- †e . . . 1 (C, i-1) + 1 (Equation 4) point position in search character string.sub.--. . . . . . -1/(2* e (C, i-1) (Equation 5) L) point Character not belonging to valid matched . . . -1/L character string point ______________________________________
+TABLE 23 ______________________________________ [Example 5] ______________________________________ Input character string C: 123456 ABCDEF Part of document D: . . . 12345678 AB · CD · EF . . . ______________________________________
+s(C,1)=1 e(C,1)=2 [Equation 13]
+s(D,1)=1 e(D,1)=2
+s(C,2)=3 e(C,2)=4 [Equation 14]
+s(D,2)=4 e(D,2)=5
+s(C,3)=5 e(C,3)=6 [Equation 15]
+s(D,3)=7 e(D,3)=8
+TABLE 24 ______________________________________ C:AB CD EF 1 2 3 D: AB · CD ·EF 1 2 3 .sup.·1,1, 1,1, 1,1, -1/3 -1/3 ______________________________________ Points
+TABLE 27 ______________________________________ [Example 7] ______________________________________ Input character string C: 1234 ABCD Part of document D: . . . 1234567891011121314 ABXXXXCDXXXXXX . . . ______________________________________
+TABLE 28 ______________________________________ C:ABCD 1 D: ABXXXXCDXXXXXX. 1 ______________________________________
+[TABLE 29] ______________________________________ C:ABCD 1 D: ABXXXXCDXXXXXX. 1 ______________________________________
+[TABLE 30] ______________________________________ [Example 8] 1234567 Input character string C: ABCDEFG 12345678 Part of document D: . . . ABCCDEFG . . . ______________________________________
+[TABLE 31] ______________________________________ C:ABCDEFG 1 .sub.------ 2 D:ABC CDEFG 1 2 1,1,1, 1,1,1,1 -1/6 ______________________________________
+Claims (22)
+e(D, i)+1≦s(D, i+1)≦e(D, i)+L+1,
+s(C, i+1)>e(C, i)-(M-1)
+e(D, i)+1≦s(D, i+1)≦e(D, i)+L+1,
+s(C, i+1)>e(C, i)-(M-1)
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+JP06865596A JP3160201B2 (en) | 1996-03-25 | 1996-03-25 | Information retrieval method and information retrieval device |
+JP8-068655 | 1996-03-25 |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US5992737A true US5992737A (en) | 1999-11-30 |
+Family
+ID=13379943
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US08/805,846 Expired - Lifetime US5992737A (en) | 1996-03-25 | 1997-03-03 | Information search method and apparatus, and medium for storing information searching program |
+Country Status (3)
+Country | Link |
+---|---|
+US (1) | US5992737A (en) |
+JP (1) | JP3160201B2 (en) |
+KR (1) | KR100272389B1 (en) |
+Cited By (42)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6304872B1 (en) * | 1998-08-13 | 2001-10-16 | Tornado Technology Co. Ltd. | Search system for providing fulltext search over web pages of world wide web servers |
+US20010049706A1 (en) * | 2000-06-02 | 2001-12-06 | John Thorne | Document indexing system and method |
+US6411223B1 (en) * | 2000-10-18 | 2002-06-25 | Digital Fountain, Inc. | Generating high weight encoding symbols using a basis |
+US6425123B1 (en) * | 1999-06-29 | 2002-07-23 | International Business Machines Corporation | System, method, and program for testing translatability of software by using english multi-byte transliteration creating double-wide characters |
+US6453462B1 (en) | 1999-06-29 | 2002-09-17 | International Business Machines Corporation | Mock translation system, method, and program using multi-byte placeholder characters to test translatability of software that will display multi-byte languages |
+US6459810B1 (en) * | 1999-09-03 | 2002-10-01 | International Business Machines Corporation | Method and apparatus for forming variant search strings |
+US6477531B1 (en) | 1998-12-18 | 2002-11-05 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content |
+US6486803B1 (en) | 2000-09-22 | 2002-11-26 | Digital Fountain, Inc. | On demand encoding with a window |
+US6507812B1 (en) | 1999-06-29 | 2003-01-14 | International Business Machines Corporation | Mock translation method, system, and program to test software translatability |
+US6533822B2 (en) * | 1998-01-30 | 2003-03-18 | Xerox Corporation | Creating summaries along with indicators, and automatically positioned tabs |
+US6542898B1 (en) | 1999-05-12 | 2003-04-01 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content developed for specific audiences |
+US6615240B1 (en) | 1998-12-18 | 2003-09-02 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability and option to escalate to live help |
+US20030182316A1 (en) * | 2002-03-22 | 2003-09-25 | Johnson Richard Alan | Algorithm for selecting audio content |
+US6658598B1 (en) | 2000-02-17 | 2003-12-02 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content assertions |
+US20040020121A1 (en) * | 1999-08-11 | 2004-02-05 | Weder Donald E. | Method for forming a decorative flower pot cover having a holographic image thereon |
+US6694314B1 (en) * | 1998-12-18 | 2004-02-17 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability via a system-supplied search string |
+US20040194141A1 (en) * | 2003-03-24 | 2004-09-30 | Microsoft Corporation | Free text and attribute searching of electronic program guide (EPG) data |
+US20050226603A1 (en) * | 2001-08-08 | 2005-10-13 | Mitsuhiro Hirabayashi | Recording apparatus, recording method, and recording medium |
+US20050246543A1 (en) * | 2000-05-31 | 2005-11-03 | Sony Corporation | System and method of content copy control |
+US6970894B2 (en) * | 1998-12-30 | 2005-11-29 | Intel Corporation | Method for extracting information from a file using a printer driver |
+US20060265364A1 (en) * | 2000-03-09 | 2006-11-23 | Keith Robert O Jr | Method and apparatus for organizing data by overlaying a searchable database with a directory tree structure |
+US7225181B2 (en) * | 2000-02-04 | 2007-05-29 | Fujitsu Limited | Document searching apparatus, method thereof, and record medium thereof |
+US20070124295A1 (en) * | 2005-11-29 | 2007-05-31 | Forman Ira R | Systems, methods, and media for searching documents based on text characteristics |
+US20070282806A1 (en) * | 2006-06-02 | 2007-12-06 | Microsoft Corporation | Searchable storage system |
+US20080177783A1 (en) * | 2005-03-31 | 2008-07-24 | Bangel Matthew J | System and program product for providing high performance data lookup |
+US20080195601A1 (en) * | 2005-04-14 | 2008-08-14 | The Regents Of The University Of California | Method For Information Retrieval |
+US20080201334A1 (en) * | 2005-05-03 | 2008-08-21 | Pctfiler Holdings Pty Ltd | Computer System for Distributing a Validation Instruction Message |
+US20090138453A1 (en) * | 2007-11-26 | 2009-05-28 | Hyungkeun Jee | System and method for searching large amount of data at high speed for digital forensic system |
+US7895350B1 (en) | 2001-07-05 | 2011-02-22 | Motive, Inc. | N-way data stream splitter |
+US7917604B1 (en) * | 2007-06-29 | 2011-03-29 | Emc Corporation | Techniques for operating a data storage assembly via a series of web pages and a commit-at-the-end, wizard-style behavior |
+US7921424B2 (en) | 2003-05-27 | 2011-04-05 | Microsoft Corporation | Systems and methods for the repartitioning of data |
+US20110093443A1 (en) * | 2004-10-29 | 2011-04-21 | Farshid Alizadeh-Shabdiz | Access Point Database |
+US20110213783A1 (en) * | 2002-08-16 | 2011-09-01 | Keith Jr Robert Olan | Method and apparatus for gathering, categorizing and parameterizing data |
+US20110231324A1 (en) * | 2000-10-23 | 2011-09-22 | Pctfiler Holdings Pty Ltd | System and method of attracting and lodging pct national phase applications |
+US8131867B1 (en) | 2000-06-01 | 2012-03-06 | Qualcomm Incorporated | Dynamic layer congestion control for multicast transport |
+US20130204898A1 (en) * | 2012-02-07 | 2013-08-08 | Casio Computer Co., Ltd. | Text search apparatus and text search method |
+US20150032704A1 (en) * | 2013-07-26 | 2015-01-29 | Electronics And Telecommunications Research Institute | Apparatus and method for performing compression operation in hash algorithm |
+US20150088944A1 (en) * | 2012-05-31 | 2015-03-26 | Fujitsu Limited | Generating method, generating apparatus, and recording medium |
+RU2623802C2 (en) * | 2007-12-31 | 2017-06-29 | Мастеркард Интернешнл Инкорпорейтед | Methods and systems for approximate comparing strings in database |
+US10587710B2 (en) * | 2017-10-04 | 2020-03-10 | International Business Machines Corporation | Cognitive device-to-device interaction and human-device interaction based on social networks |
+US11126621B1 (en) * | 2017-12-31 | 2021-09-21 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US11586715B1 (en) * | 2021-07-30 | 2023-02-21 | Coupang Corp. | Electronic apparatus for providing information based on existence of a user account and method thereof |
+Families Citing this family (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+SG98366A1 (en) | 1997-07-11 | 2003-09-19 | Matsushita Electric Ind Co Ltd | Recording medium of character data of full text and character string collating apparatus |
+JP3275816B2 (en) | 1998-01-14 | 2002-04-22 | 日本電気株式会社 | Symbol string search method, symbol string search device, and recording medium recording symbol string search program |
+JP2001043228A (en) * | 1999-07-28 | 2001-02-16 | Ricoh Co Ltd | System and method for retrieving document and storage medium |
+JP4003522B2 (en) * | 2002-04-23 | 2007-11-07 | 日本電気株式会社 | Program search device, program video processing device, and program |
+JP5251938B2 (en) * | 2010-08-31 | 2013-07-31 | 株式会社日立製作所 | Plant control device and thermal power plant control device |
+Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5524201A (en) * | 1993-11-03 | 1996-06-04 | Apple Computer, Inc. | Method of preparing an electronic book for a computer system |
+US5778223A (en) * | 1992-03-17 | 1998-07-07 | International Business Machines Corporation | Dictionary for encoding and retrieving hierarchical data processing information for a computer system |
+-
+1996
+- 1996-03-25 JP JP06865596A patent/JP3160201B2/en not_active Expired - Fee Related
+- 1996-12-14 KR KR1019960065808A patent/KR100272389B1/en not_active IP Right Cessation
+-
+1997
+- 1997-03-03 US US08/805,846 patent/US5992737A/en not_active Expired - Lifetime
+Patent Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5778223A (en) * | 1992-03-17 | 1998-07-07 | International Business Machines Corporation | Dictionary for encoding and retrieving hierarchical data processing information for a computer system |
+US5524201A (en) * | 1993-11-03 | 1996-06-04 | Apple Computer, Inc. | Method of preparing an electronic book for a computer system |
+Cited By (63)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6533822B2 (en) * | 1998-01-30 | 2003-03-18 | Xerox Corporation | Creating summaries along with indicators, and automatically positioned tabs |
+US6304872B1 (en) * | 1998-08-13 | 2001-10-16 | Tornado Technology Co. Ltd. | Search system for providing fulltext search over web pages of world wide web servers |
+US6477531B1 (en) | 1998-12-18 | 2002-11-05 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content |
+US6694314B1 (en) * | 1998-12-18 | 2004-02-17 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability via a system-supplied search string |
+US6999990B1 (en) | 1998-12-18 | 2006-02-14 | Motive, Inc. | Technical support chain automation with guided self-help capability, escalation to live help, and active journaling |
+US6615240B1 (en) | 1998-12-18 | 2003-09-02 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability and option to escalate to live help |
+US6970894B2 (en) * | 1998-12-30 | 2005-11-29 | Intel Corporation | Method for extracting information from a file using a printer driver |
+US6542898B1 (en) | 1999-05-12 | 2003-04-01 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content developed for specific audiences |
+US6425123B1 (en) * | 1999-06-29 | 2002-07-23 | International Business Machines Corporation | System, method, and program for testing translatability of software by using english multi-byte transliteration creating double-wide characters |
+US6453462B1 (en) | 1999-06-29 | 2002-09-17 | International Business Machines Corporation | Mock translation system, method, and program using multi-byte placeholder characters to test translatability of software that will display multi-byte languages |
+US6507812B1 (en) | 1999-06-29 | 2003-01-14 | International Business Machines Corporation | Mock translation method, system, and program to test software translatability |
+US20040020121A1 (en) * | 1999-08-11 | 2004-02-05 | Weder Donald E. | Method for forming a decorative flower pot cover having a holographic image thereon |
+US6459810B1 (en) * | 1999-09-03 | 2002-10-01 | International Business Machines Corporation | Method and apparatus for forming variant search strings |
+US7225181B2 (en) * | 2000-02-04 | 2007-05-29 | Fujitsu Limited | Document searching apparatus, method thereof, and record medium thereof |
+US6658598B1 (en) | 2000-02-17 | 2003-12-02 | Motive Communications, Inc. | Technical support chain automation with guided self-help capability using active content assertions |
+US20070282823A1 (en) * | 2000-03-09 | 2007-12-06 | Keith Robert O Jr | Method and apparatus for formatting information within a directory tree structure into an encyclopedia-like entry |
+US20060265364A1 (en) * | 2000-03-09 | 2006-11-23 | Keith Robert O Jr | Method and apparatus for organizing data by overlaying a searchable database with a directory tree structure |
+US20100241662A1 (en) * | 2000-03-09 | 2010-09-23 | The Web Access, Inc. | Method and apparatus formatting information within a directory tree structure into an encyclopedia-like entry |
+US7747654B2 (en) | 2000-03-09 | 2010-06-29 | The Web Access, Inc. | Method and apparatus for applying a parametric search methodology to a directory tree database format |
+US7756850B2 (en) * | 2000-03-09 | 2010-07-13 | The Web Access, Inc. | Method and apparatus for formatting information within a directory tree structure into an encyclopedia-like entry |
+US20070271290A1 (en) * | 2000-03-09 | 2007-11-22 | Keith Robert O Jr | Method and apparatus for accessing data within an electronic system by an extrernal system |
+US8296296B2 (en) | 2000-03-09 | 2012-10-23 | Gamroe Applications, Llc | Method and apparatus for formatting information within a directory tree structure into an encyclopedia-like entry |
+US8150885B2 (en) | 2000-03-09 | 2012-04-03 | Gamroe Applications, Llc | Method and apparatus for organizing data by overlaying a searchable database with a directory tree structure |
+US7672963B2 (en) | 2000-03-09 | 2010-03-02 | The Web Access, Inc. | Method and apparatus for accessing data within an electronic system by an external system |
+US20050268105A1 (en) * | 2000-05-31 | 2005-12-01 | Sony Corporation | System and method of content copy control |
+US20050246543A1 (en) * | 2000-05-31 | 2005-11-03 | Sony Corporation | System and method of content copy control |
+US7363512B2 (en) * | 2000-05-31 | 2008-04-22 | Sony Corporation | System and method of content copy control |
+US7720223B2 (en) | 2000-05-31 | 2010-05-18 | Sony Corporation | System and method of content copy control |
+US8131867B1 (en) | 2000-06-01 | 2012-03-06 | Qualcomm Incorporated | Dynamic layer congestion control for multicast transport |
+US20010049706A1 (en) * | 2000-06-02 | 2001-12-06 | John Thorne | Document indexing system and method |
+US6486803B1 (en) | 2000-09-22 | 2002-11-26 | Digital Fountain, Inc. | On demand encoding with a window |
+US6411223B1 (en) * | 2000-10-18 | 2002-06-25 | Digital Fountain, Inc. | Generating high weight encoding symbols using a basis |
+US20110231324A1 (en) * | 2000-10-23 | 2011-09-22 | Pctfiler Holdings Pty Ltd | System and method of attracting and lodging pct national phase applications |
+US7895350B1 (en) | 2001-07-05 | 2011-02-22 | Motive, Inc. | N-way data stream splitter |
+US7609296B2 (en) * | 2001-08-08 | 2009-10-27 | Sony Corporation | Recording apparatus, recording method, and recording medium using an index file |
+US20050226603A1 (en) * | 2001-08-08 | 2005-10-13 | Mitsuhiro Hirabayashi | Recording apparatus, recording method, and recording medium |
+US20030182316A1 (en) * | 2002-03-22 | 2003-09-25 | Johnson Richard Alan | Algorithm for selecting audio content |
+US20110213783A1 (en) * | 2002-08-16 | 2011-09-01 | Keith Jr Robert Olan | Method and apparatus for gathering, categorizing and parameterizing data |
+US8335779B2 (en) | 2002-08-16 | 2012-12-18 | Gamroe Applications, Llc | Method and apparatus for gathering, categorizing and parameterizing data |
+US7885963B2 (en) * | 2003-03-24 | 2011-02-08 | Microsoft Corporation | Free text and attribute searching of electronic program guide (EPG) data |
+US20040194141A1 (en) * | 2003-03-24 | 2004-09-30 | Microsoft Corporation | Free text and attribute searching of electronic program guide (EPG) data |
+US7921424B2 (en) | 2003-05-27 | 2011-04-05 | Microsoft Corporation | Systems and methods for the repartitioning of data |
+US20110093443A1 (en) * | 2004-10-29 | 2011-04-21 | Farshid Alizadeh-Shabdiz | Access Point Database |
+US8965412B2 (en) | 2004-10-29 | 2015-02-24 | Skyhook Wireless, Inc. | Location-based services that choose location algorithms based on number of detected access points within range of user device |
+US8630664B2 (en) * | 2004-10-29 | 2014-01-14 | Skyhook Wireless, Inc. | Access point database |
+US20080177783A1 (en) * | 2005-03-31 | 2008-07-24 | Bangel Matthew J | System and program product for providing high performance data lookup |
+US20080195601A1 (en) * | 2005-04-14 | 2008-08-14 | The Regents Of The University Of California | Method For Information Retrieval |
+US20080201334A1 (en) * | 2005-05-03 | 2008-08-21 | Pctfiler Holdings Pty Ltd | Computer System for Distributing a Validation Instruction Message |
+US20070124295A1 (en) * | 2005-11-29 | 2007-05-31 | Forman Ira R | Systems, methods, and media for searching documents based on text characteristics |
+US7698258B2 (en) * | 2006-06-02 | 2010-04-13 | Microsoft Corporation | Searchable storage system |
+US20070282806A1 (en) * | 2006-06-02 | 2007-12-06 | Microsoft Corporation | Searchable storage system |
+US7917604B1 (en) * | 2007-06-29 | 2011-03-29 | Emc Corporation | Techniques for operating a data storage assembly via a series of web pages and a commit-at-the-end, wizard-style behavior |
+US20090138453A1 (en) * | 2007-11-26 | 2009-05-28 | Hyungkeun Jee | System and method for searching large amount of data at high speed for digital forensic system |
+RU2623802C2 (en) * | 2007-12-31 | 2017-06-29 | Мастеркард Интернешнл Инкорпорейтед | Methods and systems for approximate comparing strings in database |
+US8996571B2 (en) * | 2012-02-07 | 2015-03-31 | Casio Computer Co., Ltd. | Text search apparatus and text search method |
+US20130204898A1 (en) * | 2012-02-07 | 2013-08-08 | Casio Computer Co., Ltd. | Text search apparatus and text search method |
+US20150088944A1 (en) * | 2012-05-31 | 2015-03-26 | Fujitsu Limited | Generating method, generating apparatus, and recording medium |
+US20150032704A1 (en) * | 2013-07-26 | 2015-01-29 | Electronics And Telecommunications Research Institute | Apparatus and method for performing compression operation in hash algorithm |
+US9479193B2 (en) * | 2013-07-26 | 2016-10-25 | Electronics And Telecommunications Research Institute | Apparatus and method for performing compression operation in hash algorithm |
+US10587710B2 (en) * | 2017-10-04 | 2020-03-10 | International Business Machines Corporation | Cognitive device-to-device interaction and human-device interaction based on social networks |
+US10594817B2 (en) * | 2017-10-04 | 2020-03-17 | International Business Machines Corporation | Cognitive device-to-device interaction and human-device interaction based on social networks |
+US11126621B1 (en) * | 2017-12-31 | 2021-09-21 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US11586715B1 (en) * | 2021-07-30 | 2023-02-21 | Coupang Corp. | Electronic apparatus for providing information based on existence of a user account and method thereof |
+Also Published As
+Publication number | Publication date |
+---|---|
+KR970066946A (en) | 1997-10-13 |
+JP3160201B2 (en) | 2001-04-25 |
+KR100272389B1 (en) | 2000-12-01 |
+JPH09259140A (en) | 1997-10-03 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US5992737A (en) | Information search method and apparatus, and medium for storing information searching program | |
+US6041323A (en) | Information search method, information search device, and storage medium for storing an information search program | |
+EP0423683B1 (en) | Apparatus for automatically generating index | |
+US6173251B1 (en) | Keyword extraction apparatus, keyword extraction method, and computer readable recording medium storing keyword extraction program | |
+EP0294950B1 (en) | A method of facilitating computer sorting | |
+EP0686286B1 (en) | Text input transliteration system | |
+US4862408A (en) | Paradigm-based morphological text analysis for natural languages | |
+US4706212A (en) | Method using a programmed digital computer system for translation between natural languages | |
+US6496820B1 (en) | Method and search method for structured documents | |
+US4876665A (en) | Document processing system deciding apparatus provided with selection functions | |
+US4903206A (en) | Spelling error correcting system | |
+US20020165707A1 (en) | Methods and apparatus for storing and processing natural language text data as a sequence of fixed length integers | |
+EP0274281A1 (en) | Method using a programmed digital computer system for translation between natural languages | |
+JPS62249270A (en) | Document processor | |
+JPH07287716A (en) | Device for retrieving dictionary | |
+JPH04160473A (en) | Method and device for example reuse type translation | |
+JP2621999B2 (en) | Document processing device | |
+JP2634926B2 (en) | Kana-Kanji conversion device | |
+JP2698192B2 (en) | Second language search method in electronic dictionary | |
+JPH06223107A (en) | Dictionary retrieving device | |
+CA1257705A (en) | Textual database system using skeletonization and phonetic replacement to retrieve words matching or similar to query words | |
+JP2574741B2 (en) | Language processing method | |
+JPH0232455A (en) | Item extracting system | |
+JPH0567080A (en) | Kana/kanji converter | |
+JPH0497477A (en) | Document processor |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORP., NEW YORKFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:KUBOTA, RIE;REEL/FRAME:008410/0895Effective date: 19970217 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+REMI | Maintenance fee reminder mailed | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026894/0001Effective date: 20110817 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 11 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

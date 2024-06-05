@@ -1,0 +1,563 @@
+JP6984068B2 - End-to-end streaming keyword spotting - Google Patents
+End-to-end streaming keyword spotting Download PDFInfo
+- Publication number
+- JP6984068B2 JP6984068B2 JP2021500875A JP2021500875A JP6984068B2 JP 6984068 B2 JP6984068 B2 JP 6984068B2 JP 2021500875 A JP2021500875 A JP 2021500875A JP 2021500875 A JP2021500875 A JP 2021500875A JP 6984068 B2 JP6984068 B2 JP 6984068B2
+- Authority
+- JP
+- Japan
+- Prior art keywords
+- audio
+- training
+- memory
+- hotword
+- label
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/08—Speech classification or search
+- G10L15/16—Speech classification or search using artificial neural networks
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/04—Architecture, e.g. interconnection topology
+- G06N3/044—Recurrent networks, e.g. Hopfield networks
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/04—Architecture, e.g. interconnection topology
+- G06N3/045—Combinations of networks
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/08—Learning methods
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/02—Feature extraction for speech recognition; Selection of recognition unit
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/06—Creation of reference templates; Training of speech recognition systems, e.g. adaptation to the characteristics of the speaker's voice
+- G10L15/063—Training
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/22—Procedures used during a speech recognition process, e.g. man-machine dialogue
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L17/00—Speaker identification or verification
+- G10L17/22—Interactive procedures; Man-machine interfaces
+- G10L17/24—Interactive procedures; Man-machine interfaces the user being prompted to utter a password or a predefined phrase
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/02—Feature extraction for speech recognition; Selection of recognition unit
+- G10L2015/025—Phonemes, fenemes or fenones being the recognition units
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/08—Speech classification or search
+- G10L2015/088—Word spotting
+-
+- G—PHYSICS
+- G10—MUSICAL INSTRUMENTS; ACOUSTICS
+- G10L—SPEECH ANALYSIS OR SYNTHESIS; SPEECH RECOGNITION; SPEECH OR VOICE PROCESSING; SPEECH OR AUDIO CODING OR DECODING
+- G10L15/00—Speech recognition
+- G10L15/22—Procedures used during a speech recognition process, e.g. man-machine dialogue
+- G10L2015/223—Execution procedure of a spoken command
+Description
+本開示は、ストリーミングオーディオ内のキーワードをスポッティングするためのエンドツーエンドシステムに関する。 The present disclosure relates to an end-to-end system for spotting keywords in streaming audio.
+音声対応環境(たとえば、自宅、職場、学校、自動車など)は、照会を処理し、照会に回答し、かつ/またはコマンドに基づいて機能を実施するコンピュータベースのシステムに、ユーザが声に出して照会またはコマンドを話すことを可能にする。音声対応環境は、環境の様々な部屋またはエリアにわたって分散された、接続されたマイクロフォンデバイスのネットワークを使用して実装され得る。これらのデバイスは、環境内に存在する別の個人に向けられる発話ではなく、所与の発話がシステムに向けられるときを識別する助けとするために、ホットワードを使用し得る。したがって、デバイスは、スリープ状態またはハイバネーション状態において動作し、検出された発話がホットワードを含むときにのみウェイクアップし得る。近頃、ニューラルネットワークが、ストリーミングオーディオ内のユーザによって話されたホットワードを検出するようにモデルをトレーニングするための魅力的な解決策として現れた。通常、ストリーミングオーディオ内のホットワードを検出するために使用されるシステムは、信号処理フロントエンド構成要素、ニューラルネットワーク音響エンコーダ構成要素、およびハンドデザインド(hand-designed)デコーダ構成要素を含む。これらの構成要素は一般に、互いに独立にトレーニングされ、それによって、複雑さが増し加わり、すべての構成要素を一緒にトレーニングすることに比べて準最適である。 A voice-enabled environment (for example, home, work, school, car, etc.) is a computer-based system that processes queries, answers queries, and / or performs functions based on commands. Allows you to speak a query or command. A voice-enabled environment can be implemented using a network of connected microphone devices distributed across different rooms or areas of the environment. These devices may use hotwords to help identify when a given utterance is directed to the system rather than an utterance directed to another individual present in the environment. Thus, the device operates in a sleep or hibernation state and can only wake up when the detected utterance contains a hot word. Recently, neural networks have emerged as an attractive solution for training models to detect hot words spoken by users in streaming audio. Systems typically used to detect hotwords in streaming audio include signal processing front-end components, neural network acoustic encoder components, and hand-designed decoder components. These components are generally trained independently of each other, thereby increasing complexity and being suboptimal compared to training all components together.
+本開示の一態様は、ストリーミングオーディオ内のホットワードを検出するための方法を提供する。方法は、ユーザデバイスのデータ処理ハードウェアにおいて、ユーザデバイスによって取り込まれたストリーミングオーディオを特徴付けるそれぞれのオーディオ特徴をそれぞれが含む入力フレームのシーケンスを受け取ること、およびデータ処理ハードウェアによって、記憶済みニューラルネットワークを使用して、ストリーミングオーディオ内のホットワードの存在を示す確率スコアを生成することを含む。記憶済みニューラルネットワークは、順次スタックされた(sequentially-stacked)単一値分解フィルタ(SVDF)層を含み、各SVDF層は少なくとも1つのニューロンを含む。各ニューロンは、それぞれのメモリ構成要素、第1のステージ、および第2のステージを含む。それぞれのメモリ構成要素は、対応するニューロンのそれぞれのメモリ容量に関連付けられる。第1のステージは、各入力フレームのそれぞれのオーディオ特徴に関するフィルタリングを個々に実施し、フィルタリングされたオーディオ特徴をそれぞれのメモリ構成要素に出力するように構成される。第2のステージは、それぞれのメモリ構成要素内にあるすべてのフィルタリングされたオーディオ特徴に関するフィルタリングを実施するように構成される。方法はまた、データ処理ハードウェアによって、確率スコアがホットワード検出しきい値を満たすかどうかを判定すること、ならびに確率スコアがホットワード検出しきい値を満たすとき、データ処理ハードウェアによって、オーディオストリーム内のホットワードおよび/またはホットワードの後に続く1つもしくは複数の他の用語を処理するためのユーザデバイスに関するウェイクアッププロセスを開始することをも含む。 One aspect of the disclosure provides a method for detecting hot words in streaming audio. The method is to receive, in the data processing hardware of the user device, a sequence of input frames, each containing each audio feature that characterizes the streaming audio captured by the user device, and by the data processing hardware, a stored neural network. It involves using it to generate a probability score that indicates the presence of a hot word in streaming audio. The stored neural network contains sequentially-stacked single-valued filter (SVDF) layers, each SVDF layer containing at least one neuron. Each neuron contains its own memory component, a first stage, and a second stage. Each memory component is associated with its own memory capacity of the corresponding neuron. The first stage is configured to individually filter for each audio feature of each input frame and output the filtered audio feature to each memory component. The second stage is configured to perform filtering on all filtered audio features within each memory component. The method also determines if the probability score meets the hotword detection threshold by the data processing hardware, and when the probability score meets the hotword detection threshold, the audio stream by the data processing hardware. It also includes initiating a wakeup process for the user device to process one or more other terms that follow the hotword and / or the hotword in.
+本開示の実装は、以下の任意選択の特徴のうちの1つまたは複数を含み得る。いくつかの実装では、SVDF層のそれぞれからのニューロンについての、それぞれのメモリ構成要素に関連付けられるメモリ容量の合計が、記憶済みニューラルネットワークに、典型的な話者がホットワードを話すのにかかる時間の長さに比例する固定メモリ容量を与える。いくつかの例では、それぞれのメモリ構成要素のうちの少なくとも1つに関連付けられるそれぞれのメモリ容量は、残りのメモリ構成要素に関連付けられるそれぞれのメモリ容量とは異なる。他の例では、すべてのSVDF層のそれぞれのメモリ構成要素に関連付けられるそれぞれのメモリ容量は同一である。 Implementations of the present disclosure may include one or more of the following optional features: In some implementations, the total amount of memory associated with each memory component for neurons from each of the SVDF layers is the time it takes a typical speaker to speak a hotword to a memorized neural network. Gives a fixed memory capacity proportional to the length of. In some examples, each memory capacity associated with at least one of each memory component is different from each memory capacity associated with the remaining memory components. In another example, the amount of memory associated with each memory component of all SVDF layers is the same.
+いくつかの例では、リモートシステムは、複数のトレーニング入力オーディオシーケンスに関して、記憶済みニューラルネットワークをトレーニングする。これらの例では、各トレーニング入力オーディオシーケンスは、ホットワードの音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴をそれぞれが含む入力フレームのシーケンスと、入力フレームに割り当てられたラベルであって、各ラベルが、それぞれの入力フレームのオーディオ特徴がホットワードの音声成分を含む確率を示すラベルとを含む。いくつかの構成では、記憶済みニューラルネットワークをトレーニングすることは、各トレーニング入力オーディオシーケンスについて、ホットワードの音声成分を含む入力フレームの部分に第1のラベルを割り当て、ホットワードの音声成分を含む入力フレームの残りの部分に第2のラベルを割り当てることによってエンコーダ部分をトレーニングすること、および対応するトレーニング入力オーディオシーケンスがホットワードを含み、またはホットワードを含まないことのどちらかを示すラベルを適用することによってデコーダ部分をトレーニングすることを含む。この場合、入力オーディオフレームの部分に第1のラベルを割り当てることは、ホットワードの最後の音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴を含む少なくとも1つの入力フレームに第1のラベルを割り当てること、およびホットワードの残りの音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴をそれぞれが含む残りの入力フレームに第2のラベルを割り当てることを含み得る。他の構成では、記憶済みニューラルネットワークをトレーニングすることは、各トレーニング入力オーディオシーケンスについて、トレーニングの第1のステージの間、対応するトレーニング入力オーディオシーケンスについての入力フレームにラベルを割り当てることによってエンコーダ部分を事前トレーニングすること、ならびにトレーニングの第2のステージの間、トレーニングの第1のステージからの割り当てられたラベルを用いてエンコーダ部分を初期化すること、およびホットワードを検出し、またはホットワードを検出しないように、エンコーダ部分からの出力を用いてデコーダ部分をトレーニングすることを含む。 In some examples, the remote system trains a memorized neural network for multiple training input audio sequences. In these examples, each training input audio sequence is a sequence of input frames, each containing one or more respective audio features that characterize the audio component of the hotword, and a label assigned to each input frame. The label includes a label indicating the probability that the audio feature of each input frame contains the audio component of the hot word. In some configurations, training a memorized neural network assigns a first label to the portion of the input frame that contains the audio component of the hotword for each training input audio sequence, and the input that contains the audio component of the hotword. Train the encoder part by assigning a second label to the rest of the frame, and apply a label indicating whether the corresponding training input audio sequence contains or does not contain hotwords. Includes training the decoder part by. In this case, assigning the first label to a portion of the input audio frame assigns the first label to at least one input frame that contains one or more of the respective audio features that characterize the last audio component of the hotword. That, and may include assigning a second label to the remaining input frames, each containing one or more of the respective audio features that characterize the remaining audio components of the hotword. In other configurations, training a memorized neural network forces the encoder portion of each training input audio sequence by assigning a label to the input frame for the corresponding training input audio sequence during the first stage of training. Pre-training, and during the second stage of training, initializing the encoder portion with the assigned label from the first stage of training, and detecting hotwords or detecting hotwords. It involves training the decoder part with the output from the encoder part so as not to.
+記憶済みニューラルネットワークは、隣接するSVDF層間に配設された少なくとも1つの追加の処理層を含み得る。記憶済みニューラルネットワークは、隣接するSVDF層間に配設された少なくとも1つのボトルネッキング層を含む。いくつかの例では、各入力フレームのオーディオ特徴がログフィルタバンクを含む。たとえば、各入力フレームは40個のログフィルタバンクを含み得る。 The stored neural network may include at least one additional processing layer disposed between adjacent SVDF layers. The stored neural network includes at least one bottlenecking layer disposed between adjacent SVDF layers. In some examples, the audio features of each input frame include a log filter bank. For example, each input frame may contain 40 log filter banks.
+本開示の別の態様は、ストリーミングオーディオ内のオーディオを検出するためのシステムを提供する。システムは、ユーザデバイスのデータ処理ハードウェアと、データ処理ハードウェアと通信しており、データ処理ハードウェアによって実行されるとき、データ処理ハードウェアに動作を実施させる命令を記憶するメモリハードウェアとを含む。動作は、ユーザデバイスによって取り込まれたストリーミングオーディオを特徴付けるそれぞれのオーディオ特徴をそれぞれが含む入力フレームのシーケンスを受け取ること、および記憶済みニューラルネットワークを使用して、ストリーミングオーディオ内のホットワードの存在を示す確率スコアを生成することを含む。記憶済みニューラルネットワークは、順次スタックされた単一値分解フィルタ(SVDF)層を含み、各SVDF層は少なくとも1つのニューロンを含む。各ニューロンは、それぞれのメモリ構成要素、第1のステージ、および第2のステージを含む。それぞれのメモリ構成要素は、対応するニューロンのそれぞれのメモリ容量に関連付けられる。第1のステージは、各入力フレームのそれぞれのオーディオ特徴に関するフィルタリングを個々に実施し、フィルタリングされたオーディオ特徴をそれぞれのメモリ構成要素に出力するように構成される。第2のステージは、それぞれのメモリ構成要素内にあるすべてのフィルタリングされたオーディオ特徴に関するフィルタリングを実施するように構成される。動作はまた、確率スコアがホットワード検出しきい値を満たすかどうかを判定すること、ならびに確率スコアがホットワード検出しきい値を満たすとき、オーディオストリーム内のホットワードおよび/またはホットワードに続く1つもしくは複数の他の用語を処理するためのユーザデバイスに関するウェイクアッププロセスを開始することをも含む。
+Another aspect of the present disclosure provides a system for detecting audio in streaming audio. The system communicates with the data processing hardware of the user device and, when executed by the data processing hardware, has memory hardware that stores instructions that cause the data processing hardware to perform its actions. include. The behavior is to receive a sequence of input frames, each containing each audio feature that characterizes the streaming audio captured by the user device, and the probability of using a memorized neural network to indicate the presence of a hot word in the streaming audio. Includes generating scores. The stored neural network contains sequentially stacked single-valued decomposition filter (SVDF) layers, each SVDF layer containing at least one neuron. Each neuron contains its own memory component, a first stage, and a second stage. Each memory component is associated with its own memory capacity of the corresponding neuron. The first stage is configured to individually filter for each audio feature of each input frame and output the filtered audio feature to each memory component. The second stage is configured to perform filtering on all filtered audio features within each memory component. The behavior is also to determine if the probability score meets the hotword detection threshold, and when the probability score meets the hotword detection threshold, it follows the hotword and / or hotword in the
+この態様は、以下の任意選択の特徴のうちの1つまたは複数を含み得る。いくつかの実装では、SVDF層のそれぞれからのニューロンについての、それぞれのメモリ構成要素に関連付けられるメモリ容量の合計が、記憶済みニューラルネットワークに、典型的な話者がホットワードを話すのにかかる時間の長さに比例する固定メモリ容量を与える。いくつかの例では、それぞれのメモリ構成要素のうちの少なくとも1つに関連付けられるそれぞれのメモリ容量は、残りのメモリ構成要素に関連付けられるそれぞれのメモリ容量とは異なる。他の例では、すべてのSVDF層のそれぞれのメモリ構成要素に関連付けられるそれぞれのメモリ容量は同一である。 This embodiment may include one or more of the following optional features: In some implementations, the total amount of memory associated with each memory component for neurons from each of the SVDF layers is the time it takes a typical speaker to speak a hotword to a memorized neural network. Gives a fixed memory capacity proportional to the length of. In some examples, each memory capacity associated with at least one of each memory component is different from each memory capacity associated with the remaining memory components. In another example, the amount of memory associated with each memory component of all SVDF layers is the same.
+いくつかの例では、リモートシステムは、複数のトレーニング入力オーディオシーケンスに関して、記憶済みニューラルネットワークをトレーニングする。これらの例では、各トレーニング入力オーディオシーケンスは、ホットワードの音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴をそれぞれが含む入力フレームのシーケンスと、入力フレームに割り当てられたラベルであって、それぞれの入力フレームのオーディオ特徴がホットワードの音声成分を含む確率をそれぞれが示すラベルとを含む。いくつかの構成では、記憶済みニューラルネットワークをトレーニングすることは、各トレーニング入力オーディオシーケンスについて、ホットワードの音声成分を含む入力フレームの部分に第1のラベルを割り当て、ホットワードの音声成分を含む入力フレームの残りの部分に第2のラベルを割り当てることによってエンコーダ部分をトレーニングすること、および対応するトレーニング入力オーディオシーケンスがホットワードを含み、またはホットワードを含まないことのどちらかを示すラベルを適用することによってデコーダ部分をトレーニングすることを含む。この場合、入力オーディオフレームの部分に第1のラベルを割り当てることは、ホットワードの最後の音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴を含む少なくとも1つの入力フレームに第1のラベルを割り当てること、およびホットワードの残りの音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴をそれぞれが含む残りの入力フレームに第2のラベルを割り当てることを含み得る。他の構成では、記憶済みニューラルネットワークをトレーニングすることは、各トレーニング入力オーディオシーケンスについて、トレーニングの第1のステージの間、対応するトレーニング入力オーディオシーケンスについての入力フレームにラベルを割り当てることによってエンコーダ部分を事前トレーニングすること、ならびにトレーニングの第2のステージの間、トレーニングの第1のステージからの割り当てられたラベルを用いてエンコーダ部分を初期化すること、およびホットワードを検出し、またはホットワードを検出しないように、エンコーダ部分からの出力を用いてデコーダ部分をトレーニングすることを含む。 In some examples, the remote system trains a memorized neural network for multiple training input audio sequences. In these examples, each training input audio sequence is a sequence of input frames, each containing one or more of the respective audio features that characterize the audio component of the hotword, and a label assigned to the input frame, respectively. Each contains a label indicating the probability that the audio feature of the input frame will contain the audio component of the hotword. In some configurations, training a memorized neural network assigns a first label to the portion of the input frame that contains the audio component of the hotword for each training input audio sequence, and the input that contains the audio component of the hotword. Train the encoder part by assigning a second label to the rest of the frame, and apply a label indicating whether the corresponding training input audio sequence contains or does not contain hotwords. Includes training the decoder part by. In this case, assigning the first label to a portion of the input audio frame assigns the first label to at least one input frame that contains one or more of the respective audio features that characterize the last audio component of the hotword. That, and may include assigning a second label to the remaining input frames, each containing one or more of the respective audio features that characterize the remaining audio components of the hotword. In other configurations, training a memorized neural network forces the encoder portion of each training input audio sequence by assigning a label to the input frame for the corresponding training input audio sequence during the first stage of training. Pre-training, and during the second stage of training, initializing the encoder portion with the assigned label from the first stage of training, and detecting hotwords or detecting hotwords. It involves training the decoder part with the output from the encoder part so as not to.
+記憶済みニューラルネットワークは、隣接するSVDF層間に配設された少なくとも1つの追加の処理層を含み得る。記憶済みニューラルネットワークは、隣接するSVDF層間に配設された少なくとも1つのボトルネッキング層を含む。いくつかの例では、各入力フレームのオーディオ特徴がログフィルタバンクを含む。たとえば、各入力フレームは40個のログフィルタバンクを含み得る。 The stored neural network may include at least one additional processing layer disposed between adjacent SVDF layers. The stored neural network includes at least one bottlenecking layer disposed between adjacent SVDF layers. In some examples, the audio features of each input frame include a log filter bank. For example, each input frame may contain 40 log filter banks.
+本開示の1つまたは複数の実装の詳細が、添付の図面および以下の説明において述べられる。説明および図面から、および特許請求の範囲から、他の態様、特徴、および利点が明らかとなるであろう。 Details of one or more implementations of the present disclosure are set forth in the accompanying drawings and the description below. Other aspects, features, and advantages will become apparent from the description and drawings, and from the claims.
+様々な図面内の同様の参照符号は同様の要素を示す。 Similar reference numerals in various drawings indicate similar elements.
+ボイス対応デバイス(たとえば、ボイスアシスタントを実行するユーザデバイス)は、ユーザが声に出して照会またはコマンドを話し、照会を処理し、照会に回答し、かつ/またはコマンドに基づいて機能を実施することを可能にする。合意によって、ボイス対応デバイスに対する注意を引き起こすために話される所定の用語/フレーズが予約される、「ホットワード」(「キーワード」、「アテンションワード」、「ウェイクアップフレーズ/ワード」、「トリガフレーズ」、または「ボイスアクション開始コマンド」とも呼ばれる)の使用を通じて、ボイス対応デバイスは、システムに向けられる発話(すなわち、発話内のホットワードの後に続く1つまたは複数の用語を処理するためのウェイクアッププロセスを初期化するため)と、環境内の個人に向けられる発話とを識別することができる。通常、ボイス対応デバイスは、電池電力を節約するためにスリープ状態において動作し、発話されたホットワードの後に入力オーディオデータが続かない限り、入力オーディオデータを処理しない。たとえば、スリープ状態の間、ボイス対応デバイスは、マイクロフォンを介して入力オーディオを取り込み、入力オーディオ内のホットワードの存在を検出するようにトレーニングされたホットワード検出器を使用する。入力オーディオ内でホットワードが検出されたとき、ボイス対応デバイスは、ホットワードおよび/またはホットワードの後に続く入力オーディオ内の任意の他の用語を処理するためのウェイクアッププロセスを開始する。 A voice-enabled device (for example, a user device running a voice assistant) allows the user to speak aloud a query or command, process the query, answer the query, and / or perform a function based on the command. Enables. The agreement reserves certain terms / phrases spoken to raise attention to voice-enabled devices: "hot words" ("keywords", "attention words", "wakeup phrases / words", "trigger phrases". Through the use of ", or" Voice Action Start Command "), the voice-enabled device wakes up to process one or more terms that follow the utterance (ie, the hot word in the utterance) directed at the system. It is possible to distinguish between (to initialize the process) and utterances directed at individuals in the environment. Normally, voice-enabled devices operate in sleep mode to save battery power and do not process input audio data unless the spoken hotword is followed by input audio data. For example, during sleep, voice-enabled devices capture input audio through a microphone and use a hotword detector trained to detect the presence of hotwords in the input audio. When a hotword is detected in the input audio, the voice-enabled device initiates a wakeup process to process the hotword and / or any other term in the input audio that follows the hotword.
+ホットワード検出器はストリーミングオーディオを継続的に聴取し、ホットワードの存在がストリーミングオーディオ内で検出されたときを正確かつ瞬間的にトリガしなければならないので、ホットワード検出は、干し草の山の中の針を探索することに類似している。言い換えれば、ホットワード検出器は、ホットワードの存在が検出されない限り、ストリーミングオーディオを無視することが課される。オーディオの連続的ストリーム内のホットワードの存在を検出することの複雑さに対処するために、ニューラルネットワークがホットワード検出器によって一般的に利用される。ホットワード検出器は通常、信号処理フロントエンド、ニューラルネットワーク音響エンコーダ、およびハンドデザインドデコーダという3つの主な構成要素を含む。信号処理フロントエンドは、ユーザデバイスのマイクロフォンによって取り込まれた生オーディオ信号を、ニューラルネットワーク音響エンコーダ構成要素によって処理するためにフォーマットされた1つまたは複数のオーディオ特徴に変換し得る。たとえば、ニューラルネットワーク音響エンコーダ構成要素はこれらのオーディオ特徴を音素に変換し、ハンドデザインドデコーダは、ハンド符号化アルゴリズムを使用して、音素を互いにスティッチし、オーディオシーケンスがホットワードを含むか否かの確率を与える。通常、これらの3つの構成要素は、トレーニングされ、かつ/または互いに独立に手動で設計され得、それによって、トレーニング中の複雑さが増し加わり、すべての構成要素を一緒にトレーニングすることに比べてトレーニング中の効率が失われる。さらに、個々にトレーニングされたモデルから構成されるモデルを配置することは、追加のリソース要件を消費する(たとえば、処理速度およびメモリ消費)。相異なるホットワードを検出するため、ならびに相異なる地域において同一のホットワードを検出するために、別々のモデルがしばしば必要とされる。たとえば、南アフリカの英語話者は、ノースダコタに位置する米国の英語話者とは異なるようにフレーズ「Ok Google」を発音し得る。 Hotword detection is in the mountains of hay, as the hotword detector must continuously listen to the streaming audio and trigger exactly and momentarily when the presence of the hotword is detected in the streaming audio. Similar to searching for a needle in. In other words, the hotword detector is charged with ignoring streaming audio unless the presence of a hotword is detected. Neural networks are commonly used by hotword detectors to address the complexity of detecting the presence of hotwords in a continuous stream of audio. Hotword detectors typically include three main components: a signal processing front end, a neural network acoustic encoder, and a hand-designed decoder. The signal processing front end may convert the raw audio signal captured by the microphone of the user device into one or more audio features formatted for processing by the neural network acoustic encoder component. For example, a neural network acoustic encoder component converts these audio features into phonemes, a hand-designed decoder uses a hand-coded algorithm to stitch the phonemes to each other, and whether the audio sequence contains hotwords. Gives the probability of. In general, these three components can be trained and / or manually designed independently of each other, which adds to the complexity during training and compared to training all components together. Loss of efficiency during training. In addition, placing a model consisting of individually trained models consumes additional resource requirements (eg, processing speed and memory consumption). Separate models are often needed to detect different hotwords, as well as to detect the same hotword in different regions. For example, an English speaker in South Africa may pronounce the phrase "Ok Google" differently than an English speaker in the United States located in North Dakota.
+本明細書での実装は、ストリーミングオーディオ内の指定のホットワードの存在の確率を決定するために、単一の記憶済みニューラルネットワークとして符号化構成要素と復号化構成要素を共にトレーニングするエンドツーエンドホットワードスポッティングシステム(「キーワードスポッティングシステム」とも呼ばれる)を対象とする。この単一の記憶済みニューラルネットワークは、複数のホットワードを検出し、異なる言語および/または異なる地域において話される同一のホットワードを検出するようにトレーニングされ得る。具体的には、記憶済みニューラルネットワークは、ニューラルネットワークが覚えたい過去のストリーミングオーディオ量に比例する固定メモリ量を有するニューラルネットワークトポロジを指す。たとえば、ニューラルネットワークは、典型的な話者が指定のホットワードを話すのにかかる時間と同等のストリーミングオーディオ量を覚えるのに十分なメモリだけを有することが望ましいことがある。いくつかの実装では、記憶済みニューラルネットワークトポロジは、単一値分解フィルタ(SVDF)層の層状トポロジであり、各層は1つまたは複数のSVDFニューロンを含む。各層の各SVDFニューロンはそれぞれのメモリ容量を含み、SVDF層のすべてのメモリ容量が、ホットワードを特徴付けるオーディオ特徴を取り込むのに必要なストリーミングオーディオ内の固定長の時間のみをニューラルネットワークが覚えるための全固定メモリを加法的に構成する。各ニューロンはまた、適切な活動化関数(たとえば、正規化線形)をも含み得る。さらに、各SVDF層の出力は後続のSVDF層の入力であるので、後続のSVDF層に供給される入力数をスケーリングするために、ボトルネック層が1つまたは複数の隣接するSVDF層間に配設され得る。 Implementations herein are end-to-end training of coding and decoding components together as a single stored neural network to determine the probability of the presence of a given hotword in streaming audio. Targets hotword spotting systems (also known as "keyword spotting systems"). This single stored neural network can be trained to detect multiple hotwords and / or the same hotword spoken in different languages and / or different regions. Specifically, a stored neural network refers to a neural network topology having a fixed amount of memory proportional to the amount of past streaming audio that the neural network wants to remember. For example, it may be desirable for a neural network to have only enough memory to remember the amount of streaming audio that a typical speaker would take to speak a given hotword. In some implementations, the memorized neural network topology is a layered topology of single-value decomposition filter (SVDF) layers, each layer containing one or more SVDF neurons. Each SVDF neuron in each layer contains its own memory capacity, so that the neural network only remembers the fixed length of time in the streaming audio that all the memory capacity of the SVDF layer needs to capture the audio features that characterize the hotword. Additively configure all fixed memory. Each neuron may also contain an appropriate activation function (eg, normalized linearity). In addition, since the output of each SVDF layer is the input of the subsequent SVDF layer, the bottleneck layer is placed between one or more adjacent SVDF layers to scale the number of inputs supplied to the subsequent SVDF layer. Can be done.
+図1を参照すると、いくつかの実装では、例示的システム100が、それぞれのユーザ10にそれぞれ関連付けられ、ネットワーク104を介してリモートシステム110と通信している1つまたは複数のユーザデバイス102を含む。各ユーザデバイス102は、携帯電話、コンピュータ、ウェアラブルデバイス、スマートアプライアンス、スマートスピーカなどのコンピューティングデバイスに対応し得、データ処理ハードウェア103およびメモリハードウェア105を備える。リモートシステム110は、スケーラブル/エラスティックコンピューティングリソース112(たとえば、データ処理ハードウェア)および/または記憶リソース114(たとえば、メモリハードウェア)を有する単一のコンピュータ、複数のコンピュータ、または分散システム(たとえば、クラウド環境)であり得る。ユーザデバイス102は、ネットワーク104を介してリモートシステム110からトレーニングされた記憶済みニューラルネットワーク300を受け取り、トレーニングされた記憶済みニューラルネットワーク300を実行して、ストリーミングオーディオ118内のホットワードを検出する。トレーニングされた記憶済みニューラルネットワーク300は、ストリーミングオーディオ118に対する意味解析または音声認識を実施することなくストリーミングオーディオ内のホットワードの存在を検出するように構成される、ユーザデバイス102のホットワード検出器106(ホットワーダとも呼ばれる)内に常駐し得る。任意選択で、トレーニングされた記憶済みニューラルネットワーク300は、追加または代替として、ホットワード検出器106がストリーミングオーディオ118内のホットワードの存在を正しく検出したことを確認するために、ユーザデバイス102の自動音声認識器(ASR)108および/またはリモートシステム110内に常駐し得る。
+Referring to FIG. 1, in some implementations, the
+いくつかの実装では、データ処理ハードウェア103は、注釈付き発話プール130から取得されたトレーニングサンプル400を使用して、記憶済みニューラルネットワーク300をトレーニングし得る。注釈付き発話プール130は、メモリハードウェア114および/または何らかの他のリモートメモリ位置上に常駐し得る。図示される例では、ユーザデバイス102によってストリーミングオーディオ118として取り込まれるホットワード(たとえば、「Hey Google」)を含む発話120をユーザ10が話すとき、ユーザデバイス102上で実行中の記憶済みニューラルネットワーク300は、発話120内のホットワードの存在を検出して、発話120内のホットワードおよび/またはホットワードの後に続く1つまたは複数の他の用語(たとえば、照会またはコマンド)を処理するためのユーザデバイス102に関するウェイクアッププロセスを開始するように構成される。追加の実装では、ユーザデバイス102は、(たとえば、他の潜在的により計算集約的な、記憶済みニューラルネットワーク300を用いた)追加の処理または検証のために、リモートシステム110に発話120を送る。
+In some implementations, the
+図示される例では、記憶済みニューラルネットワーク300は、単一値分解フィルタ(SVDF)層302の層状トポロジをそれぞれが含むエンコーダ部分310およびデコーダ部分311を含む。SVDF層302は、メモリ容量を各SVDF層302に設けることによってニューラルネットワーク300のためのメモリを提供し、それによって、SVDF層302のすべてのメモリ容量が、ホットワードを特徴付けるオーディオ特徴410(図4Aおよび図4B)を取り込むのに必要なストリーミングオーディオ118内の固定長の時間のみを覚えるために、ニューラルネットワーク300のための全固定メモリを加法的に構成する。
+In the illustrated example, the stored
+次に図2を参照すると、典型的なホットワード検出器が、メモリのないニューラルネットワーク音響エンコーダ200を使用する。ネットワーク200はメモリを欠いているので、音響エンコーダ200の各ニューロン212は、入力として、話された発話120のあらゆるフレーム210、210a〜210dのあらゆるオーディオ特徴を受け入れなければならない。各フレーム210が任意の数のオーディオ特徴を有し得、オーディオ特徴のそれぞれをニューロン212が入力として受け入れることに留意されたい。そのような構成は、固定長の時間が増大し、かつ/またはオーディオ特徴数が増加するにつれて劇的に増大する、かなりのサイズのニューラルネットワーク音響エンコーダ200を必要とする。音響エンコーダ200の出力の結果、それぞれの確率、たとえば検出されたホットワードの音素の確率が得られる。次いで、音響エンコーダ200は、ホットワードの存在を示すスコア(すなわち、推定)を生成するために、ハンド符号化デコーダを利用して、音響エンコーダ200の出力を処理し(たとえば、音素を互いにスティッチし)なければならない。
+Next, referring to Figure 2, a typical hotword detector uses a memoryless neural network
+次に図3Aおよび図3Bを参照すると、いくつかの実装では、単一値分解フィルタ(SVDF)ニューラルネットワーク300(記憶済みニューラルネットワークとも呼ばれる)が、任意の数のニューロン/ノード312を有し、各ニューロン312は、一度に、話された発話120の単一のフレーム210、210a〜210dのみを受け入れる。すなわち、各フレーム210が、たとえば30msのオーディオデータを構成する場合、それぞれのフレーム210が、約30msごとに(すなわち、時間1、時間2、時間3、時間4など)ニューロン312に入力される。図3Aは、入力の特徴次元に関するフィルタリングを実施する第1のステージ320(すなわち、ステージ1特徴フィルタ)と、第1のステージ320の出力上の時間次元に関するフィルタリングを実施する第2のステージ340(すなわち、ステージ2時間フィルタ)という2ステージフィルタリング機構を含む各ニューロン312を示す。したがって、ステージ1特徴フィルタ320は、現フレーム210のみに関する特徴フィルタリングを実施する。次いで、処理の結果がメモリ構成要素330内に配置される。メモリ構成要素330のサイズは、ノードまたは層レベルごとに構成可能である。ステージ1特徴フィルタ320が(たとえば、フレーム内のオーディオ特徴をフィルタリングすることによって)所与のフレーム210を処理した後、フィルタリングされた結果が、メモリ構成要素330の次に利用可能なメモリ位置332、332a〜332d内に配置される。すべてのメモリ位置332が充填されると、ステージ1特徴フィルタ320は、メモリ構成要素330内の最も古いフィルタリングされたデータを記憶するメモリ位置332を上書きする。例示のために、図3Aは、サイズ4のメモリ構成要素330(4つのメモリ位置332a〜332d)および4つのフレーム210a〜210dを示すが、ホットワード検出の性質のために、システム100は通常、継続的にストリーミングオーディオ118を監視し、それによって、各ニューロン312がフレーム210に沿って「スライド」し、またはパイプラインと同様にフレーム210を処理することに留意されたい。言い換えれば、各ステージがN個の特徴フィルタ320およびN個の時間フィルタ340(入力特徴フレーム210のサイズにそれぞれ合致する)を含む場合、層は、特徴フレームのサイズのストライドでN個のフィルタ320、340のそれぞれを入力特徴フレーム210に対してスライドすることによって特徴フィルタのN×T(Tは固定期間内のフレーム210の数に等しい)畳込みを計算することに類似する。たとえば、例は、ステージ1特徴フィルタが(時間4の間の)フレーム4(F4)210dに関連する、フィルタリングされたオーディオ特徴を出力した後の容量のメモリ構成要素330を示すので、ステージ1特徴フィルタ320は、メモリ位置332a内のフレーム1(F1)210aに関連する、フィルタリングされたオーディオ特徴を上書きすることによって、(時間5の間の)続くフレーム5(F5)に関連する、フィルタリングされたオーディオ特徴をメモリ330内に配置する。このようにして、ステージ2時間フィルタ340は、ステージ1特徴フィルタ320から出力された、前のT-1(この場合も、Tは固定期間内のフレーム210の数に等しい)のフィルタリングされたオーディオ特徴にフィルタリングを適用する。
+Then with reference to FIGS. 3A and 3B, in some implementations, a single-valued decomposition filter (SVDF) neural network 300 (also known as a memorized neural network) has an arbitrary number of neurons /
+次いで、ステージ2時間フィルタ340は、メモリ330内に記憶されたそれぞれのフィルタリングされたオーディオ特徴をフィルタリングする。たとえば、図3Aは、ステージ1特徴フィルタ320が新しいフィルタリングされたオーディオ特徴をメモリ330内に記憶するごとに、ステージ2時間フィルタ340がメモリ位置332のそれぞれの中のオーディオ特徴をフィルタリングすることを示す。このようにして、ステージ2時間フィルタ340は、いくつかの過去のフレーム210をフィルタリングする層であり、数はメモリ330のサイズに比例する。各ニューロン312は単一のSVDF層302の部分であり、ニューラルネットワーク300は任意の数の層302を含み得る。各ステージ2時間フィルタ340の出力は、次の層302内のニューロン312の入力に渡される。層302の数および層302当たりのニューロン312の数は完全に構成可能であり、利用可能なリソースおよび所望のサイズ、出力、および精度に依存する。本開示は、SVDF層302の数にも、各SVDF層302内のニューロン312の数にも限定されない。
+The
+次に図3Bを参照すると、ニューラルネットワーク300の各SVDF層302、302a〜302n(または単に「層」)が接続され、それによって、前の層の出力が、対応する層302に対する入力として受け入れられる。いくつかの例では、最終層302nは、発話120がホットワードを含む確率を示す確率スコア350を出力する。
+Then referring to FIG. 3B, each
+SVDFネットワーク300において、層設計は、入力フレーム210のシーケンスを処理している高密度に接続された層302がそのノード312のそれぞれの特異値分解を使用することによって近似され得るという概念に由来する。近似は構成可能である。たとえば、ランクR近似は、層のフィルタについての新しい次元Rを拡張することを示す。ステージ1は独立に行われ、ステージ2では、非線形性を通過する前にすべてのランクの出力が加算される。言い換えれば、合致する次元の高密度に接続された層のノード312のSVDF分解が、SVDF層302を初期化するために使用され得、SVDF層302は、原則に基づいた初期化を実現し、層の一般化の品質を向上させる。本質的に、より高密度に接続された層の「出力」が、(ランクに応じて)潜在的にずっと小さいSVDFに移転される。しかしながら、SVDF層302は、同一の操作、さらにはより多くの操作を伴う高密度に接続された層、さらには畳込み層をしのぐために初期化を必要としないことに留意されたい。
+In the
+したがって、本明細書における実装は、ステートフルなスタック可能ニューラルネットワーク300を対象とし、各SVDF層302の各ニューロン312がオーディオ特徴をフィルタリングすることに関連する第1のステージ320と、時間に関して第1のステージ320の出力をフィルタリングすることに関連する第2のステージ340とを含む。具体的には、第1のステージ320は、一度に1つのオーディオ特徴入力フレーム210上の1つまたは複数のオーディオ特徴に関するフィルタリングを実施し、フィルタリングされたオーディオ特徴をそれぞれのメモリ構成要素330に出力するように構成される。この場合、ステージ1特徴フィルタ320は、時間フレーム210に関連すぶ1つまたは複数のオーディオ特徴を、処理するための入力として受け取り、処理されたオーディオ特徴をSVDF層302のそれぞれのメモリ構成要素330内に出力する。その後で、第2のステージ340が、第1のステージ320から出力された、それぞれのメモリ構成要素330内にある、すべてのフィルタリングされたオーディオ特徴に関するフィルタリングを実施するように構成される。たとえば、それぞれのメモリ構成要素330が8に等しいとき、第2のステージ340は、8つの入力フレーム210のシーケンス内のオーディオ特徴の個々のフィルタリングの間に第1のステージ320から出力されたメモリ構成要素330内にある最後の8つのフィルタリングされたオーディオ特徴までプルする。第1のステージ320が、対応するメモリ構成要素330を容量まで充填するにつれて、最も古いフィルタリングされたオーディオ特徴を含むメモリ位置332が上書きされる(すなわち、先入れ先出し)。したがって、SVDFニューロン312または層302でのメモリ構成要素330の容量に応じて、第2のステージ340は、対応するSVDF層302の第1のステージ320によって処理されたいくつかの過去の出力を覚えることができる。さらに、SVDF層302でのメモリ構成要素330は加法的であるので、各SVDFニューロン312および層302でのメモリ構成要素330はまた、それぞれの先行するSVDFニューロン312および層302のメモリをも含み、したがって記憶済みニューラルネットワーク300の全受容フィールドを拡張する。たとえば、8に等しいメモリ構成要素330を備える単一のニューロン312をそれぞれ有する4つのSVDF層302を備えるニューラルネットワーク300トポロジでは、最後のSVDF層302が、ニューラルネットワーク300によって個々にフィルタリングされた最後の32個のオーディオ特徴入力フレーム210までのシーケンスを含む。しかしながら、メモリ量は層302ごとに、さらにはノード312ごとに構成可能である。たとえば、第1の層302aには32個の位置332が割り振られ得、一方、最後の層302は、8つの位置332と共に構成され得る。その結果、スタックされたSVDF層302は、ニューラルネットワーク300が、一度に1つの入力時間フレーム210(たとえば、30ミリ秒のオーディオデータ)についてのオーディオ特徴のみを処理し、いくつかのフィルタリングされたオーディオ特徴を、ストリーミングオーディオ118内の指定のホットワードを取り込むのに必要な固定長の時間を取り込む過去に組み込むことを可能にする。一方、(図2に示されるように)メモリのないニューラルネットワーク200は、そのニューロン212が、ホットワードの存在を含むストリーミングオーディオの確率を決定するために、すぐに固定長の時間(たとえば、2秒のオーディオデータ)をカバーするオーディオ特徴フレームのすべてを処理することを必要とし、そのことは、ネットワークの全サイズを劇的に増大させる。さらに、長短期記憶(LSTM)を使用する再帰型ニューラルネットワーク(RNN)がメモリを提供するが、RNN-LSTMは、実際には無限のメモリを有するニューロンに、各処理インスタンス後にニューロンの状態を継続的に更新させ、それによって、無限の数の過去の処理された出力を覚えられることを防止し、(固定サイズのメモリが容量に達すると)それぞれの新しい出力が前の出力の上に再書込みする。言い換えれば、SVDFネットワークは、出力を状態(メモリ)への出力を繰り返さず、すべての状態をそれぞれの反復で再書込みすることもせず、その代わりに、メモリは、各推論実行の状態を、後続の実効から分離して保ち、その代わりに、層のために構成されたメモリサイズに基づいて新しいエントリ内にプッシュおよびポップする。
+Therefore, the implementation herein targets a stateful stackable
+次に図4Aおよび図4Bを参照すると、いくつかの実装では、記憶済みニューラルネットワーク300が、入力フレーム210、210a〜210nおよび入力フレーム210に割り当てられたラベル420のシーケンスをそれぞれが含む複数のトレーニング入力オーディオシーケンス400(すなわち、トレーニングサンプル)に関してトレーニングされる。各入力フレーム210は、ホットワードの音声成分430を特徴付ける1つまたは複数のそれぞれのオーディオ特徴410を含み、各ラベル420は、それぞれの入力フレーム210の1つまたは複数のオーディオ特徴410がホットワードの音声成分430を含む確率を示す。いくつかの例では、各入力フレーム210についてのオーディオ特徴410は、事前処理ステージ404の間にオーディオストリーム118の生オーディオ信号402から変換される。オーディオ特徴410は1つまたは複数のログフィルタバンクを含み得る。したがって、事前処理ステージは、オーディオストリーム118(または話された発話120)を入力フレーム210のシーケンス(たとえば、それぞれ30ms)にセグメント化し、各フレーム210について別々のログフィルタバンクを生成し得る。たとえば、各フレーム210は40個のログフィルタバンクによって表され得る。さらに、それぞれの連続するSVDF層302は、直前のSVDF層302から出力される、時間に関してフィルタリングされたオーディオ特徴410を入力として受け取る。
+Then with reference to FIGS. 4A and 4B, in some implementations, the stored
+図示される例では、各トレーニング入力オーディオシーケンス400は、固定長の時間(たとえば、2秒)内に行われる指定のホットワードを含む注釈付き発話を含むトレーニングサンプルに関連付けられる。任意選択で、記憶済みニューラルネットワーク300はまた、指定のホットワードを含まない注釈付き発話400、または指定のホットワードを含むが、固定長の時間よりも長い時間におよび、したがって固定長の時間外のデータを忘れる固定メモリのために誤って検出されない注釈付き発話400に関してトレーニングされ得る。いくつかの例では、固定長の時間は、話された照会および/またはボイスコマンドを処理するためのユーザデバイス102に典型的な話者が命令するために指定のホットワードを話すのにかかる時間量に対応し得る。たとえば、指定のホットワードがフレーズ「Hey Google」または「Ok Google」を含む場合、低速な話者であっても、指定のフレーズを話すのに一般には2秒よりも長くはかからないので、2秒に等しい固定長の時間は十分である可能性が高い。したがって、固定長の時間の間にストリーミングオーディオ118内の指定のホットワードの発生を検出することは重要ではないので、ニューラルネットワーク300は、固定時間(たとえば、2秒)に及ぶオーディオ量に比例する固定メモリ量を含む。したがって、ニューラルネットワーク300の固定メモリは、ニューラルネットワークのニューロン312が、一度にストリーミングオーディオ118の1つの入力フレーム210(たとえば、30msの時間ウィンドウ)からオーディオ特徴410(たとえば、ログフィルタバンク)をフィルタリングすることを可能にすると共に、固定長の時間に及ぶ最も最近のフィルタリングされたオーディオ特徴410を記憶し、現フィルタリング反復から固定長の時間外の任意のフィルタリングされたオーディオ特徴410を除去または削除する。したがって、ニューラルネットワーク300がたとえばメモリ深度32を有する場合、ニューラルネットワーク300によって処理された最初の32フレームがメモリ構成要素330を容量まで充填し、最初の32個の後のそれぞれの新しい出力について、ニューラルネットワーク300は、最も古い処理されたオーディオ特徴を、メモリ構成要素330の対応するメモリ位置332から除去する。
+In the illustrated example, each training
+図4Aを参照すると、エンドツーエンドトレーニングについて、トレーニング入力オーディオシーケンス400aが、各入力フレーム210に適用され得るラベル420を含む。いくつかの例では、トレーニングサンプル400aがホットワードを含むとき、ターゲットスコア(たとえば、「1」)に関連付けられるターゲットラベル420が、ホットワードの、またはホットワードの近くの音声成分430を特徴付けるオーディオ特徴410を含む1つまたは複数の入力フレーム210に適用される。たとえば、ホットワード「OK Google」の音声成分430が「ou」、「k」、「eI」、「<無音>」、「g」、「u」、「g」、「@」、「l」に分割される場合、数字「1」のターゲットラベルが、ホットワードの音声成分430の必要とされるシーケンスの部分である、文字「l」(すなわち、ホットワードの最後の成分430)に対応するすべての入力フレーム210に適用される。このシナリオでは、(最後の音声成分430に関連付けられない)すべての他の入力フレーム210に、異なるラベル(たとえば、「0」)が割り当てられる。したがって、各入力フレーム210は、対応する入力特徴-ラベル対410、420を含む。入力特徴410は通常、入力フレーム210にわたって入力オーディオから計算された、たとえばメルフィルタバンクまたはログフィルタバンクに対応する1次元テンソルである。ラベル420は、注釈付き発話400aから生成され、強制アライメントステップ(すなわち、ラベル「1」が、ホットワードに属する最後のクラスに対応する対に与えられ、「0」が残りのすべてに与えられる)を介して各入力特徴テンソル410に音声クラスが割り当てられる。したがって、トレーニング入力オーディオシーケンス400aは、入力フレームのシーケンスに割り当てられた2進数ラベルを含む。注釈付き発話400a、またはトレーニング入力オーディオシーケンス400aは、図1の注釈付き発話プール130から取得されたトレーニングサンプル400に対応する。
+Referring to FIG. 4A, for end-to-end training, the training input audio sequence 400a contains a label 420 that may be applied to each
+別の実装では、図4Bは、ホットワードの音声成分430を特徴付ける(音声成分430に合致する)オーディオ特徴410の数が増加するにつれて、入力フレーム210のシーケンスに沿って増加するスコアに関連付けられるラベル420を含むトレーニング入力オーディオシーケンス400bを含む。たとえば、ホットワードが「OK Google」を含むとき、第1の音声成分「o」および「k」を特徴付けるそれぞれのオーディオ特徴410を含む入力フレーム210には、ラベル420「1」が割り当てられ、一方、最後の音声成分「l」を特徴付けるそれぞれのオーディオ特徴410を含む入力フレーム210には、ラベル420「5」が割り当てられる。中間の音声成分430を特徴付けるそれぞれのオーディオ特徴410を含む入力フレーム210には、ラベル420「2」、「3」、および「4」が割り当てられる。
+In another implementation, Figure 4B shows a label associated with a score that increases along the sequence of input frames 210 as the number of
+追加の実装では、正のラベル420の数が増加する。たとえば、ホットワードの最後の音声成分430を特徴付けるオーディオ特徴410を含む第1のフレーム210から開始して、固定量の「1」ラベル420が生成される。この実装では、構成された数の正のラベル420(たとえば、「1」)が大きいとき、普通なら正でないラベル420(たとえば「0」)が適用されたはずのフレーム210に、正のラベル420が適用され得る。他の例では、正のラベル420の開始位置が修正される。たとえば、最後のキーワード音声成分430を含むフレーム210のセグメントの開始、中間点、または終わりのいずれかにおいて開始するようにラベル420がシフトされ得る。さらに他の例では、重み損失が入力シーケンスに関連付けられる。たとえば、小さいミスアライメントによって引き起こされる損失(すなわち、誤差勾配)をトレーニング手順が低減することを可能にする重み損失データが、入力シーケンスに追加される。具体的には、フレームベースの損失関数では、損失が誤分類またはミスアライメントのどちらかから引き起こされ得る。損失を低減するために、ニューラルネットワーク300が、正しいラベル420とラベル420の正しい位置(タイミング)を共に予測する。ネットワーク300がある地点でキーワードを検出した場合であっても、所与のターゲットラベル420と完全に位置合せされていない場合、結果は誤りと見なされ得る。したがって、強制アライメントステージの間のミスアライメントの可能性が高いフレーム210について、損失を重み付けすることは特に有用である。
+Additional implementations increase the number of positive labels 420. For example, starting with the
+図4Aおよび図4Bのトレーニング入力オーディオシーケンス400a、400bのどちらかを使用するトレーニングの結果として、ホットワードがストリーミングオーディオ118内に存在するかどうかを示す2進決定ラベル420を出力するように、ニューラルネットワーク300が(通常はクロスエントロピー(CE)損失を使用して)最適化される。いくつかの例では、ネットワーク300は2つのステージにおいてトレーニングされる。次に図5Aを参照すると、概略図500aは、音響事後確率を生成するように個々にトレーニングされる、たとえば8つの層を含むニューラルネットワーク300のエンコーダ部分(または単に「エンコーダ」)310aを示す。SVDF層に加えて、ネットワーク300は、たとえばボトルネック層、ソフトマックス層、および/または他の層を含み得る。エンコーダ310aをトレーニングするために、ラベル生成は、ホットワードのすべての音声成分に別個のクラスを割り当てる(加えて、ホットワードではないすべてについて無音および「イプシロン」ターゲット)。次いで、ニューラルネットワーク300のデコーダ部分(または単に「デコーダ」)311aは、第1の部分(すなわち、層および接続)がエンコーダ310aのそれと合致するトポロジを作成することによってトレーニングされ、それを初期化するために、ニューラルネットワーク300のそのエンコーダ310aから選択されたチェックポイントが使用される。トレーニングは、エンコーダ310aのパラメータを「フリーズ」し(すなわち、更新せず)、したがってトポロジのデコーダ311a部分だけをチューニングするように指定される。これは、2つのスタッガードトレーニングパイプラインの生成物であっても、必然的に単一のスポッタニューラルネットワークを生成する。この方法を用いるトレーニングは、トレーニングセットの部分に対するオーバーフィッティングを呈する傾向のあるモデルに関して特に有用である。
+Neural to output a binary decision label 420 indicating whether the hotword is present in the
+代替として、ニューラルネットワーク300は、開始からエンドツーエンドでトレーニングされる。たとえば、ニューラルネットワーク300が(前述のエンコーダ310aトレーニングと同様に)特徴を直接的に受け入れるが、デコーダ311aをトレーニングする際に使用するための2進ターゲットラベル420(すなわち、「0」または「1」)出力を使用する。そのようなエンドツーエンドニューラルネットワーク300は、任意のトポロジを使用し得る。たとえば、図5Bに示されるように、概略図500bは、エンコーダ310bが中間ソフトマックス層を含まないことを除いて、図5Aのトポロジと同様のエンコーダ310bおよびデコーダ311bのニューラルネットワーク300トポロジを示す。図5Aのトポロジの場合と同じく、図5Bのトポロジは、どのようにデコーダ311b部分が調節されるかをチューニングするための適合レートを有する、事前トレーニングされたエンコーダチェックポイントを使用し得る(たとえば、適合レートが0に設定される場合、図5Bのトポロジは図5Aのトポロジと同等である)。このエンドツーエンドパイプラインは、トポロジのパラメータの全体が調節される場合、オーバーフィットする傾向のない、より小さいサイズのモデルでは特に、図5Aの別々にトレーニングされたエンコーダ310aおよびデコーダ311aをしのぐ傾向がある。
+Alternatively, the
+したがって、ニューラルネットワーク300は、手動チューニングされたデコーダの使用を回避する。デコーダを手動チューニングすることは、ホットワードを変更または追加する際の難点を増大させる。単一の記憶済みニューラルネットワーク300は、複数の異なるホットワード、ならびに2つ以上のロケールにわたる同一のホットワードを検出するようにトレーニングされ得る。さらに、検出品質は、潜在的に数百万の例を用いてトレーニングされた、ホットワード検出のために特に最適化されたネットワークと比べて低下する。さらに、典型的な手動チューニングされたデコーダは、符号化と復号化を共に実施する単一のニューラルネットワークよりも複雑である。従来のシステムは、過剰にパラメータ化される傾向があり、同程度のエンドツーエンドモデルよりも多くのメモリおよび計算を著しく消費し、ニューラルネットワーク加速ハードウェアをそれほど活用することができない。さらに、手動チューニングされたデコーダは、アクセントのある発話に弱点があり、それによって、複数のロケールおよび/または言語にわたって働き得る検出器を作成することが極めて難しくなる。
+Therefore, the
+記憶済みニューラルネットワーク300は、同一のサイズの単純な完全結合層をしのぐが、事前トレーニングされた完全結合層からのパラメータを任意選択で初期化することからも恩恵を受ける。ネットワーク300は、過去からどれほど覚えるかに関する微細制御を可能にする。この結果、理論的に無限の過去に注意を払うこと(たとえば、継続的にストリーミングオーディオを聴取すること)から恩恵を受けない(実際には害を受ける)一定のタスクについてRNN-LSTMをしのぐ。しかしながら、ネットワーク300は、RNN-LSTMとタンデムで働き得、通常は下位層についてのSVDFを活用し、雑音の多い低レベル特徴の過去、および上位層についてのLSTMをフィルタリングする。いくつかの比較的小さいフィルタがSVDFを含むことを考えると、パラメータおよび計算の数が微細に制御される。これは、品質とサイズ/計算との間の兼ね合いを選択するときに有用である。さらに、この品質のために、ネットワーク300は、より大きいグラニュラリティで動作する、単純な畳込みニューラルネットワーク(CNN)のような他のトポロジをしのぐ非常に小さいネットワークを作成することを可能にする。
+The memorized
+図6は、ストリーミングオーディオ118内のホットワードを検出する方法600についての動作の例示的構成のフローチャートである。フローチャートは、ユーザデバイス102によって取り込まれたストリーミングオーディオ118を特徴付けるそれぞれのオーディオ特徴410をそれぞれが含む入力フレーム210のシーケンスを、ユーザデバイス102のデータ処理ハードウェア103において受け取ることによって、動作602において開始する。各入力フレーム210のオーディオ特徴410は、ログフィルタバンクを含み得る。たとえば、各入力フレーム210は40個のログフィルタバンクを含み得る。動作604において、方法600は、データ処理ハードウェア103によって、順次スタックされたSVDF層302を含む、記憶済みニューラルネットワーク300を使用して、ストリーミングオーディオ118内のホットワードの存在を示す確率スコア350を生成することを含み、各SVDF層302は少なくとも1つのニューロン312を含み、各ニューロン312はそれぞれのメモリ構成要素330を含み、それぞれのメモリ構成要素330は、対応するニューロン312のそれぞれのメモリ容量に関連付けられる。各ニューロン312はまた、第1のステージ320および第2のステージ340をも含む。第1のステージ320は、各入力フレーム210のオーディオ特徴410に関するフィルタリングを個々に実施し、フィルタリングされたオーディオ特徴410をそれぞれのメモリ構成要素330に出力するように構成される。第2のステージ340は、それぞれのメモリ構成要素330内にあるすべてのフィルタリングされたオーディオ特徴410に関するフィルタリングを実施するように構成される。ニューラルネットワーク300は、隣接するSVDF層302間に配設された少なくとも1つの追加の処理層を含み得る。ニューラルネットワーク300は、いくつかの例では、隣接するSVDF層間に配設された少なくとも1つのボトルネッキング層302を含む。ボトルネック層は、層間のパラメータカウントを著しく削減するために使用される。
+FIG. 6 is a flow chart of an exemplary configuration of operation for
+いくつかの例では、SVDF層302のそれぞれからのニューロン312についての、それぞれのメモリ構成要素330に関連付けられるメモリ容量の合計が、ニューラルネットワーク300に、典型的な話者がホットワードを話すのにかかる時間の長さに比例する固定メモリ容量を与える。それぞれのメモリ構成要素330のうちの少なくとも1つに関連付けられるそれぞれのメモリ容量は、残りのメモリ構成要素330に関連付けられるそれぞれのメモリ容量とは異なり得る。あるいは、すべてのSVDF層302のニューロン312のそれぞれのメモリ構成要素330に関連付けられるそれぞれのメモリ容量は同一である。
+In some examples, for
+動作606において、方法600は、データ処理ハードウェア103によって、確率スコア350がホットワード検出しきい値を満たすかどうかを判定することを含む。確率スコア350がホットワード検出しきい値を満たすとき、方法600は、動作608において、データ処理ハードウェア103によって、オーディオストリーム118内のホットワードおよび/またはホットワードに続く1つもしくは複数の他の用語を処理するためのユーザデバイス102に関するウェイクアッププロセスを開始する。
+In
+いくつかの実装では、コンピューティングリソース112およびメモリリソース113を有するリモートシステム110は、複数のトレーニング入力シーケンス400に関してニューラルネットワーク300をトレーニングするように構成され、各トレーニング入力オーディオシーケンス400は、ホットワードの音声成分430を特徴付ける1つまたは複数のそれぞれのオーディオ特徴410をそれぞれが含む入力フレーム210のシーケンスを含む。各トレーニング入力オーディオシーケンス400はまた、入力フレーム210に割り当てられたラベル420をも含み、各ラベル420は、それぞれの入力フレーム210のオーディオ特徴410がホットワードの音声成分430を含む確率を示す。追加の例では、ニューラルネットワーク300をトレーニングすることは、各トレーニング入力オーディオシーケンス400について、ホットワードの音声成分430を含む入力フレーム210の部分に第1のラベル420を割り当てることによってエンコーダ部分310bをトレーニングすることを含む。トレーニングはまた、ホットワードの音声成分430を含む入力フレーム210の残りの部分に第2のラベル420を割り当てること、および対応するトレーニング入力オーディオシーケンス400がホットワードを含み、またはホットワードを含まないことのどちらかを示すラベル420を適用することによってデコーダ部分311bをトレーニングすることをも含む。入力フレーム210の部分に第1のラベル420を割り当てることは、ホットワードの最後の音声成分430を特徴付ける1つまたは複数のそれぞれのオーディオ特徴410を含む少なくとも1つの入力フレーム210に第1のラベル420を割り当てること、およびホットワードの残りの音声成分を特徴付ける1つまたは複数のそれぞれのオーディオ特徴410をそれぞれが含む残りの入力フレーム210に第2のラベル420を割り当てることを含み得る。
+In some implementations, the
+いくつかの実装では、方法600は、トレーニングの第1のステージ320の間、対応するトレーニング入力オーディオシーケンス400についての入力フレーム210にラベル420を割り当てることによってエンコーダ部分310aを事前トレーニングすることによってニューラルネットワーク300をトレーニングすることを含む。トレーニングの第2のステージ340の間、方法600は、トレーニングの第1のステージからの割り当てられたラベル420を用いてエンコーダ部分310aを初期化すること、およびホットワードを検出し、またはホットワードを検出しないように、エンコーダ部分310aからの出力を用いてデコーダ部分311aをトレーニングすることを含む。
+In some implementations,
+ソフトウェアアプリケーション(すなわち、ソフトウェアリソース)は、コンピューティングデバイスにタスクを実施させるコンピュータソフトウェアを指すことがある。いくつかの例では、ソフトウェアアプリケーションは「アプリケーション」、「app」、または「プログラム」と呼ばれることがある。例示的アプリケーションには、限定はしないが、システム診断アプリケーション、システム管理アプリケーション、システム保守アプリケーション、ワードプロセッシングアプリケーション、スプレッドシートアプリケーション、メッセージングアプリケーション、メディアストリーミングアプリケーション、ソーシャルネットワーキングアプリケーション、およびゲーミングアプリケーションが含まれる。 Software applications (ie, software resources) may refer to computer software that causes computing devices to perform tasks. In some examples, software applications are sometimes referred to as "applications," "apps," or "programs." Exemplary applications include, but are not limited to, system diagnostic applications, system management applications, system maintenance applications, word processing applications, spreadsheet applications, messaging applications, media streaming applications, social networking applications, and gaming applications.
+非一時的メモリは、コンピューティングデバイスによる使用のために一時的または永続的にプログラム(たとえば、命令のシーケンス)またはデータ(たとえば、プログラム状態情報)を記憶するために使用される物理デバイスであり得る。非一時的メモリは揮発性および/または不揮発性アドレス可能半導体メモリであり得る。不揮発性メモリの例には、限定はしないが、フラッシュメモリおよび読取り専用メモリ(ROM)/プログラマブル読取り専用メモリ(PROM)/消去可能プログラマブル読取り専用メモリ(EPROM)/電気消去可能プログラマブル読取り専用メモリ(EEPROM)(たとえば、通常はブートプログラムなどのファームウェアのために使用される)が含まれる。揮発性メモリの例には、限定はしないが、ランダムアクセスメモリ(RAM)、ダイナミックランダムアクセスメモリ(DRAM)、静的ランダムアクセスメモリ(SRAM)、相変化メモリ(PCM)、ならびにディスクまたはテープが含まれる。 Non-temporary memory can be a physical device used to store a program (eg, a sequence of instructions) or data (eg, program state information) temporarily or permanently for use by a computing device. .. The non-temporary memory can be a volatile and / or non-volatile addressable semiconductor memory. Examples of non-volatile memory are, but are not limited to, flash memory and read-only memory (ROM) / programmable read-only memory (PROM) / erasable programmable read-only memory (EPROM) / electrically erasable programmable read-only memory (EEPROM). ) (Usually used for firmware such as boot programs). Examples of volatile memory include, but are not limited to, random access memory (RAM), dynamic random access memory (DRAM), static random access memory (SRAM), phase change memory (PCM), and disk or tape. Is done.
+図7は、本文書において説明されるシステムおよび方法を実装するために使用され得る例示的コンピューティングデバイス700の概略図である。コンピューティングデバイス700は、ラップトップ、デスクトップ、ワークステーション、携帯情報端末、サーバ、ブレードサーバ、メインフレーム、他の適切なコンピュータなどの様々な形態のデジタルコンピュータを表すものとする。ここで示される構成要素、その接続および関係、ならびにその機能は、例示的なものに過ぎず、本文書において説明され、かつ/または特許請求される本発明の実装を限定するものではない。
+FIG. 7 is a schematic representation of an
+コンピューティングデバイス700は、プロセッサ710と、メモリ720と、記憶デバイス730と、メモリ720および高速拡張ポート750に接続する高速インターフェース/コントローラ740と、低速バス770および記憶デバイス730に接続する低速インターフェース/コントローラ760とを含む。構成要素710、720、730、740、750、および760のそれぞれは、様々なバスを使用して相互接続され、共通マザーボード上に、または適宜他の方式で取り付けられ得る。プロセッサ710は、高速インターフェース740に結合されたディスプレイ780などの外部入力/出力デバイス上のグラフィカルユーザインターフェース(GUI)のためのグラフィカル情報を表示するためにメモリ720内または記憶デバイス730上に記憶された命令を含む、コンピューティングデバイス700内での実行のための命令を処理し得る。他の実装では、複数のプロセッサおよび/または複数のバスが、複数のメモリおよびメモリのタイプと共に適宜使用され得る。さらに、複数のコンピューティングデバイス700が接続され得、各デバイスは、必要な動作の各部分を(たとえば、サーババンク、ブレードサーバのグループ、またはマルチプロセッサシステムとして)実現する。
+The
+メモリ720は、コンピューティングデバイス700内に情報を非一時的に記憶する。メモリ720は、コンピュータ可読媒体、揮発性メモリユニット、または不揮発性メモリユニットであり得る。非一時的メモリ720は、コンピューティングデバイス700による使用のために一時的または永続的にプログラム(たとえば、命令のシーケンス)またはデータ(たとえば、プログラム状態情報)を記憶するために使用される物理デバイスであり得る。不揮発性メモリの例には、限定はしないが、フラッシュメモリおよび読取り専用メモリ(ROM)/プログラマブル読取り専用メモリ(PROM)/消去可能プログラマブル読取り専用メモリ(EPROM)/電気消去可能プログラマブル読取り専用メモリ(EEPROM)(たとえば、通常はブートプログラムなどのファームウェアのために使用される)が含まれる。揮発性メモリの例には、限定はしないが、ランダムアクセスメモリ(RAM)、ダイナミックランダムアクセスメモリ(DRAM)、静的ランダムアクセスメモリ(SRAM)、相変化メモリ(PCM)、ならびにディスクまたはテープが含まれる。
+The
+記憶デバイス730は、コンピューティングデバイス700のためのマスストレージを提供することができる。いくつかの実装では、記憶デバイス730はコンピュータ可読媒体である。様々な異なる実装では、記憶デバイス730は、フロッピィディスクデバイス、ハードディスクデバイス、光ディスクデバイス、テープデバイス、フラッシュメモリもしくは他の類似の固体メモリデバイス、またはストレージエリアネットワークもしくは他の構成内のデバイスを含むデバイスのアレイであり得る。追加の実装では、コンピュータプログラム製品は情報キャリアとして有形に実施される。コンピュータプログラム製品は、実行されるとき、前述のような1つまたは複数の方法を実施する命令を含む。情報キャリアは、メモリ720、記憶デバイス730、またはプロセッサ710上のメモリなどのコンピュータ可読または機械可読媒体である。
+The
+高速コントローラ740は、コンピューティングデバイス700についての帯域幅集約的な動作を管理し、低速コントローラ760はより低い帯域幅集約的な動作を管理する。そのような責務の割振りは例示的なものに過ぎない。いくつかの実装では、高速コントローラ740は、メモリ720、ディスプレイ780(たとえば、グラフィックスプロセッサまたはアクセラレータを通じて)、および高速拡張ポート750に結合され、高速拡張ポート750は様々な拡張カード(図示せず)を受け入れ得る。いくつかの実装では、低速コントローラ760は、記憶デバイス730および低速拡張ポート790に結合される。低速拡張ポート790は、様々な通信ポート(たとえば、USB、Bluetooth、イーサネット、ワイヤレスイーサネット)を含み得、キーボード、ポインティングデバイス、スキャナなどの1つまたは複数の入力/出力デバイスに、またはたとえばネットワークアダプタを通じて、スイッチやルータなどのネットワーキングデバイスに結合され得る。
+The high-
+コンピューティングデバイス700は、図に示されるのとは異なるいくつかの形態で実装され得る。たとえば、コンピューティングデバイス700は、標準サーバ700aとして実装され、またはそのようなサーバのグループ内で複数回実装され、ラップトップコンピュータ700bとして実装され、またはラックサーバシステム700cの部分として実装され得る。
+The
+本明細書において説明されるシステムおよび技法の様々な実装は、デジタル電子および/または光学回路、集積回路、特別に設計されたASIC(特定用途向け集積回路)、コンピュータハードウェア、ファームウェア、ソフトウェア、ならびに/あるいはそれらの組合せとして実現され得る。これらの様々な実装は、記憶システム、少なくとも1つの入力デバイス、および少なくとも1つの出力デバイスとの間でデータおよび命令を受け取り、データおよび命令を送信するように結合された、専用または汎用であり得る、少なくとも1つのプログラマブルプロセッサを含むプログラマブルシステム上で実行可能および/または解釈可能な1つまたは複数のコンピュータプログラム内の実装を含み得る。 Various implementations of the systems and techniques described herein include digital electronic and / or optical circuits, integrated circuits, specially designed ASICs (application specific integrated circuits), computer hardware, firmware, software, and more. / Or can be realized as a combination thereof. These various implementations can be dedicated or generic, combined to receive data and instructions and send data and instructions to and from the storage system, at least one input device, and at least one output device. , May include implementations in one or more computer programs that are runnable and / or interpretable on a programmable system that includes at least one programmable processor.
+これらのコンピュータプログラム(プログラム、ソフトウェア、ソフトウェアアプリケーション、またはコードとも呼ばれる)は、プログラマブルプロセッサのための機械語命令を含み、高水準手続型および/またはオブジェクト指向プログラミング言語として、ならびに/あるいはアセンブリ/機械語として実装され得る。本明細書では、「機械可読媒体」および「コンピュータ可読媒体」という用語は、機械語命令を機械可読信号として受け取る機械可読媒体を含む、プログラマブルプロセッサに機械語命令および/またはデータを提供するために使用される任意のコンピュータプログラム製品、非一時的コンピュータ可読媒体、装置、および/またはデバイス(たとえば、磁気ディスク、光ディスク、メモリ、プログラマブル論理デバイス(PLD))を指す。「機械可読信号」という用語は、プログラマブルプロセッサに機械語命令および/またはデータを提供するために使用される任意の信号を指す。 These computer programs (also called programs, software, software applications, or code) include machine language instructions for programmable processors, as high-level procedural and / or object-oriented programming languages, and / or assembly / machine language. Can be implemented as. As used herein, the terms "machine readable medium" and "computer readable medium" are used to provide machine language instructions and / or data to programmable processors, including machine readable media that receive machine language instructions as machine readable signals. Refers to any computer program product, non-transient computer-readable medium, device, and / or device used (eg, magnetic disk, disk, memory, programmable logic device (PLD)). The term "machine readable signal" refers to any signal used to provide machine language instructions and / or data to a programmable processor.
+本明細書において説明されるプロセスおよび論理フローは、1つまたは複数のコンピュータプログラムを実行して、入力データに対して演算し、出力を出力することによって機能を実施する、データ処理ハードウェアとも呼ばれる1つまたは複数のプログラマブルプロセッサによって実施され得る。プロセスおよび論理フローはまた、専用論理回路、たとえばFPGA(フィールドプログラマブルゲートアレイ)またはASIC(特定用途向け集積回路)によって実施され得る。コンピュータプログラムの実行に適したプロセッサには、例として、汎用マイクロプロセッサと専用マイクロプロセッサの両方、および任意の種類のデジタルコンピュータの任意の1つまたは複数のプロセッサが含まれる。一般に、プロセッサは、読取り専用メモリまたはランダムアクセスメモリあるいはその両方から命令およびデータを受け取る。コンピュータの不可欠な要素は、命令を実施するためのプロセッサと、命令およびデータを記憶するための1つまたは複数のメモリデバイスである。一般に、コンピュータはまた、データを記憶するための1つまたは複数の大容量記憶デバイス、たとえば磁気ディスク、光磁気ディスク、または光ディスクをも含み、あるいはそれらとの間でデータを受け取り、またはデータを転送する。しかしながら、コンピュータがそのようなデバイスを有する必要はない。コンピュータプログラム命令およびデータを記憶するのに適したコンピュータ可読媒体には、例として半導体メモリデバイス、たとえばEPROM、EEPROM、およびフラッシュメモリデバイス、磁気ディスク、たとえば内部ハードディスクまたは取外し可能ディスク、光磁気光ディスク、ならびにCD-ROMおよびDVD-ROMディスクを含む、すべての形態の不揮発性メモリ、媒体、およびメモリデバイスが含まれる。プロセッサおよびメモリは、専用論理回路によって補足され、または専用論理回路内に組み込まれ得る。 The processes and logical flows described herein are also referred to as data processing hardware, which perform functions by running one or more computer programs, computing on input data, and outputting output. It can be implemented by one or more programmable processors. Processes and logic flows can also be implemented by dedicated logic circuits, such as FPGAs (Field Programmable Gate Arrays) or ASICs (Application Specific Integrated Circuits). Suitable processors for running computer programs include, for example, both general purpose and dedicated microprocessors, and any one or more processors of any type of digital computer. In general, the processor receives instructions and data from read-only memory and / or random access memory. An integral part of a computer is a processor for executing instructions and one or more memory devices for storing instructions and data. In general, a computer also includes, or receives, or transfers data to or from one or more mass storage devices for storing data, such as magnetic disks, magneto-optical disks, or optical disks. do. However, the computer does not have to have such a device. Computer-readable media suitable for storing computer program instructions and data include, for example, semiconductor memory devices such as EPROM, EEPROM, and flash memory devices, magnetic disks such as internal hard disks or removable disks, optomagnetic optical disks, and Includes all forms of non-volatile memory, media, and memory devices, including CD-ROM and DVD-ROM discs. Processors and memory can be supplemented by dedicated logic or incorporated within dedicated logic.
+ユーザとの対話を実現するために、本開示の1つまたは複数の態様が、ディスプレイデバイス、たとえばCRT(陰極線管)、LCD(液晶ディスプレイ)モニタ、またはユーザに情報を表示するためのタッチスクリーンと、任意選択で、ユーザがそれによってコンピュータに入力を与え得るキーボードおよびポインティングデバイス、たとえばマウスまたはトラックボールとを有するコンピュータ上で実装され得る。ユーザとの対話を実現するために他の種類のデバイスも使用され得、たとえば、ユーザに提供されるフィードバックは、任意の形態の感覚フィードバック、たとえば視覚フィードバック、聴覚フィードバック、または触覚フィードバックであり得、ユーザからの入力は、音響、音声、または触覚入力を含む任意の形態として受け取られ得る。さらに、コンピュータは、ユーザによって使用されるデバイスとの間で文書を送り、文書を受け取ることによって、たとえばユーザのクライアントデバイス上のウェブブラウザから受け取った要求に応答して、ウェブブラウザにウェブページを送ることによって、ユーザと対話し得る。 To enable user interaction, one or more aspects of the disclosure include display devices such as CRTs (cathode tubes), LCD (liquid crystal display) monitors, or touch screens for displaying information to the user. , Optionally, may be implemented on a computer with a keyboard and pointing device, such as a mouse or trackball, on which the user may give input to the computer. Other types of devices may also be used to provide user interaction, for example, the feedback provided to the user may be any form of sensory feedback, such as visual feedback, auditory feedback, or tactile feedback. Input from the user can be received in any form, including acoustic, voice, or tactile input. In addition, the computer sends a document to and from the device used by the user, and by receiving the document, for example, in response to a request received from a web browser on the user's client device, sends a web page to the web browser. By doing so, you can interact with the user.
+いくつかの実装が説明された。それでも、本開示の精神および範囲から逸脱することなく、様々な修正が行われ得ることを理解されよう。したがって、他の実装は以下の特許請求の範囲内にある。 Several implementations have been described. Nevertheless, it will be appreciated that various modifications can be made without departing from the spirit and scope of this disclosure. Therefore, other implementations are within the scope of the following claims.
+10 ユーザ
+100 システム
+102 ユーザデバイス
+103 データ処理ハードウェア
+104 ネットワーク
+105 メモリハードウェア
+106 ホットワード検出器
+108 自動音声認識器(ASR)
+110 リモートシステム
+112 コンピューティングリソース
+113 メモリリソース
+114 記憶リソース、メモリハードウェア
+118 ストリーミングオーディオ、オーディオストリーム
+120 発話
+130 注釈付き発話プール
+200 ニューラルネットワーク音響エンコーダ、ネットワーク
+210 フレーム
+210a-d フレーム
+212 ニューロン
+300 ニューラルネットワーク
+302 単一値分解フィルタ(SVDF)層
+302n 最終層
+310 エンコーダ部分
+310a,b エンコーダ部分、エンコーダ
+311 デコーダ部分
+311a,b デコーダ部分、デコーダ
+312 ニューロン/ノード
+320 第1のステージ、ステージ1特徴フィルタ
+330 メモリ構成要素、メモリ
+332 メモリ位置
+332a-d メモリ位置
+340 第2のステージ、ステージ2時間フィルタ
+350 確率スコア
+400 トレーニング入力オーディオシーケンス
+402 生オーディオ信号
+404 事前処理ステージ
+410 オーディオ特徴、入力特徴、入力特徴テンソル
+420 ラベル
+430 音声成分
+700 コンピューティングデバイス
+700a 標準サーバ
+700b ラップトップコンピュータ
+700c ラックサーバシステム
+710 プロセッサ
+720 メモリ
+730 記憶デバイス
+740 高速インターフェース/コントローラ
+750 高速拡張ポート
+760 低速インターフェース/コントローラ
+770 低速バス
+780 ディスプレイ
+790 低速拡張ポート
+10 users
+100 systems
+102 User device
+103 Data processing hardware
+104 network
+105 memory hardware
+106 hot word detector
+108 Automatic Speech Recognition (ASR)
+110 remote system
+112 Computing resources
+113 Memory resources
+114 Storage resources, memory hardware
+118 Streaming audio, audio stream
+120 utterances
+130 Annotated speech pool
+200 Neural Network Acoustic Encoder, Network
+210 frames
+210a-d frame
+212 neurons
+300 neural network
+302 Single Value Decomposition Filter (SVDF) Layer
+302n final layer
+310 Encoder part
+310a, b Encoder part, encoder
+311 decoder part
+311a, b decoder part, decoder
+312 Neurons / Nodes
+320 First Stage,
+330 Memory component, memory
+332 Memory location
+332a-d memory location
+340 Second stage,
+350 probability score
+400 training input audio sequence
+402 Raw audio signal
+404 Preprocessing stage
+410 Audio Features, Input Features, Input Features Tensor
+420 label
+430 Audio component
+700 computing devices
+700a standard server
+700b laptop computer
+700c rack server system
+710 processor
+720 memory
+730 storage device
+740 High speed interface / controller
+750 fast expansion port
+760 Slow interface / controller
+770 low speed bus
+780 display
+790 slow expansion port
+Claims (22)
+前記データ処理ハードウェア(103)によって、記憶済みニューラルネットワーク(300)を使用して、前記ストリーミングオーディオ(118)内のホットワードの存在を示す確率スコア(350)を生成するステップであって、
+前記記憶済みニューラルネットワーク(300)が、順次スタックされた単一値分解フィルタ(SVDF)層(302)を備え、各SVDF層(302)が少なくとも1つのニューロン(312)を備え、各ニューロン(312)が、
+それぞれのメモリ構成要素(330)であって、対応する前記ニューロン(312)のそれぞれのメモリ容量に関連付けられる、それぞれのメモリ構成要素(330)と、
+各入力フレーム(210)の前記それぞれのオーディオ特徴(410)に関するフィルタリングを個々に実施し、前記フィルタリングされたオーディオ特徴(410)を前記それぞれのメモリ構成要素(330)に出力するように構成された第1のステージ(320)と、
+前記それぞれのメモリ構成要素(330)内にあるすべての前記フィルタリングされたオーディオ特徴(410)に関するフィルタリングを実施するように構成された第2のステージ(340)と
+を備える、ステップと、
+前記データ処理ハードウェア(103)によって、前記確率スコア(350)がホットワード検出しきい値を満たすかどうかを判定するステップと、
+前記確率スコア(350)が前記ホットワード検出しきい値を満たすとき、前記データ処理ハードウェア(103)によって、前記ストリーミングオーディオ(118)内の前記ホットワードおよび/または前記ホットワードに続く1つもしくは複数の他の用語を処理するための前記ユーザデバイス(102)に関するウェイクアッププロセスを初期化するステップと
+を含み、
+前記SVDF層(302)のそれぞれからのニューロン(312)についての、前記それぞれのメモリ構成要素(330)に関連付けられるメモリ容量の合計が、前記記憶済みニューラルネットワーク(300)に、典型的な話者が前記ホットワードを話すのにかかる時間の長さに比例する固定メモリ容量を与える
+方法(600)。 In the data processing hardware (103) of the user device (102), a sequence of input frames (210) each including each audio feature (410) that characterizes the streaming audio (118) captured by the user device (102). And the steps to receive
+A step in which the data processing hardware (103) uses a stored neural network (300) to generate a probability score (350) indicating the presence of a hotword in the streaming audio (118).
+The memorized neural network (300) comprises a sequentially stacked single-valued decomposition filter (SVDF) layer (302), each SVDF layer (302) comprising at least one neuron (312), and each neuron (312). )But,
+Each memory component (330), and each memory component (330) associated with its respective memory capacity of the corresponding neuron (312),
+Each input frame (210) was configured to individually filter for each of the audio features (410) and output the filtered audio features (410) to the respective memory component (330). The first stage (320) and
+A step comprising a second stage (340) configured to perform filtering on all said filtered audio features (410) within each said memory component (330).
+A step of determining whether the probability score (350) meets the hotword detection threshold by the data processing hardware (103).
+When the probability score (350) meets the hotword detection threshold, the data processing hardware (103) may follow the hotword and / or the hotword in the streaming audio (118). a step of initializing a wake-up process for the user device (102) for processing a plurality of other terms seen including,
+For neurons (312) from each of the SVDF layers (302), the sum of the memory capacities associated with each of the memory components (330) is typical of the speaker in the stored neural network (300). A method of giving a fixed amount of memory proportional to the length of time it takes to speak the hotword (600).
+前記ホットワードの音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)をそれぞれが含む入力フレーム(210)のシーケンスと、
+前記入力フレーム(210)に割り当てられたラベル(420)であって、各ラベル(420)が、それぞれの入力フレーム(210)の前記オーディオ特徴(410)が前記ホットワードの音声成分(430)を含む確率を示す、ラベル(420)と
+を含む請求項１から３のいずれか一項に記載の方法(600)。 The remote system (110) trains the stored neural network (300) for a plurality of training input audio sequences (400), and each training input audio sequence (400)
+A sequence of input frames (210), each containing one or more of the respective audio features (410) that characterize the audio component (430) of the hotword.
+Labels (420) assigned to the input frame (210), where each label (420) has the audio feature (410) of each input frame (210) the audio component (430) of the hot word. The method (600) according to any one of claims 1 to 3 , comprising the label (420) and indicating the probability of inclusion.
+前記ホットワードの音声成分(430)を含む前記入力フレーム(210)の部分に第1のラベル(420)を割り当て、前記ホットワードの音声成分(430)を含む前記入力フレーム(210)の残りの部分に第2のラベル(420)を割り当てることによってエンコーダ部分(310)をトレーニングするステップと、
+対応する前記トレーニング入力オーディオシーケンス(400)が前記ホットワードを含み、または前記ホットワードを含まないことのどちらかを示すラベル(420)を適用することによってデコーダ部分(311)をトレーニングするステップと
+を含む請求項４に記載の方法(600)。 The step of training the stored neural network (300) is for each training input audio sequence (400).
+A first label (420) is assigned to a portion of the input frame (210) containing the audio component (430) of the hot word, and the rest of the input frame (210) containing the audio component (430) of the hot word. A step to train the encoder part (310) by assigning a second label (420) to the part,
+A step of training the decoder portion (311) by applying a label (420) indicating that the corresponding training input audio sequence (400) contains or does not contain the hotword. The method according to claim 4, which includes (600).
+前記ホットワードの最後の音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)を含む少なくとも1つの入力フレーム(210)に前記第1のラベル(420)を割り当てるステップと、
+前記ホットワードの残りの音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)をそれぞれが含む残りの入力フレーム(210)に前記第2のラベル(420)を割り当てるステップと
+を含む請求項５に記載の方法(600)。 The step of assigning the first label (420) to the portion of the input frame (210) is
+A step of assigning the first label (420) to at least one input frame (210) containing one or more respective audio features (410) that characterize the last audio component (430) of the hotword.
+A step of assigning the second label (420) to the remaining input frames (210) each containing one or more respective audio features (410) that characterize the remaining audio component (430) of the hotword. The method according to claim 5, which includes (600).
+トレーニングの前記第1のステージ(320)の間、対応する前記トレーニング入力オーディオシーケンス(400)についての前記入力フレーム(210)に前記ラベル(420)を割り当てることによってエンコーダ部分(310)を事前トレーニングするステップと、
+トレーニングの前記第2のステージ(340)の間、
+トレーニングの前記第1のステージ(320)からの前記割り当てられたラベル(420)を用いて前記エンコーダ部分(310)を初期化するステップと、
+前記ホットワードを検出し、または前記ホットワードを検出しないように、前記エンコーダ部分(310)からの出力を用いてデコーダ部分(311)をトレーニングするステップと
+を含む請求項４から６のいずれか一項に記載の方法(600)。 The step of training the neural network (300) is for each training input audio sequence (400).
+During the first stage (320) of training, the encoder portion (310) is pretrained by assigning the label (420) to the input frame (210) for the corresponding training input audio sequence (400). Steps and
+During the second stage (340) of training,
+A step of initializing the encoder portion (310) with the assigned label (420) from the first stage (320) of training.
+One of claims 4 to 6 , including the step of training the decoder portion (311) with the output from the encoder portion (310) so as to detect the hot word or not detect the hot word. The method described in section (600).
+前記データ処理ハードウェア(103)と通信しているメモリハードウェア(105)であって、前記データ処理ハードウェア(103)上で実行されるとき、前記データ処理ハードウェア(103)に、
+前記ユーザデバイス(102)によって取り込まれたストリーミングオーディオ(118)を特徴付けるそれぞれのオーディオ特徴(410)をそれぞれが含む入力フレーム(210)のシーケンスを受け取ること、
+記憶済みニューラルネットワーク(300)を使用して、前記ストリーミングオーディオ(118)内のホットワードの存在を示す確率スコア(350)を生成することであって、
+前記記憶済みニューラルネットワーク(300)が、順次スタックされた単一値分解フィルタ(SVDF)層(302)を含み、
+各SVDF層(302)が少なくとも1つのニューロン(312)を含み、各ニューロン(312)が、
+それぞれのメモリ構成要素(330)であって、対応する前記ニューロン(312)のそれぞれのメモリ容量に関連付けられる、それぞれのメモリ構成要素(330)と、
+各入力フレーム(210)の前記それぞれのオーディオ特徴(410)に関するフィルタリングを個々に実施し、前記フィルタリングされたオーディオ特徴(410)を前記それぞれのメモリ構成要素(330)に出力するように構成された第1のステージ(320)と、
+前記それぞれのメモリ構成要素(330)内にあるすべての前記フィルタリングされたオーディオ特徴(410)に関するフィルタリングを実施するように構成された第2のステージ(340)と
+を含む、生成すること、
+前記確率スコア(350)がホットワード検出しきい値を満たすかどうかを判定すること、および
+前記確率スコア(350)が前記ホットワード検出しきい値を満たすとき、前記ストリーミングオーディオ(118)内の前記ホットワードおよび/または前記ホットワードに続く1つまたは複数の他の用語を処理するための前記ユーザデバイス(102)に関するウェイクアッププロセスを初期化すること
+を含む動作を実施させる命令を記憶する、メモリハードウェア(105)と
+を備え、
+前記SVDF層(302)のそれぞれからのニューロン(312)についての、前記それぞれのメモリ構成要素(330)に関連付けられるメモリ容量の合計が、前記記憶済みニューラルネットワーク(300)に、典型的な話者が前記ホットワードを話すのにかかる時間の長さに比例する固定メモリ容量を与える
+システム(100)。 The data processing hardware (103) of the user device (102) and
+The memory hardware (105) communicating with the data processing hardware (103), and when executed on the data processing hardware (103), the data processing hardware (103).
+Receiving a sequence of input frames (210), each containing each audio feature (410) that characterizes the streaming audio (118) captured by the user device (102).
+Using a stored neural network (300) to generate a probability score (350) indicating the presence of a hotword in said streaming audio (118).
+The stored neural network (300) includes a sequentially stacked single-valued decomposition filter (SVDF) layer (302).
+Each SVDF layer (302) contains at least one neuron (312), and each neuron (312)
+Each memory component (330), and each memory component (330) associated with its respective memory capacity of the corresponding neuron (312),
+Each input frame (210) was configured to individually filter for each of the audio features (410) and output the filtered audio features (410) to the respective memory component (330). The first stage (320) and
+Generating, including a second stage (340) configured to perform filtering on all the filtered audio features (410) within each of the memory components (330).
+Determining if the probability score (350) meets the hotword detection threshold, and when the probability score (350) meets the hotword detection threshold, said in the streaming audio (118). A memory that stores instructions that perform operations, including initializing a wakeup process for the user device (102) to process a hotword and / or one or more other terms following the hotword. and a hardware (105),
+For neurons (312) from each of the SVDF layers (302), the sum of the memory capacities associated with each of the memory components (330) is typical of the speaker in the stored neural network (300). A system that provides a fixed amount of memory proportional to the length of time it takes to speak the hotword (100).
+前記ホットワードの音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)をそれぞれが含む入力フレーム(210)のシーケンスと、
+前記入力フレーム(210)に割り当てられたラベル(420)であって、各ラベル(420)が、それぞれの入力フレーム(210)の前記オーディオ特徴(410)が前記ホットワードの音声成分(430)を含む確率を示す、ラベル(420)と
+を含む請求項１２から１４のいずれか一項に記載のシステム(100)。 A remote system (110) is configured to train the stored neural network (300) with respect to a plurality of training input audio sequences (400), with each training input audio sequence (400).
+A sequence of input frames (210), each containing one or more of the respective audio features (410) that characterize the audio component (430) of the hotword.
+Labels (420) assigned to the input frame (210), where each label (420) has the audio feature (410) of each input frame (210) the audio component (430) of the hotword. The system (100) according to any one of claims 12 to 14 , including the label (420), which indicates the probability of inclusion.
+前記ホットワードの音声成分(430)を含む前記入力フレーム(210)の部分に第1のラベル(420)を割り当て、前記ホットワードの音声成分(430)を含む前記入力フレーム(210)の残りの部分に第2のラベル(420)を割り当てることによってエンコーダ部分(310)をトレーニングすること、および
+対応するトレーニング前記入力オーディオシーケンス(400)が前記ホットワードを含み、または前記ホットワードを含まないことのどちらかを示すラベル(420)を適用することによってデコーダ部分(311)をトレーニングすること
+を含む請求項１５に記載のシステム(100)。 Training the stored neural network (300) is for each training input audio sequence (400).
+A first label (420) is assigned to a portion of the input frame (210) containing the audio component (430) of the hot word, and the rest of the input frame (210) containing the audio component (430) of the hot word. Training the encoder portion (310) by assigning a second label (420) to the portion, and corresponding training that the input audio sequence (400) contains or does not contain the hot word. 15. The system (100) of claim 15, comprising training the decoder portion (311) by applying a label (420) indicating either.
+前記ホットワードの最後の音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)を含む少なくとも1つの入力フレーム(210)に前記第1のラベル(420)を割り当てること、および
+前記ホットワードの残りの音声成分(430)を特徴付ける1つまたは複数のそれぞれのオーディオ特徴(410)をそれぞれが含む残りの入力フレーム(210)に前記第2のラベル(420)を割り当てること
+を含む請求項１６に記載のシステム(100)。 Assigning the first label (420) to the portion of the input frame (210) can be
+Assigning the first label (420) to at least one input frame (210) containing one or more respective audio features (410) that characterize the last audio component (430) of the hotword, and said. A claim comprising assigning the second label (420) to the remaining input frame (210), each containing one or more respective audio features (410) that characterize the remaining audio component (430) of the hotword. Item 16. The system (100).
+トレーニングの前記第1のステージ(320)の間、対応する前記トレーニング入力オーディオシーケンス(400)についての前記入力フレーム(210)に前記ラベル(420)を割り当てることによってエンコーダ部分(310)を事前トレーニングすること、ならびに
+トレーニングの前記第2のステージ(340)の間、
+トレーニングの前記第1のステージ(320)からの前記割り当てられたラベル(420)を用いて前記エンコーダ部分(310)を初期化すること、および
+前記ホットワードを検出し、または前記ホットワードを検出しないように、前記エンコーダ部分(310)からの出力を用いてデコーダ部分(311)をトレーニングすること
+を含む請求項１５から１７のいずれか一項に記載のシステム(100)。 Training the stored neural network (300) is for each training input audio sequence (400).
+During the first stage (320) of training, the encoder portion (310) is pretrained by assigning the label (420) to the input frame (210) for the corresponding training input audio sequence (400). That, as well as during the second stage of training (340),
+Initializing the encoder portion (310) with the assigned label (420) from the first stage (320) of training, and detecting or not detecting the hotword. as such, the system according to any one of claims 15 to 17, comprising training the decoder portion (311) using the output from the encoder section (310) (100).
+Priority Applications (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+JP2021189437A JP7263492B2 (en) | 2018-07-13 | 2021-11-22 | End-to-end streaming keyword spotting |
+JP2023064374A JP2023089116A (en) | 2018-07-13 | 2023-04-11 | End-to-end streaming keyword spotting |
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US201862697586P | 2018-07-13 | 2018-07-13 | |
+US62/697,586 | 2018-07-13 | ||
+PCT/US2019/036907 WO2020013946A1 (en) | 2018-07-13 | 2019-06-13 | End-to-end streaming keyword spotting |
+Related Child Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+JP2021189437A Division JP7263492B2 (en) | 2018-07-13 | 2021-11-22 | End-to-end streaming keyword spotting |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+JP2021524615A JP2021524615A (en) | 2021-09-13 |
+JP6984068B2 true JP6984068B2 (en) | 2021-12-17 |
+Family
+ID=67108200
+Family Applications (3)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+JP2021500875A Active JP6984068B2 (en) | 2018-07-13 | 2019-06-13 | End-to-end streaming keyword spotting |
+JP2021189437A Active JP7263492B2 (en) | 2018-07-13 | 2021-11-22 | End-to-end streaming keyword spotting |
+JP2023064374A Pending JP2023089116A (en) | 2018-07-13 | 2023-04-11 | End-to-end streaming keyword spotting |
+Family Applications After (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+JP2021189437A Active JP7263492B2 (en) | 2018-07-13 | 2021-11-22 | End-to-end streaming keyword spotting |
+JP2023064374A Pending JP2023089116A (en) | 2018-07-13 | 2023-04-11 | End-to-end streaming keyword spotting |
+Country Status (6)
+Country | Link |
+---|---|
+US (6) | US10930269B2 (en) |
+EP (1) | EP3807874A1 (en) |
+JP (3) | JP6984068B2 (en) |
+KR (3) | KR102622357B1 (en) |
+CN (1) | CN112368769A (en) |
+WO (1) | WO2020013946A1 (en) |
+Families Citing this family (11)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+CN106228976B (en) * | 2016-07-22 | 2019-05-31 | 百度在线网络技术（北京）有限公司 | Audio recognition method and device |
+US11205121B2 (en) * | 2018-06-20 | 2021-12-21 | Disney Enterprises, Inc. | Efficient encoding and decoding sequences using variational autoencoders |
+US11244673B2 (en) * | 2019-07-19 | 2022-02-08 | Microsoft Technologly Licensing, LLC | Streaming contextual unidirectional models |
+CN111343473B (en) * | 2020-02-25 | 2022-07-01 | 北京达佳互联信息技术有限公司 | Data processing method and device for live application, electronic equipment and storage medium |
+CN111429887B (en) * | 2020-04-20 | 2023-05-30 | 合肥讯飞数码科技有限公司 | Speech keyword recognition method, device and equipment based on end-to-end |
+CN111667835A (en) * | 2020-06-01 | 2020-09-15 | 马上消费金融股份有限公司 | Voice recognition method, living body detection method, model training method and device |
+CN112669852B (en) * | 2020-12-15 | 2023-01-31 | 北京百度网讯科技有限公司 | Memory allocation method and device and electronic equipment |
+US20220284891A1 (en) * | 2021-03-03 | 2022-09-08 | Google Llc | Noisy student teacher training for robust keyword spotting |
+US20230274731A1 (en) * | 2022-02-28 | 2023-08-31 | Google Llc | Mixing Heterogeneous Loss Types to Improve Accuracy of Keyword Spotting |
+CN114863915A (en) * | 2022-07-05 | 2022-08-05 | 中科南京智能技术研究院 | Voice awakening method and system based on semantic preservation |
+CN116453514B (en) * | 2023-06-08 | 2023-08-25 | 四川大学 | Multi-view-based voice keyword detection and positioning method and device |
+Family Cites Families (50)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH06266386A (en) * | 1993-03-16 | 1994-09-22 | Nippon Telegr & Teleph Corp <Ntt> | Word spotting method |
+JPH08314490A (en) * | 1995-05-23 | 1996-11-29 | Nippon Hoso Kyokai <Nhk> | Word spotting type method and device for recognizing voice |
+US7359550B2 (en) * | 2002-04-18 | 2008-04-15 | Mitsubishi Electric Research Laboratories, Inc. | Incremental singular value decomposition of incomplete data |
+US7725319B2 (en) * | 2003-07-07 | 2010-05-25 | Dialogic Corporation | Phoneme lattice construction and its application to speech recognition and keyword spotting |
+ES2237345B1 (en) * | 2005-02-28 | 2006-06-16 | Prous Institute For Biomedical Research S.A. | PROCEDURE FOR CONVERSION OF PHONEMES TO WRITTEN TEXT AND CORRESPONDING INFORMATIC SYSTEM AND PROGRAM. |
+EP2135231A4 (en) * | 2007-03-01 | 2014-10-15 | Adapx Inc | System and method for dynamic learning |
+JP4572218B2 (en) * | 2007-06-27 | 2010-11-04 | 日本電信電話株式会社 | Music segment detection method, music segment detection device, music segment detection program, and recording medium |
+FR2923307B1 (en) * | 2007-11-02 | 2012-11-16 | Eastman Kodak Co | METHOD FOR ORGANIZING MULTIMEDIA DATA |
+US9361885B2 (en) * | 2013-03-12 | 2016-06-07 | Nuance Communications, Inc. | Methods and apparatus for detecting a voice command |
+US9704102B2 (en) * | 2013-03-15 | 2017-07-11 | William Marsh Rice University | Sparse factor analysis for analysis of user content preferences |
+US9390708B1 (en) * | 2013-05-28 | 2016-07-12 | Amazon Technologies, Inc. | Low latency and memory efficient keywork spotting |
+US9620145B2 (en) * | 2013-11-01 | 2017-04-11 | Google Inc. | Context-dependent state tying using a neural network |
+US9767410B1 (en) * | 2014-10-03 | 2017-09-19 | Google Inc. | Rank-constrained neural networks |
+US9424841B2 (en) * | 2014-10-09 | 2016-08-23 | Google Inc. | Hotword detection on multiple devices |
+US10198517B2 (en) * | 2014-12-08 | 2019-02-05 | Oath Inc. | Pairing systems and methods for electronic communications |
+KR101686827B1 (en) | 2015-03-17 | 2016-12-16 | 인천대학교 산학협력단 | Method for implementing artificial neural networks in neuromorphic hardware |
+US10013652B2 (en) | 2015-04-29 | 2018-07-03 | Nuance Communications, Inc. | Fast deep neural network feature transformation via optimized memory bandwidth utilization |
+US10503706B2 (en) * | 2015-06-01 | 2019-12-10 | Sap Se | Deferred data definition statements |
+US10438593B2 (en) * | 2015-07-22 | 2019-10-08 | Google Llc | Individualized hotword detection models |
+US20170154620A1 (en) | 2015-12-01 | 2017-06-01 | Knowles Electronics, Llc | Microphone assembly comprising a phoneme recognizer |
+US10043243B2 (en) * | 2016-01-22 | 2018-08-07 | Siemens Healthcare Gmbh | Deep unfolding algorithm for efficient image denoising under varying noise conditions |
+EP3414759B1 (en) * | 2016-02-10 | 2020-07-01 | Cerence Operating Company | Techniques for spatially selective wake-up word recognition and related systems and methods |
+US9639809B1 (en) * | 2016-02-10 | 2017-05-02 | Sas Institute Inc. | Monitoring system based on a support vector data description |
+US20170259121A1 (en) | 2016-03-08 | 2017-09-14 | Your Trainer Inc. | Science engine operative to select workout segments responsive to user-supplied information about their physical state |
+US10373612B2 (en) * | 2016-03-21 | 2019-08-06 | Amazon Technologies, Inc. | Anchored speech detection and speech recognition |
+CN106251859B (en) * | 2016-07-22 | 2019-05-31 | 百度在线网络技术（北京）有限公司 | Voice recognition processing method and apparatus |
+US10290196B2 (en) * | 2016-08-15 | 2019-05-14 | Nec Corporation | Smuggling detection system |
+KR101943381B1 (en) * | 2016-08-22 | 2019-01-29 | 에스케이텔레콤 주식회사 | Endpoint detection method of speech using deep neural network and apparatus thereof |
+DE102016216950A1 (en) * | 2016-09-07 | 2018-03-08 | Robert Bosch Gmbh | Model calculation unit and control unit for calculating a multilayer perceptron model with feedforward and feedback |
+US10403268B2 (en) * | 2016-09-08 | 2019-09-03 | Intel IP Corporation | Method and system of automatic speech recognition using posterior confidence scores |
+US11081105B2 (en) * | 2016-09-16 | 2021-08-03 | Nippon Telegraph And Telephone Corporation | Model learning device, method and recording medium for learning neural network model |
+US10950225B2 (en) * | 2016-09-30 | 2021-03-16 | Nippon Telegraph And Telephone Corporation | Acoustic model learning apparatus, method of the same and program |
+US11080595B2 (en) * | 2016-11-04 | 2021-08-03 | Salesforce.Com, Inc. | Quasi-recurrent neural network based encoder-decoder model |
+KR102241970B1 (en) | 2016-11-07 | 2021-04-20 | 구글 엘엘씨 | Suppressing recorded media hotword trigger |
+US10650311B2 (en) * | 2016-12-19 | 2020-05-12 | Asaap, Inc. | Suggesting resources using context hashing |
+US10559309B2 (en) | 2016-12-22 | 2020-02-11 | Google Llc | Collaborative voice controlled devices |
+CN106782504B (en) * | 2016-12-29 | 2019-01-22 | 百度在线网络技术（北京）有限公司 | Audio recognition method and device |
+JP6585112B2 (en) * | 2017-03-17 | 2019-10-02 | 株式会社東芝 | Voice keyword detection apparatus and voice keyword detection method |
+JP6805927B2 (en) * | 2017-03-28 | 2020-12-23 | 富士通株式会社 | Index generator, data search program, index generator, data search device, index generation method, and data search method |
+US10460729B1 (en) * | 2017-06-30 | 2019-10-29 | Amazon Technologies, Inc. | Binary target acoustic trigger detecton |
+US10664716B2 (en) * | 2017-07-19 | 2020-05-26 | Vispek Inc. | Portable substance analysis based on computer vision, spectroscopy, and artificial intelligence |
+US20190080009A1 (en) * | 2017-09-11 | 2019-03-14 | Linkedin Corporation | Calculation of tuning parameters for ranking items in a user feed |
+KR20200063215A (en) | 2017-10-06 | 2020-06-04 | 오슬로 유니버시테시케후스 에이치에프 | Chimeric antigen receptor |
+US10672380B2 (en) * | 2017-12-27 | 2020-06-02 | Intel IP Corporation | Dynamic enrollment of user-defined wake-up key-phrase for speech enabled computer system |
+US11106729B2 (en) * | 2018-01-08 | 2021-08-31 | Comcast Cable Communications, Llc | Media search filtering mechanism for search engine |
+US11586924B2 (en) * | 2018-01-23 | 2023-02-21 | Qualcomm Incorporated | Determining layer ranks for compression of deep networks |
+DE102018102758B4 (en) | 2018-02-07 | 2020-01-16 | Kendrion (Villingen) Gmbh | Spring for a check valve, check valve with such a spring, controllable vibration damper with such a check valve and motor vehicle with such a controllable vibration damper |
+US10585988B2 (en) * | 2018-06-08 | 2020-03-10 | Microsoft Technology Licensing, Llc | Graph representations for identifying a next word |
+JP6892426B2 (en) * | 2018-10-19 | 2021-06-23 | ヤフー株式会社 | Learning device, detection device, learning method, learning program, detection method, and detection program |
+CN111933114B (en) * | 2020-10-09 | 2021-02-02 | 深圳市友杰智新科技有限公司 | Training method and use method of voice awakening hybrid model and related equipment |
+-
+2019
+- 2019-06-13 WO PCT/US2019/036907 patent/WO2020013946A1/en unknown
+- 2019-06-13 US US16/439,897 patent/US10930269B2/en active Active
+- 2019-06-13 KR KR1020227046093A patent/KR102622357B1/en active IP Right Grant
+- 2019-06-13 KR KR1020207038047A patent/KR102483774B1/en active IP Right Grant
+- 2019-06-13 JP JP2021500875A patent/JP6984068B2/en active Active
+- 2019-06-13 EP EP19734618.2A patent/EP3807874A1/en active Pending
+- 2019-06-13 CN CN201980044566.5A patent/CN112368769A/en active Pending
+- 2019-06-13 KR KR1020247000260A patent/KR20240008406A/en not_active Application Discontinuation
+- 2019-12-10 US US16/709,191 patent/US11056101B2/en active Active
+-
+2021
+- 2021-01-21 US US17/155,068 patent/US11557282B2/en active Active
+- 2021-06-15 US US17/348,422 patent/US11682385B2/en active Active
+- 2021-11-22 JP JP2021189437A patent/JP7263492B2/en active Active
+-
+2023
+- 2023-01-09 US US18/151,540 patent/US11929064B2/en active Active
+- 2023-04-11 JP JP2023064374A patent/JP2023089116A/en active Pending
+- 2023-05-23 US US18/322,207 patent/US11967310B2/en active Active
+Also Published As
+Publication number | Publication date |
+---|---|
+US20210142790A1 (en) | 2021-05-13 |
+KR102622357B1 (en) | 2024-01-08 |
+US20210312913A1 (en) | 2021-10-07 |
+US11056101B2 (en) | 2021-07-06 |
+US11682385B2 (en) | 2023-06-20 |
+JP2023089116A (en) | 2023-06-27 |
+US20230162729A1 (en) | 2023-05-25 |
+US11929064B2 (en) | 2024-03-12 |
+US11557282B2 (en) | 2023-01-17 |
+US20200020322A1 (en) | 2020-01-16 |
+US20230298576A1 (en) | 2023-09-21 |
+CN112368769A (en) | 2021-02-12 |
+EP3807874A1 (en) | 2021-04-21 |
+JP2021524615A (en) | 2021-09-13 |
+JP7263492B2 (en) | 2023-04-24 |
+US11967310B2 (en) | 2024-04-23 |
+KR102483774B1 (en) | 2023-01-02 |
+US20200126537A1 (en) | 2020-04-23 |
+KR20210015967A (en) | 2021-02-10 |
+KR20240008406A (en) | 2024-01-18 |
+WO2020013946A1 (en) | 2020-01-16 |
+KR20230006055A (en) | 2023-01-10 |
+US10930269B2 (en) | 2021-02-23 |
+JP2022028846A (en) | 2022-02-16 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+JP6984068B2 (en) | End-to-end streaming keyword spotting | |
+US11798535B2 (en) | On-device custom wake word detection | |
+US11158305B2 (en) | Online verification of custom wake word | |
+US10403266B2 (en) | Detecting keywords in audio using a spiking neural network | |
+US11670299B2 (en) | Wakeword and acoustic event detection | |
+US11132990B1 (en) | Wakeword and acoustic event detection | |
+JP7345667B2 (en) | Small footprint multichannel keyword spotting | |
+US20230274731A1 (en) | Mixing Heterogeneous Loss Types to Improve Accuracy of Keyword Spotting |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+A621 | Written request for application examination |
+Free format text: JAPANESE INTERMEDIATE CODE: A621Effective date: 20210303 |
+|
+A871 | Explanation of circumstances concerning accelerated examination |
+Free format text: JAPANESE INTERMEDIATE CODE: A871Effective date: 20210303 |
+|
+A131 | Notification of reasons for refusal |
+Free format text: JAPANESE INTERMEDIATE CODE: A131Effective date: 20210712 |
+|
+A521 | Request for written amendment filed |
+Free format text: JAPANESE INTERMEDIATE CODE: A523Effective date: 20210813 |
+|
+TRDD | Decision of grant or rejection written | ||
+A01 | Written decision to grant a patent or to grant a registration (utility model) |
+Free format text: JAPANESE INTERMEDIATE CODE: A01Effective date: 20211025 |
+|
+A61 | First payment of annual fees (during grant procedure) |
+Free format text: JAPANESE INTERMEDIATE CODE: A61Effective date: 20211124 |
+|
+R150 | Certificate of patent or registration of utility model |
+Ref document number: 6984068Country of ref document: JPFree format text: JAPANESE INTERMEDIATE CODE: R150 |

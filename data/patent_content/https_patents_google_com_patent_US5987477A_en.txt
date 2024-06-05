@@ -1,0 +1,666 @@
+US5987477A - Parallel file system and method for parallel write sharing - Google Patents
+Parallel file system and method for parallel write sharing Download PDFInfo
+- Publication number
+- US5987477A US5987477A US08/890,373 US89037397A US5987477A US 5987477 A US5987477 A US 5987477A US 89037397 A US89037397 A US 89037397A US 5987477 A US5987477 A US 5987477A
+- Authority
+- US
+- United States
+- Prior art keywords
+- file
+- file size
+- node
+- lock
+- nodes
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/10—File systems; File servers
+- G06F16/18—File system types
+- G06F16/1858—Parallel file systems, i.e. file systems supporting multiple processors
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99938—Concurrency, e.g. lock management in shared database
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99951—File or database maintenance
+- Y10S707/99952—Coherency, e.g. same view to multiple users
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99951—File or database maintenance
+- Y10S707/99952—Coherency, e.g. same view to multiple users
+- Y10S707/99953—Recoverability
+Definitions
+- FIG. 2 illustrates how locking and file size caching work together.
+- the extendible hashing implementation described here works with any hash bucket size, it will be more efficient if the bucket size is the same as the file system block size or a multiple of the block size. This is because an efficient implementation of sparse files does not require any disk I/O to read a hole if the hole is aligned on file system block boundaries. Hence, all lookups require at most one disk I/O to read the actual hash bucket that would hold the record if that hash bucket is not currently cached. Note that this assumes that the file metadata that contains the location of the file's disk blocks is cached.
+- the system can implement locking and concurrency control to allow concurrent updates in different hash buckets and also implement overflow blocks. While we don't really need a temporary buffer to handle splits during a sequential scan, we could use the buffer provided by the caller. In particular, one could imagine applications using a sequential scan interface that returns only one record at a time (e.g., database?), where it doesn't make sense to reconstruct a whole bucket just to return a one record.
+- the file system buffer pool is logically divided into two parts, one used for prefetching ("prefetch pool”), and one used for caching recently accessed file blocks (“general pool”).
+- prefetch pool used for prefetching
+- general pool used for caching recently accessed file blocks
+- the activity level of both pools are computed using traditional techniques, such as reference counts, that measure data access rates. Since the two pools are only logically separate, this is done by keeping separate counts for each pool; on each buffer access, the appropriate count is updated based on whether the buffer is being accessed by sequential or random I/O.
+- prefetch I/Os will complete before the application has finished reading data in the previous block.
+- the next prefetch I/O will be started as soon as the application has read the last byte of the previous buffer.
+- data will be supplied as fast as the application reads it, and the application will never have to wait for disk I/O.
+- the complete cache is split into different working units, each of which controls a portion of the complete cache space and is responsible for buffers of a different size.
+- Each working unit is comprised of two sub-units that monitor the two kinds of workloads the system operates with.
+- the amount of different working units and the buffer sizes that they are responsible for change dynamically.
+- the cach manager recognizes at each moment in time the buffer sizes for which, with a high probability, there will be a lot of demand, and sets up the working units accordingly.
+- This aspect helps alleviate the problem of cache fragmentation by limiting the problem to one working unit and taking extra measures, such as merging and re-mapping, only there.
+- Usage statistics are constantly updated for each sub-unit of every working unit.
+- AttrIndex This is a data structure that allows finding a particular attribute value in the AttrFile.
+- AttrIndex is described in more detail under "Attribute Value Lookup" in the next section.
+- the attribute index is employed to determine whether an entry with the same value already exists in the AttrFile.
+- An indexing method such as hashing can be used for this purpose: To set or change an attribute value, a hash function is applied to the attribute data. The resulting hash value is used as an index into a hash table, where a list of AttrRefs will be found that refer to entries in the AttrFile with attribute data that hash to the same hash value. The new attribute data to be stored is compared against the data in all of these entries. If a match is found, an AttrRef referring to the existing entry is stored in the file's inode.
+- Step 1 all nodes that hold conflicting locks (nodes 1-3) send their file size change to the metanode.
+- this Step 1 is indicated by the arrows labeled "120" and "190" in the drawing (the metanode does not need to send a message to itself).
+- the metanode updates its locally cached file size by setting it to the maximum of its own file size and the file sizes it received. Accordingly, after Step 1, the drawing shows the file size cached at node 3 as 190.
+- nodes 1-3 downgrade their locks to "rw" mode as shown.
+- the main goal is to minimize token traffic.
+- a group monitoring service (like Phoenix group services) that monitors processes on all of the processors and detects processor and communication failures. This service is provided by joining "process groups"; all members of a group are informed when a member fails or when a new process attempts to join a group. During the start time, processors must join the "process groups”.
+Abstract
+Description
+TABLE 1 ______________________________________ 1 #STR1## Example of a hash tree after 4 splits: bucket 0 was split into bucket 0 andbucket 1, bucket 0 was split again into bucket 0 andbucket 2,bucket 2 was split again intobucket 2 and bucket 6,bucket 1 was split again intobucket 1 andbucket 3. The leaf nodes of the tree are labeled with the hash bucket number in binary and decimal. ______________________________________
+TABLE 2 ______________________________________ 1 #STR2## Table 2: Hash tree from Table 1 mapped into a sparse file. ______________________________________
+b"=reverse(reverse(b, h)+1, h)
+b"=reverse(reverse(b, h)+1, h)
+ceil((NM/K)/B),
+d=floor(B/(/K)=floor(BK/M).
+L=ceil(N/d)=ceil(N/floor(BK/M)).
+p, j, mod K
+q=floor(i/d).
+TABLE 3 ______________________________________ Computing the desired size of the prefetch pool ______________________________________ 1. Compute the effective number of disks as n.sub.-- eff = MIN( ceil((1 + L.sub.-- start/L.sub.-- io)*n.disks), ceil(T.sub.-- sys/T.sub.-- disk) ), where n.sub.-- disks = number of disks available to the file system L.sub.-- io = average I/O latency to read on block from disk T.sub.-- start = average I/O start latency T.sub.-- sys = maximum total I/O throughput of thedisk subsystem 2. For each open file instance, i, that is being accessed sequentially, Compute an adjusted consumption rate, c.sub.-- i, such that a fraction f (e.g. 90%) of all requests for the next data block arrive no earlier than the time predicted by the adjusted consumption rate, i.e., at intervals of a length given by the file system block size divided by c.sub.-- i. This can be computed statistically by measuring the average consumption rate and variance for the instance. Compute the total adjusted consumption as the sum of the adjusted consumption rates of all sequential open file instances: c.sub.-- total = sum c.sub.-- i, for i = 1 . . . n.sub.-- inst where n.sub.-- inst = number of sequentially accessed open file instances Compute the desired prefetch parallelism factor as n.sub.-- para = c.sub.-- total/T.sub.--disk 3. The desired number of prefetch buffers is then calculated as follows using the values computed inSteps 1 and 2: n.sub.-- bufs.sub.-- desired = MIN(n.sub.-- para, n.sub.-- eff) + n.sub.-- inst ______________________________________
+TABLE 4 ______________________________________ Scheduling prefetch I/O ______________________________________ Input to this procedure is the actual number of prefetch buffers, n.sub.-- bufs.sub.-- assigned, that was assigned by the buffer manager based on the desired number of buffers, n.sub.-- bufs.sub.-- desired, computed as shown in Table 3. The algorithm maintains two global counters: n.sub.-- io.sub.-- total is the number of prefetch I/O's currently in progress (or has been submitted to the device driver), and n.sub.-- prefetched is the number of buffers holding prefetched blocks that have not yet been read by the application for which the block was prefetched. The sum of these two numbers is the number of buffers currently in use for prefetching. Also, for each sequentially accessed open instance i, the algorithm keeps track of the predicted time at which the application will access the next block for which no prefetch I/O has been started yet. We denote this number by t.sub.-- next[i]. 1. Initialize n.sub.-- io.sub.-- total and n.sub.-- prefetched to zero. For each sequentially accessed open file instance i, initialize n.sub.-- io[i] to zero, and initialize t.sub.-- next[i] to be the time at which the application will request the next data block, based on the adjusted consumption rate, c.sub.-- i. Construct an ordered instance list by sorting all sequentially accessed open instance by t.sub.-- next[i], small value first. 2. If n.sub.-- io.sub.-- total + n.sub.-- prefetched is greater than or equal to n.sub.-- bufs.sub.-- assignedgoto Step 4; otherwise, continue to the next step. 3. Submit the next prefetch I/O request for the first instance i in the ordered instance list (this will be the instance with smallest t.sub.-- next[i]value). Update t.sub.-- next[i] to be the predicted time at which the application will request the next data block after the one for which the prefetch I/O was just started. Re-order this instance in the ordered instance list of ali instance according to its new t.sub.-- next[i] value Increment n.sub.-- io.sub.-- total. Go back toStep 2. 4. Wait for one of the following events to occur: a) A prefetch I/O completes: Decrement n.sub.-- io.sub.-- total and increment n.sub.-- prefetched Go back to the beginning of Step 4 (wait for the next event ). b) A read operation reaches the end of a block that had been prefetched Since the read operation will copy the data out of the prefetch buffer into the application's address space, that buffer is now available for another prefetch. Decrement n.sub.-- prefetched and go back toStep 2. c) The buffer manager changed the number of buffers assigned to the prefetch pool (n bufs.sub.-- assigned): Go back toStep 2. d) An open instance i is closed. Remove the instance from the ordered instance list. Decrement n.sub.-- prefetched by the number of buffers prefetched for that instance. Go back toStep 2. ______________________________________
+TABLE 5 ______________________________________ ro ww xw ro ** ww ** ** xw ** ** ** ______________________________________
+TABLE 6 ______________________________________ rw rf wf wa xw rw ** rf ** ** ** wf ** ** ** wa ** ** ** ** xw ** ** ** ** ** ______________________________________
+______________________________________ LOCK (range) retry: old.sub.-- revokes = nrevokes; if (not Test(byte.sub.-- range)) { // the token does not exist on this node acquire.sub.-- mutex; i.sub.-- am.sub.-- fetching = true; fetch.sub.-- is pending = true; release.sub.-- mutex; Acguire(byte.sub.-- range); get.sub.-- data.sub.-- associated.sub.-- with byte.sub.-- range; goto retry; } else { // we have the token locally - check that it was not stolen acquire.sub.-- mutex; if (old.sub.-- revokes != nrevokes) release.sub.-- mutex; goto retry; } // make sure there are no pending acquires; if there are // make sure they are finished first if (not i.sub.-- am.sub.-- fetching) { if (fetch.sub.-- is.sub.-- pending) { sleep(); goto retry; } } // if we acquired the token before the Test, we need to // release other threads. we hold the mutex, so no revokes // can interfere here if (i.sub.-- am.sub.-- fetching) { i.sub.-- am.sub.-- fetching = false; fetch.sub.-- is.sub.-- pending = false; wakeup(); } } err = insert.sub.-- range.sub.-- into.sub.-- lock.sub.-- table; if (err == E.sub.-- CONFLICT) { sleep(); // wait for someone to release the lock goto retry; } exit: if (i.sub.-- am.sub.-- fetching) { fetch.sub.-- is.sub.-- pending = false; i.sub.-- am.sub.-- fetching = false; } release.sub.-- mutex; } UNLOCK(range) { acquire.sub.-- mutex; delete.sub.-- range from.sub.-- lock.sub.-- table; wakeup; release.sub.-- mutex; } REVOKE(range) { retry: acquire.sub.-- mutex; err = insert.sub.-- range.sub.-- into.sub.-- lock.sub.-- table; if (err == E.sub.-- CONFLICT) { sleep(); goto retry; } nrevokes++; release.sub.-- mutex; put.sub.-- data.sub.-- associated.sub.-- with.sub.-- byte.sub.-- range; Relinquish(range); acquire.sub.-- mutex; delete.sub.-- range.sub.-- from.sub.-- lock.sub.-- table; wakeup; release.sub.-- mutex; } ______________________________________
+TABLE 7 ______________________________________ retry: if (I.sub.-- am.sub.-- metanode) then DO this.sub.-- and.sub.-- that else { err1 = send.sub.-- message.sub.-- to.sub.-- the.sub.-- metanode; // so the metanode will do // "this.sub.-- and.sub.-- that" if (errl == METANODE.sub.-- IS.sub.-- DEAD ||errl == METANODE.sub.-- NOT.sub.-- ANY.sub.-- MORE) { err2 = try.sub.-- to.sub.-- become.sub.-- metanode; if (err2 == OK) then // we became the metanode read.sub.-- metadata.sub.-- from.sub.-- disk (and other stuff to do when becoming a metanode) else // someone else became the metanode // find.sub.-- out.sub.-- the.sub.-- new.sub.-- metanode, and.sub.-- send.sub.-- it.sub.-- information.sub.-- that.sub.-- is.sub.-- not.sub.-- yet.sub.-- on.sub.-- disk // metanode has changed; in both cases, retry the original // operation } goto retry END TABLE ______________________________________
+Claims (10)
+Priority Applications (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US08/890,373 US5987477A (en) | 1997-07-11 | 1997-07-11 | Parallel file system and method for parallel write sharing |
+EP98304733A EP0890914B1 (en) | 1997-07-11 | 1998-06-16 | Parallel file system and method for parallel write sharing of files |
+DE69841034T DE69841034D1 (en) | 1997-07-11 | 1998-06-16 | Parallel file system and method for simultaneous writing to files |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US08/890,373 US5987477A (en) | 1997-07-11 | 1997-07-11 | Parallel file system and method for parallel write sharing |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US5987477A true US5987477A (en) | 1999-11-16 |
+Family
+ID=25396582
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US08/890,373 Expired - Lifetime US5987477A (en) | 1997-07-11 | 1997-07-11 | Parallel file system and method for parallel write sharing |
+Country Status (3)
+Country | Link |
+---|---|
+US (1) | US5987477A (en) |
+EP (1) | EP0890914B1 (en) |
+DE (1) | DE69841034D1 (en) |
+Cited By (129)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6308184B1 (en) * | 1999-04-09 | 2001-10-23 | Hewlett-Packard Company | Delayed unloading of a dynamically loadable file |
+US6353836B1 (en) * | 1998-02-13 | 2002-03-05 | Oracle Corporation | Method and apparatus for transferring data from the cache of one node to the cache of another node |
+US6374336B1 (en) | 1997-12-24 | 2002-04-16 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6389420B1 (en) * | 1999-09-30 | 2002-05-14 | Emc Corporation | File manager providing distributed locking and metadata management for shared data access by clients relinquishing locks after time period expiration |
+US6411970B1 (en) * | 1998-05-21 | 2002-06-25 | Intergraph Corporation | Methods and apparatus for an automatic file indexer |
+US6415373B1 (en) | 1997-12-24 | 2002-07-02 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US20020095403A1 (en) * | 1998-11-24 | 2002-07-18 | Sashikanth Chandrasekaran | Methods to perform disk writes in a distributed shared disk system needing consistency across failures |
+US20020099729A1 (en) * | 1998-11-24 | 2002-07-25 | Oracle Corporation | Managing checkpoint queues in a multiple node system |
+US6427235B1 (en) * | 1999-11-05 | 2002-07-30 | Sun Microsystems, Inc. | Method and apparatus for performing prefetching at the critical section level |
+US20020103907A1 (en) * | 2000-06-20 | 2002-08-01 | Erik Petersen | System and method of storing data to a recording medium |
+US20020107934A1 (en) * | 2001-01-12 | 2002-08-08 | Epicrealm Inc. | Method and system for dynamic distributed data caching |
+US20020123997A1 (en) * | 2000-06-26 | 2002-09-05 | International Business Machines Corporation | Data management application programming interface session management for a parallel file system |
+US20020169995A1 (en) * | 2001-05-10 | 2002-11-14 | International Business Machines Corporation | System, method, and computer program for selectable or programmable data consistency checking methodology |
+US20030004918A1 (en) * | 2001-06-28 | 2003-01-02 | International Business Machines Corporation | System and method for file system cooperation in a multi-threaded environment |
+US20030018782A1 (en) * | 2001-07-17 | 2003-01-23 | International Business Machines Corporation | Scalable memory management of token state for distributed lock managers |
+US20030018785A1 (en) * | 2001-07-17 | 2003-01-23 | International Business Machines Corporation | Distributed locking protocol with asynchronous token prefetch and relinquish |
+US6523078B1 (en) * | 1999-11-23 | 2003-02-18 | Steeleye Technology, Inc. | Distributed locking system and method for a clustered system having a distributed system for storing cluster configuration information |
+US20030140051A1 (en) * | 2002-01-23 | 2003-07-24 | Hitachi, Ltd. | System and method for virtualizing a distributed network storage as a single-view file system |
+US20030138275A1 (en) * | 2002-01-23 | 2003-07-24 | Makoto Yabuki | Color image recording apparatus |
+US20030187866A1 (en) * | 2002-03-29 | 2003-10-02 | Panasas, Inc. | Hashing objects into multiple directories for better concurrency and manageability |
+US20030187883A1 (en) * | 2002-03-29 | 2003-10-02 | Panasas, Inc. | Internally consistent file system image in distributed object-based data storage |
+US20030191745A1 (en) * | 2002-04-04 | 2003-10-09 | Xiaoye Jiang | Delegation of metadata management in a storage system by leasing of free file system blocks and i-nodes from a file system owner |
+US6633904B1 (en) * | 1999-09-16 | 2003-10-14 | Fujitsu Limited | Fast data exchange system between different type computer and medium storing program of extent information and transformation |
+US20030220923A1 (en) * | 2002-05-23 | 2003-11-27 | International Business Machines Corporation | Mechanism for running parallel application programs on metadata controller nodes |
+US20030220943A1 (en) * | 2002-05-23 | 2003-11-27 | International Business Machines Corporation | Recovery of a single metadata controller failure in a storage area network environment |
+US20030221062A1 (en) * | 2002-05-24 | 2003-11-27 | Hitachi, Ltd. | Disk array system and cache control method |
+US20040030822A1 (en) * | 2002-08-09 | 2004-02-12 | Vijayan Rajan | Storage virtualization by layering virtual disk objects on a file system |
+US20040030668A1 (en) * | 2002-08-09 | 2004-02-12 | Brian Pawlowski | Multi-protocol storage appliance that provides integrated support for file and block access protocols |
+US6708175B2 (en) | 2001-06-06 | 2004-03-16 | International Business Machines Corporation | Program support for disk fencing in a shared disk parallel file system across storage area network |
+US20040078654A1 (en) * | 2002-03-29 | 2004-04-22 | Holland Mark C. | Hybrid quorum/primary-backup fault-tolerance model |
+US20040078633A1 (en) * | 2002-03-29 | 2004-04-22 | Panasas, Inc. | Distributing manager failure-induced workload through the use of a manager-naming scheme |
+US20040143712A1 (en) * | 2003-01-16 | 2004-07-22 | International Business Machines Corporation | Task synchronization mechanism and method |
+US20040143583A1 (en) * | 2003-01-17 | 2004-07-22 | International Business Machines Corporation | Trusted access by an extendible framework method, system, article of manufacture, and computer program product |
+US20040260768A1 (en) * | 2003-04-22 | 2004-12-23 | Makio Mizuno | Storage system |
+US6850938B1 (en) | 2001-02-08 | 2005-02-01 | Cisco Technology, Inc. | Method and apparatus providing optimistic locking of shared computer resources |
+US20050039049A1 (en) * | 2003-08-14 | 2005-02-17 | International Business Machines Corporation | Method and apparatus for a multiple concurrent writer file system |
+US20050066184A1 (en) * | 2001-01-17 | 2005-03-24 | Microsoft Corporation | Exclusive encryption |
+US20050065986A1 (en) * | 2003-09-23 | 2005-03-24 | Peter Bixby | Maintenance of a file version set including read-only and read-write snapshot copies of a production file |
+US20050071330A1 (en) * | 2001-06-06 | 2005-03-31 | Microsoft Corporation | Locating potentially identical objects across multiple computers based on stochastic partitioning of workload |
+US20050114289A1 (en) * | 2003-11-25 | 2005-05-26 | Fair Robert L. | Adaptive file readahead technique for multiple read streams |
+US6915302B1 (en) * | 1999-10-01 | 2005-07-05 | International Business Machines Corporation | Method, system, and program for accessing files in a file system |
+US20050193240A1 (en) * | 2004-02-17 | 2005-09-01 | International Business Machines (Ibm) Corporation | Dynamic reconfiguration of memory in a multi-cluster storage control unit |
+US20050192932A1 (en) * | 2003-12-02 | 2005-09-01 | Michael Kazar | Storage system architecture for striping data container content across volumes of a cluster |
+US20050246397A1 (en) * | 2004-04-30 | 2005-11-03 | Edwards John K | Cloning technique for efficiently creating a copy of a volume in a storage system |
+US20050246382A1 (en) * | 2004-04-30 | 2005-11-03 | Edwards John K | Extension of write anywhere file layout write allocation |
+US6973455B1 (en) | 1999-03-03 | 2005-12-06 | Emc Corporation | File server system providing direct data sharing between clients with a server acting as an arbiter and coordinator |
+US6985995B2 (en) | 2002-03-29 | 2006-01-10 | Panasas, Inc. | Data file migration from a mirrored RAID to a non-mirrored XOR-based RAID without rewriting the data |
+US20060047814A1 (en) * | 2004-08-27 | 2006-03-02 | Cisco Technology, Inc. | System and method for managing end user approval for charging in a network environment |
+US20060064554A1 (en) * | 2004-09-21 | 2006-03-23 | Fridella Stephen A | Lock management for concurrent access to a single file from multiple data mover computers |
+US20060074940A1 (en) * | 2004-10-05 | 2006-04-06 | International Business Machines Corporation | Dynamic management of node clusters to enable data sharing |
+US7069268B1 (en) | 2003-01-13 | 2006-06-27 | Cisco Technology, Inc. | System and method for identifying data using parallel hashing |
+US7072916B1 (en) * | 2000-08-18 | 2006-07-04 | Network Appliance, Inc. | Instant snapshot |
+US7111057B1 (en) * | 2000-10-31 | 2006-09-19 | Akamai Technologies, Inc. | Method and system for purging content from a content delivery network |
+US20060224600A1 (en) * | 2005-04-01 | 2006-10-05 | Ronen Grosman | Traversal of empty regions in a searchable data structure |
+US20060248088A1 (en) * | 2005-04-29 | 2006-11-02 | Michael Kazar | System and method for multi-tiered meta-data caching and distribution in a clustered computer environment |
+US20060248379A1 (en) * | 2005-04-29 | 2006-11-02 | Jernigan Richard P Iv | System and method for restriping data across a plurality of volumes |
+US20060288049A1 (en) * | 2005-06-20 | 2006-12-21 | Fabio Benedetti | Method, System and computer Program for Concurrent File Update |
+US20070022138A1 (en) * | 2005-07-22 | 2007-01-25 | Pranoop Erasani | Client failure fencing mechanism for fencing network file system data in a host-cluster environment |
+US20070027941A1 (en) * | 2005-07-27 | 2007-02-01 | International Business Machines Corporation | System, method, and service for enforcing resource utilization in a distributed system |
+US20070055702A1 (en) * | 2005-09-07 | 2007-03-08 | Fridella Stephen A | Metadata offload for a file server cluster |
+US20070073830A1 (en) * | 2005-09-15 | 2007-03-29 | Burnett Rodney C | Method and apparatus for managing multi-stream input/output requests in a network file server |
+US7200651B1 (en) | 1999-07-02 | 2007-04-03 | Cisco Technology, Inc. | Dynamic configuration and up-dating of integrated distributed applications |
+US20070136282A1 (en) * | 2005-11-25 | 2007-06-14 | Sony Corporation | Information processing apparatus and method, information recording medium, and computer program |
+US20070244908A1 (en) * | 2005-10-28 | 2007-10-18 | Vijayan Rajan | System and method for optimizing multi-pathing support in a distributed storage system environment |
+US20070294324A1 (en) * | 2006-06-16 | 2007-12-20 | Microsoft Corporation | Techniques to manage media files |
+US20070294311A1 (en) * | 2006-06-16 | 2007-12-20 | Microsoft Corporation | Application program interface to manage media files |
+US20070299843A1 (en) * | 2006-06-23 | 2007-12-27 | Microsoft Corporation | Solving table locking problems associated with concurrent processing |
+US20080016249A1 (en) * | 2006-07-17 | 2008-01-17 | The Mathworks, Inc. | Recoverable error detection for concurrent computing programs |
+US20080071804A1 (en) * | 2006-09-15 | 2008-03-20 | International Business Machines Corporation | File system access control between multiple clusters |
+US7349940B1 (en) | 2000-11-03 | 2008-03-25 | Agere Systems Inc. | Communication protocol for data exchange via shared files |
+US20080147755A1 (en) * | 2002-10-10 | 2008-06-19 | Chapman Dennis E | System and method for file system snapshot of a virtual logical disk |
+US20080162481A1 (en) * | 2001-01-30 | 2008-07-03 | Cisco Technology, Inc. | Controlling access of concurrent users of computer resources in a distributed system using an improved semaphore counting approach |
+US7401093B1 (en) | 2003-11-10 | 2008-07-15 | Network Appliance, Inc. | System and method for managing file data during consistency points |
+US20080189343A1 (en) * | 2006-12-29 | 2008-08-07 | Robert Wyckoff Hyer | System and method for performing distributed consistency verification of a clustered file system |
+US20080243963A1 (en) * | 2007-03-30 | 2008-10-02 | Microsoft Corporation | Quota Enforcement With Transacted File Systems |
+US20080270690A1 (en) * | 2007-04-27 | 2008-10-30 | English Robert M | System and method for efficient updates of sequential block storage |
+US7448077B2 (en) | 2002-05-23 | 2008-11-04 | International Business Machines Corporation | File level security for a metadata controller in a storage area network |
+US20080310267A1 (en) * | 2007-06-12 | 2008-12-18 | Sony Corporation | Information processing apparatus, information processing method and computer program |
+US20090019047A1 (en) * | 2007-07-11 | 2009-01-15 | International Business Machines Corporation | Concurrent directory update in a cluster file system |
+US20090019098A1 (en) * | 2007-07-10 | 2009-01-15 | International Business Machines Corporation | File system mounting in a clustered file system |
+US20090034377A1 (en) * | 2007-04-27 | 2009-02-05 | English Robert M | System and method for efficient updates of sequential block storage |
+US20090063614A1 (en) * | 2007-08-27 | 2009-03-05 | International Business Machines Corporation | Efficiently Distributing Class Files Over A Network Without Global File System Support |
+US20090119304A1 (en) * | 2002-01-30 | 2009-05-07 | Red Hat, Inc. | Metadata structures and related locking techniques to improve performance and scalability in a cluster file system |
+US7548986B1 (en) * | 2003-03-17 | 2009-06-16 | Hewlett-Packard Development Company, L.P. | Electronic device network providing streaming updates |
+US7590660B1 (en) | 2006-03-21 | 2009-09-15 | Network Appliance, Inc. | Method and system for efficient database cloning |
+US7596563B1 (en) * | 1999-10-28 | 2009-09-29 | Hewlett-Packard Development Company, L.P. | Computerized file system and method |
+US7698501B1 (en) | 2005-04-29 | 2010-04-13 | Netapp, Inc. | System and method for utilizing sparse data containers in a striped volume set |
+US7721062B1 (en) | 2003-11-10 | 2010-05-18 | Netapp, Inc. | Method for detecting leaked buffer writes across file system consistency points |
+US20100153397A1 (en) * | 2000-10-13 | 2010-06-17 | Miosoft Corporation | Maintaining a relationship between two different items of data |
+US7757056B1 (en) | 2005-03-16 | 2010-07-13 | Netapp, Inc. | System and method for efficiently calculating storage required to split a clone volume |
+US7783611B1 (en) | 2003-11-10 | 2010-08-24 | Netapp, Inc. | System and method for managing file metadata during consistency points |
+US7797489B1 (en) | 2007-06-01 | 2010-09-14 | Netapp, Inc. | System and method for providing space availability notification in a distributed striped volume set |
+US7818299B1 (en) | 2002-03-19 | 2010-10-19 | Netapp, Inc. | System and method for determining changes in two snapshots and for transmitting changes to a destination snapshot |
+US7827350B1 (en) | 2007-04-27 | 2010-11-02 | Netapp, Inc. | Method and system for promoting a snapshot in a distributed file system |
+US20100281214A1 (en) * | 2009-04-30 | 2010-11-04 | Netapp, Inc. | Data distribution through capacity leveling in a striped file system |
+US7886364B2 (en) | 2001-03-26 | 2011-02-08 | Microsoft Corporation | Encrypted key cache |
+US7930278B2 (en) | 1998-02-13 | 2011-04-19 | Oracle International Corporation | Methods to perform disk writes in a distributed shared disk system needing consistency across failures |
+US7975032B2 (en) | 2001-01-12 | 2011-07-05 | Parallel Networks, Llc | Method and system for community data caching |
+US7984259B1 (en) | 2007-12-17 | 2011-07-19 | Netapp, Inc. | Reducing load imbalance in a storage system |
+US7996607B1 (en) | 2008-01-28 | 2011-08-09 | Netapp, Inc. | Distributing lookup operations in a striped storage system |
+US7996636B1 (en) | 2007-11-06 | 2011-08-09 | Netapp, Inc. | Uniquely identifying block context signatures in a storage volume hierarchy |
+US8112452B2 (en) | 2001-03-26 | 2012-02-07 | Microsoft Corporation | Serverless distributed file system |
+US20120036394A1 (en) * | 2009-04-15 | 2012-02-09 | Chengdu Huawei Symantec Technologies Co., Ltd. | Data recovery method, data node, and distributed file system |
+US8140622B2 (en) | 2002-05-23 | 2012-03-20 | International Business Machines Corporation | Parallel metadata service in storage area network environment |
+US8219821B2 (en) | 2007-03-27 | 2012-07-10 | Netapp, Inc. | System and method for signature based data container recognition |
+US20120246436A1 (en) * | 2011-03-21 | 2012-09-27 | Microsoft Corporation | Combining memory pages having identical content |
+US8312214B1 (en) | 2007-03-28 | 2012-11-13 | Netapp, Inc. | System and method for pausing disk drives in an aggregate |
+US8312046B1 (en) | 2007-02-28 | 2012-11-13 | Netapp, Inc. | System and method for enabling a data container to appear in a plurality of locations in a super-namespace |
+US20120311259A1 (en) * | 2007-10-05 | 2012-12-06 | Imation Corp. | Methods for controlling remote archiving systems |
+US20130007733A1 (en) * | 2011-06-29 | 2013-01-03 | Microsoft Corporation | Virtual machine block substitution |
+US8484649B2 (en) | 2011-01-05 | 2013-07-09 | International Business Machines Corporation | Amortizing costs of shared scans |
+US8489811B1 (en) | 2006-12-29 | 2013-07-16 | Netapp, Inc. | System and method for addressing data containers using data set identifiers |
+US8510334B2 (en) | 2009-11-05 | 2013-08-13 | Oracle International Corporation | Lock manager on disk |
+US8526940B1 (en) | 2004-08-17 | 2013-09-03 | Palm, Inc. | Centralized rules repository for smart phone customer care |
+US8578361B2 (en) | 2004-04-21 | 2013-11-05 | Palm, Inc. | Updating an electronic device with update agent code |
+US8699178B2 (en) | 2008-07-11 | 2014-04-15 | Imation Corp. | Library system with connector for removable cartridges |
+US8725986B1 (en) | 2008-04-18 | 2014-05-13 | Netapp, Inc. | System and method for volume block number to disk block number mapping |
+US8752044B2 (en) | 2006-07-27 | 2014-06-10 | Qualcomm Incorporated | User experience and dependency management in a mobile device |
+US8893110B2 (en) | 2006-06-08 | 2014-11-18 | Qualcomm Incorporated | Device management in a network |
+US8898105B1 (en) * | 2006-12-22 | 2014-11-25 | Amazon Technologies, Inc. | Scalable partitioning in a multilayered data service framework |
+US8935225B2 (en) | 2000-10-13 | 2015-01-13 | Miosoft Corporation | Persistent data storage techniques |
+US20160004718A1 (en) * | 2014-07-02 | 2016-01-07 | Panzura, Inc. | Using byte-range locks to manage multiple concurrent accesses to a file in a distributed filesystem |
+US9424271B2 (en) | 2012-08-30 | 2016-08-23 | International Business Machines Corporation | Atomic incremental load for map-reduce systems on append-only file systems |
+US9824114B1 (en) * | 2015-03-30 | 2017-11-21 | EMC IP Holding Company LLC | Multiple concurrent cursors for file repair |
+RU2673019C1 (en) * | 2017-12-14 | 2018-11-21 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for providing access to shared resource in distributed computing system |
+CN109716279A (en) * | 2016-09-15 | 2019-05-03 | 净睿存储股份有限公司 | It is persistent adaptive concurrent for being written |
+US20190384688A1 (en) * | 2017-01-12 | 2019-12-19 | Bull Sas | Method for Analysing the Rules of Changes Between the Levels of Use of Resources of a Computer System |
+US10671370B2 (en) * | 2018-05-30 | 2020-06-02 | Red Hat, Inc. | Distributing file system states |
+US10896071B2 (en) * | 2011-11-19 | 2021-01-19 | International Business Machines Corporation | Partial reading of input files to process business objects |
+Families Citing this family (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US9438672B2 (en) | 2014-02-14 | 2016-09-06 | Prakash Khemani | Method for client specific database change propagation |
+Citations (15)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4274139A (en) * | 1978-06-15 | 1981-06-16 | International Business Machines Corporation | Digital telecommunication network having improved data processing systems |
+US5043876A (en) * | 1988-05-27 | 1991-08-27 | International Business Machines Corporation | N-level file shadowing and recovery in a shared file system |
+US5202971A (en) * | 1987-02-13 | 1993-04-13 | International Business Machines Corporation | System for file and record locking between nodes in a distributed data processing environment maintaining one copy of each file lock |
+US5226159A (en) * | 1989-05-15 | 1993-07-06 | International Business Machines Corporation | File lock management in a distributed data processing system |
+US5454108A (en) * | 1994-01-26 | 1995-09-26 | International Business Machines Corporation | Distributed lock manager using a passive, state-full control-server |
+US5463736A (en) * | 1992-03-30 | 1995-10-31 | International Business Machines Corporation | Coupling facility for receiving commands from plurality of hosts for activating selected connection paths to I/O devices and maintaining status thereof |
+US5490270A (en) * | 1994-06-16 | 1996-02-06 | International Business Machines Corporation | Simultaneous updates to the modification time attribute of a shared file in a cluster having a server and client nodes |
+US5551046A (en) * | 1991-06-14 | 1996-08-27 | International Business Machines Corporation | Method for non-hierarchical lock management in a multi-system shared data environment |
+US5566297A (en) * | 1994-06-16 | 1996-10-15 | International Business Machines Corporation | Non-disruptive recovery from file server failure in a highly available file system for clustered computing environments |
+US5596754A (en) * | 1992-10-29 | 1997-01-21 | Digital Equipment Corporation | Method for performing private lock management |
+US5659682A (en) * | 1994-06-16 | 1997-08-19 | International Business Machines Corporation | Scheme to determine completion of directory operations for server recovery |
+US5692182A (en) * | 1995-10-05 | 1997-11-25 | International Business Machines Corporation | Bufferpool coherency for identifying and retrieving versions of workfile data using a producing DBMS and a consuming DBMS |
+US5701473A (en) * | 1995-03-17 | 1997-12-23 | Unisys Corporation | System for optimally storing a data file for enhanced query processing |
+US5802366A (en) * | 1989-09-08 | 1998-09-01 | Auspex Systems, Inc. | Parallel I/O network file server architecture |
+US5802599A (en) * | 1994-02-08 | 1998-09-01 | International Business Machines Corporation | System and method for allocating storage in a fragmented storage space |
+-
+1997
+- 1997-07-11 US US08/890,373 patent/US5987477A/en not_active Expired - Lifetime
+-
+1998
+- 1998-06-16 EP EP98304733A patent/EP0890914B1/en not_active Expired - Lifetime
+- 1998-06-16 DE DE69841034T patent/DE69841034D1/en not_active Expired - Lifetime
+Patent Citations (15)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4274139A (en) * | 1978-06-15 | 1981-06-16 | International Business Machines Corporation | Digital telecommunication network having improved data processing systems |
+US5202971A (en) * | 1987-02-13 | 1993-04-13 | International Business Machines Corporation | System for file and record locking between nodes in a distributed data processing environment maintaining one copy of each file lock |
+US5043876A (en) * | 1988-05-27 | 1991-08-27 | International Business Machines Corporation | N-level file shadowing and recovery in a shared file system |
+US5226159A (en) * | 1989-05-15 | 1993-07-06 | International Business Machines Corporation | File lock management in a distributed data processing system |
+US5802366A (en) * | 1989-09-08 | 1998-09-01 | Auspex Systems, Inc. | Parallel I/O network file server architecture |
+US5551046A (en) * | 1991-06-14 | 1996-08-27 | International Business Machines Corporation | Method for non-hierarchical lock management in a multi-system shared data environment |
+US5463736A (en) * | 1992-03-30 | 1995-10-31 | International Business Machines Corporation | Coupling facility for receiving commands from plurality of hosts for activating selected connection paths to I/O devices and maintaining status thereof |
+US5596754A (en) * | 1992-10-29 | 1997-01-21 | Digital Equipment Corporation | Method for performing private lock management |
+US5454108A (en) * | 1994-01-26 | 1995-09-26 | International Business Machines Corporation | Distributed lock manager using a passive, state-full control-server |
+US5802599A (en) * | 1994-02-08 | 1998-09-01 | International Business Machines Corporation | System and method for allocating storage in a fragmented storage space |
+US5566297A (en) * | 1994-06-16 | 1996-10-15 | International Business Machines Corporation | Non-disruptive recovery from file server failure in a highly available file system for clustered computing environments |
+US5490270A (en) * | 1994-06-16 | 1996-02-06 | International Business Machines Corporation | Simultaneous updates to the modification time attribute of a shared file in a cluster having a server and client nodes |
+US5659682A (en) * | 1994-06-16 | 1997-08-19 | International Business Machines Corporation | Scheme to determine completion of directory operations for server recovery |
+US5701473A (en) * | 1995-03-17 | 1997-12-23 | Unisys Corporation | System for optimally storing a data file for enhanced query processing |
+US5692182A (en) * | 1995-10-05 | 1997-11-25 | International Business Machines Corporation | Bufferpool coherency for identifying and retrieving versions of workfile data using a producing DBMS and a consuming DBMS |
+Non-Patent Citations (8)
+Title |
+---|
+"CMS Interactive File Sharing Prototype", by Eshel et al., IBM Research Division, T.J. Watson Research Center, Yorktown Heights, NY, RC13371 (#50869) Dec. 18, 1987. |
+"IBM VideoCharger Server for AIX", International Business Machines Corporation, Mar. 1997. |
+CMS Interactive File Sharing Prototype , by Eshel et al., IBM Research Division, T.J. Watson Research Center, Yorktown Heights, NY, RC13371 ( 50869) Dec. 18, 1987. * |
+Corbett et al., "Vesta Parallel File System," ACM Transactions on Computer Systems, vol. 14 No. 3, Aug. 1996 pp. 225-264. |
+Corbett et al., Vesta Parallel File System, ACM Transactions on Computer Systems, vol. 14 No. 3, Aug. 1996 pp. 225 264. * |
+Custer, H., "Inside the Windows NT File System," Microsoft Press, 1994, pp. 49-52. |
+Custer, H., Inside the Windows NT File System, Microsoft Press, 1994, pp. 49 52. * |
+IBM VideoCharger Server for AIX , International Business Machines Corporation, Mar. 1997. * |
+Cited By (289)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8984223B2 (en) | 1997-12-24 | 2015-03-17 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US7917696B2 (en) | 1997-12-24 | 2011-03-29 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US7487309B2 (en) | 1997-12-24 | 2009-02-03 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6760808B2 (en) | 1997-12-24 | 2004-07-06 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US8478957B2 (en) | 1997-12-24 | 2013-07-02 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US7660947B2 (en) | 1997-12-24 | 2010-02-09 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6415373B1 (en) | 1997-12-24 | 2002-07-02 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6449688B1 (en) | 1997-12-24 | 2002-09-10 | Avid Technology, Inc. | Computer system and process for transferring streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US20040243763A1 (en) * | 1997-12-24 | 2004-12-02 | Peters Eric C. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US9432460B2 (en) | 1997-12-24 | 2016-08-30 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US9152647B2 (en) | 1997-12-24 | 2015-10-06 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US20070016727A1 (en) * | 1997-12-24 | 2007-01-18 | Peters Eric C | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6374336B1 (en) | 1997-12-24 | 2002-04-16 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US7111115B2 (en) | 1997-12-24 | 2006-09-19 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6785768B2 (en) | 1997-12-24 | 2004-08-31 | Avid Technology, Inc. | Computer system and process for transferring streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US8140755B2 (en) | 1997-12-24 | 2012-03-20 | Avid Technology, Inc. | Computer system and process for transferring multiple high bandwidth streams of data between multiple storage units and multiple applications in a scalable and reliable manner |
+US6507853B2 (en) | 1998-02-13 | 2003-01-14 | Oracle Corporation | Recovering data from a failed cache using recovery logs of caches that updated the data |
+US6411968B2 (en) | 1998-02-13 | 2002-06-25 | Oracle Corporation | Managing recovery of data after failure of one or more caches |
+US6353836B1 (en) * | 1998-02-13 | 2002-03-05 | Oracle Corporation | Method and apparatus for transferring data from the cache of one node to the cache of another node |
+US7930278B2 (en) | 1998-02-13 | 2011-04-19 | Oracle International Corporation | Methods to perform disk writes in a distributed shared disk system needing consistency across failures |
+US6564234B2 (en) | 1998-02-13 | 2003-05-13 | Oracle Corporation | Managing a resource used by a plurality of nodes |
+US6564230B2 (en) | 1998-02-13 | 2003-05-13 | Oracle Corporation | Transferring a resource between caches of different nodes |
+US6567827B2 (en) | 1998-02-13 | 2003-05-20 | Oracle Corporation | Using a checkpoint to manage data that is shared by a plurality of nodes |
+US6609136B2 (en) | 1998-02-13 | 2003-08-19 | Oracle Corporation | Recovering data from a failed cache using a surviving cache |
+US6411970B1 (en) * | 1998-05-21 | 2002-06-25 | Intergraph Corporation | Methods and apparatus for an automatic file indexer |
+US7296039B2 (en) | 1998-11-24 | 2007-11-13 | Oracle International Corporation | Managing checkpoint queues in a multiple node system |
+US20050065907A1 (en) * | 1998-11-24 | 2005-03-24 | Oracle Corporation | Managing checkpoint queues in a multiple node system |
+US20060195648A1 (en) * | 1998-11-24 | 2006-08-31 | Oracle International Corporation | Managing checkpoint queues in a multiple node system |
+US7577690B2 (en) | 1998-11-24 | 2009-08-18 | Oracle International Corporation | Managing checkpoint queues in a multiple node system |
+US20020095403A1 (en) * | 1998-11-24 | 2002-07-18 | Sashikanth Chandrasekaran | Methods to perform disk writes in a distributed shared disk system needing consistency across failures |
+US20020099729A1 (en) * | 1998-11-24 | 2002-07-25 | Oracle Corporation | Managing checkpoint queues in a multiple node system |
+US7065540B2 (en) | 1998-11-24 | 2006-06-20 | Oracle International Corporation | Managing checkpoint queues in a multiple node system |
+US7200623B2 (en) | 1998-11-24 | 2007-04-03 | Oracle International Corp. | Methods to perform disk writes in a distributed shared disk system needing consistency across failures |
+US7620671B2 (en) | 1999-03-03 | 2009-11-17 | Emc Corporation | Delegation of metadata management in a storage system by leasing of free file system blocks from a file system owner |
+US6973455B1 (en) | 1999-03-03 | 2005-12-06 | Emc Corporation | File server system providing direct data sharing between clients with a server acting as an arbiter and coordinator |
+US20050240628A1 (en) * | 1999-03-03 | 2005-10-27 | Xiaoye Jiang | Delegation of metadata management in a storage system by leasing of free file system blocks from a file system owner |
+US6681216B2 (en) | 1999-04-09 | 2004-01-20 | Hewlett-Packard Development Company, L.P. | Delayed unloading of a dynamically loadable file |
+US6308184B1 (en) * | 1999-04-09 | 2001-10-23 | Hewlett-Packard Company | Delayed unloading of a dynamically loadable file |
+US7200651B1 (en) | 1999-07-02 | 2007-04-03 | Cisco Technology, Inc. | Dynamic configuration and up-dating of integrated distributed applications |
+US6633904B1 (en) * | 1999-09-16 | 2003-10-14 | Fujitsu Limited | Fast data exchange system between different type computer and medium storing program of extent information and transformation |
+US6389420B1 (en) * | 1999-09-30 | 2002-05-14 | Emc Corporation | File manager providing distributed locking and metadata management for shared data access by clients relinquishing locks after time period expiration |
+US6915302B1 (en) * | 1999-10-01 | 2005-07-05 | International Business Machines Corporation | Method, system, and program for accessing files in a file system |
+US7596563B1 (en) * | 1999-10-28 | 2009-09-29 | Hewlett-Packard Development Company, L.P. | Computerized file system and method |
+US6427235B1 (en) * | 1999-11-05 | 2002-07-30 | Sun Microsystems, Inc. | Method and apparatus for performing prefetching at the critical section level |
+US6523078B1 (en) * | 1999-11-23 | 2003-02-18 | Steeleye Technology, Inc. | Distributed locking system and method for a clustered system having a distributed system for storing cluster configuration information |
+US20020103907A1 (en) * | 2000-06-20 | 2002-08-01 | Erik Petersen | System and method of storing data to a recording medium |
+US20060195616A1 (en) * | 2000-06-20 | 2006-08-31 | Erik Petersen | System and method for storing data to a recording medium |
+US7120650B2 (en) | 2000-06-26 | 2006-10-10 | International Business Machines Corporation | Implementing data management application programming interface access rights in a parallel file system |
+US20020124013A1 (en) * | 2000-06-26 | 2002-09-05 | International Business Machines Corporation | Data management application programming interface failure recovery in a parallel file system |
+US6990478B2 (en) | 2000-06-26 | 2006-01-24 | International Business Machines Corporation | Data management application programming interface for a parallel file system |
+US7111291B2 (en) | 2000-06-26 | 2006-09-19 | International Business Machines Corporation | Data management application programming interface session management for a parallel file system |
+US7024582B2 (en) | 2000-06-26 | 2006-04-04 | International Business Machines Corporation | Data management application programming interface failure recovery in a parallel file system |
+US20020123997A1 (en) * | 2000-06-26 | 2002-09-05 | International Business Machines Corporation | Data management application programming interface session management for a parallel file system |
+US7072894B2 (en) | 2000-06-26 | 2006-07-04 | International Business Machines Corporation | Data management application programming interface handling mount on multiple nodes in a parallel file system |
+US7454445B2 (en) | 2000-08-18 | 2008-11-18 | Network Appliance, Inc. | Write allocation based on storage system map and snapshot |
+US7072916B1 (en) * | 2000-08-18 | 2006-07-04 | Network Appliance, Inc. | Instant snapshot |
+US8935225B2 (en) | 2000-10-13 | 2015-01-13 | Miosoft Corporation | Persistent data storage techniques |
+US9189536B2 (en) * | 2000-10-13 | 2015-11-17 | Miosoft Corporation | Maintaining a relationship between two different items of data |
+US9830348B2 (en) | 2000-10-13 | 2017-11-28 | Miosoft Corporation | Persistent data storage techniques |
+US20100153397A1 (en) * | 2000-10-13 | 2010-06-17 | Miosoft Corporation | Maintaining a relationship between two different items of data |
+US7111057B1 (en) * | 2000-10-31 | 2006-09-19 | Akamai Technologies, Inc. | Method and system for purging content from a content delivery network |
+US7349940B1 (en) | 2000-11-03 | 2008-03-25 | Agere Systems Inc. | Communication protocol for data exchange via shared files |
+US8504663B2 (en) | 2001-01-12 | 2013-08-06 | Parallel Networks, Llc | Method and system for community data caching |
+US7975032B2 (en) | 2001-01-12 | 2011-07-05 | Parallel Networks, Llc | Method and system for community data caching |
+US9602618B2 (en) | 2001-01-12 | 2017-03-21 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US9369540B2 (en) * | 2001-01-12 | 2016-06-14 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US20100241810A1 (en) * | 2001-01-12 | 2010-09-23 | Parallel Networks, Llc | Method and System for Dynamic Distributed Data Caching |
+US7890701B2 (en) | 2001-01-12 | 2011-02-15 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US9210236B2 (en) | 2001-01-12 | 2015-12-08 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US20020107934A1 (en) * | 2001-01-12 | 2002-08-08 | Epicrealm Inc. | Method and system for dynamic distributed data caching |
+US7730262B2 (en) | 2001-01-12 | 2010-06-01 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US8572326B2 (en) | 2001-01-12 | 2013-10-29 | Parallel Networks, Llc | Method and system for dynamic distributed data caching when a source of data is not available |
+US7188145B2 (en) * | 2001-01-12 | 2007-03-06 | Epicrealm Licensing Llc | Method and system for dynamic distributed data caching |
+US8271628B2 (en) | 2001-01-12 | 2012-09-18 | Parallel Networks, Llc | Method and system for community data caching |
+US7519677B2 (en) | 2001-01-12 | 2009-04-14 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US8205044B2 (en) | 2001-01-12 | 2012-06-19 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US20070150575A1 (en) * | 2001-01-12 | 2007-06-28 | Epicrealm Operating Inc. | Method and System for Dynamic Distributed Data Caching |
+US20070150577A1 (en) * | 2001-01-12 | 2007-06-28 | Epicrealm Operating Inc. | Method and System for Dynamic Distributed Data Caching |
+US20110161421A1 (en) * | 2001-01-12 | 2011-06-30 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US8135812B2 (en) | 2001-01-12 | 2012-03-13 | Parallel Networks, Llc | Method and system for community data caching |
+US7694076B2 (en) | 2001-01-12 | 2010-04-06 | Parallel Networks, Llc | Method and system for dynamic distributed data caching |
+US20150189037A1 (en) * | 2001-01-12 | 2015-07-02 | Parallel Networks, Llc | Method and System for Dynamic Distributed Data Caching |
+US7571327B2 (en) | 2001-01-17 | 2009-08-04 | Microsoft Corporation | Exclusive encryption |
+US20050066185A1 (en) * | 2001-01-17 | 2005-03-24 | Microsoft Corporation | Exclusive encryption |
+US7555656B2 (en) | 2001-01-17 | 2009-06-30 | Microsoft Corporation | Exclusive encryption |
+US20050066184A1 (en) * | 2001-01-17 | 2005-03-24 | Microsoft Corporation | Exclusive encryption |
+US7685415B2 (en) | 2001-01-17 | 2010-03-23 | Microsoft Corporation | Exclusive encryption |
+US7770023B2 (en) | 2001-01-17 | 2010-08-03 | Microsoft Corporation | Exclusive encryption |
+US7743146B2 (en) * | 2001-01-30 | 2010-06-22 | Cisco Technology, Inc. | Controlling access of concurrent users of computer resources in a distributed system using an improved semaphore counting approach |
+US20080162481A1 (en) * | 2001-01-30 | 2008-07-03 | Cisco Technology, Inc. | Controlling access of concurrent users of computer resources in a distributed system using an improved semaphore counting approach |
+US20050138375A1 (en) * | 2001-02-08 | 2005-06-23 | Shahrokh Sadjadi | Method and apparatus providing optimistic locking of shared computer resources |
+US6850938B1 (en) | 2001-02-08 | 2005-02-01 | Cisco Technology, Inc. | Method and apparatus providing optimistic locking of shared computer resources |
+US8745707B2 (en) | 2001-02-08 | 2014-06-03 | Cisco Technology, Inc. | Method and apparatus providing optimistic locking of shared computer resources |
+US20110173169A1 (en) * | 2001-03-07 | 2011-07-14 | Oracle International Corporation | Methods To Perform Disk Writes In A Distributed Shared Disk System Needing Consistency Across Failures |
+US8112452B2 (en) | 2001-03-26 | 2012-02-07 | Microsoft Corporation | Serverless distributed file system |
+US7886364B2 (en) | 2001-03-26 | 2011-02-08 | Microsoft Corporation | Encrypted key cache |
+US20020169995A1 (en) * | 2001-05-10 | 2002-11-14 | International Business Machines Corporation | System, method, and computer program for selectable or programmable data consistency checking methodology |
+US6928578B2 (en) * | 2001-05-10 | 2005-08-09 | International Business Machines Corporation | System, method, and computer program for selectable or programmable data consistency checking methodology |
+US7519623B2 (en) * | 2001-06-06 | 2009-04-14 | Microsoft Corporation | Locating potentially identical objects across multiple computers based on stochastic partitioning of workload |
+US6708175B2 (en) | 2001-06-06 | 2004-03-16 | International Business Machines Corporation | Program support for disk fencing in a shared disk parallel file system across storage area network |
+US20050071330A1 (en) * | 2001-06-06 | 2005-03-31 | Microsoft Corporation | Locating potentially identical objects across multiple computers based on stochastic partitioning of workload |
+US20050071340A1 (en) * | 2001-06-06 | 2005-03-31 | Microsoft Corporation | Locating potentially identical objects across multiple computers based on stochastic partitioning of workload |
+US7509423B2 (en) | 2001-06-06 | 2009-03-24 | Microsoft Corporation | Locating potentially identical objects across multiple computers based on stochastic partitioning of workload |
+US20030004918A1 (en) * | 2001-06-28 | 2003-01-02 | International Business Machines Corporation | System and method for file system cooperation in a multi-threaded environment |
+US6768993B2 (en) * | 2001-06-28 | 2004-07-27 | International Business Machines Corporation | System and method for file system cooperation in a multi-threaded environment |
+US20080091680A1 (en) * | 2001-07-17 | 2008-04-17 | International Business Machines Corporation | Distributed locking protocol with asynchronous token prefetch and relinquish |
+US7085815B2 (en) | 2001-07-17 | 2006-08-01 | International Business Machines Corporation | Scalable memory management of token state for distributed lock managers |
+US20030018782A1 (en) * | 2001-07-17 | 2003-01-23 | International Business Machines Corporation | Scalable memory management of token state for distributed lock managers |
+US20030018785A1 (en) * | 2001-07-17 | 2003-01-23 | International Business Machines Corporation | Distributed locking protocol with asynchronous token prefetch and relinquish |
+US7792980B2 (en) | 2001-07-17 | 2010-09-07 | International Business Machines Corporation | Distributed locking protocol with asynchronous token prefetch and relinquish |
+US7325064B2 (en) | 2001-07-17 | 2008-01-29 | International Business Machines Corporation | Distributed locking protocol with asynchronous token prefetch and relinquish |
+US7587426B2 (en) * | 2002-01-23 | 2009-09-08 | Hitachi, Ltd. | System and method for virtualizing a distributed network storage as a single-view file system |
+US20030138275A1 (en) * | 2002-01-23 | 2003-07-24 | Makoto Yabuki | Color image recording apparatus |
+US20030140051A1 (en) * | 2002-01-23 | 2003-07-24 | Hitachi, Ltd. | System and method for virtualizing a distributed network storage as a single-view file system |
+US20090119304A1 (en) * | 2002-01-30 | 2009-05-07 | Red Hat, Inc. | Metadata structures and related locking techniques to improve performance and scalability in a cluster file system |
+US9442952B2 (en) * | 2002-01-30 | 2016-09-13 | Red Hat, Inc. | Metadata structures and related locking techniques to improve performance and scalability in a cluster file system |
+US8805889B2 (en) * | 2002-01-30 | 2014-08-12 | Red Hat, Inc. | Metadata structures and related locking techniques to improve performance and scalability in a cluster file system |
+US20140330802A1 (en) * | 2002-01-30 | 2014-11-06 | Red Hat, Inc. | Metadata structures and related locking techniques to improve performance and scalability in a cluster file system |
+US7818299B1 (en) | 2002-03-19 | 2010-10-19 | Netapp, Inc. | System and method for determining changes in two snapshots and for transmitting changes to a destination snapshot |
+US7036039B2 (en) | 2002-03-29 | 2006-04-25 | Panasas, Inc. | Distributing manager failure-induced workload through the use of a manager-naming scheme |
+US20040078633A1 (en) * | 2002-03-29 | 2004-04-22 | Panasas, Inc. | Distributing manager failure-induced workload through the use of a manager-naming scheme |
+US20030187883A1 (en) * | 2002-03-29 | 2003-10-02 | Panasas, Inc. | Internally consistent file system image in distributed object-based data storage |
+US20040078654A1 (en) * | 2002-03-29 | 2004-04-22 | Holland Mark C. | Hybrid quorum/primary-backup fault-tolerance model |
+US7191357B2 (en) | 2002-03-29 | 2007-03-13 | Panasas, Inc. | Hybrid quorum/primary-backup fault-tolerance model |
+US20030187866A1 (en) * | 2002-03-29 | 2003-10-02 | Panasas, Inc. | Hashing objects into multiple directories for better concurrency and manageability |
+US20060123057A1 (en) * | 2002-03-29 | 2006-06-08 | Panasas, Inc. | Internally consistent file system image in distributed object-based data storage |
+US6985995B2 (en) | 2002-03-29 | 2006-01-10 | Panasas, Inc. | Data file migration from a mirrored RAID to a non-mirrored XOR-based RAID without rewriting the data |
+US7007024B2 (en) | 2002-03-29 | 2006-02-28 | Panasas, Inc. | Hashing objects into multiple directories for better concurrency and manageability |
+US7007047B2 (en) | 2002-03-29 | 2006-02-28 | Panasas, Inc. | Internally consistent file system image in distributed object-based data storage |
+US20030191745A1 (en) * | 2002-04-04 | 2003-10-09 | Xiaoye Jiang | Delegation of metadata management in a storage system by leasing of free file system blocks and i-nodes from a file system owner |
+US7010554B2 (en) | 2002-04-04 | 2006-03-07 | Emc Corporation | Delegation of metadata management in a storage system by leasing of free file system blocks and i-nodes from a file system owner |
+US20090119767A1 (en) * | 2002-05-23 | 2009-05-07 | International Business Machines Corporation | File level security for a metadata controller in a storage area network |
+US20030220943A1 (en) * | 2002-05-23 | 2003-11-27 | International Business Machines Corporation | Recovery of a single metadata controller failure in a storage area network environment |
+US7448077B2 (en) | 2002-05-23 | 2008-11-04 | International Business Machines Corporation | File level security for a metadata controller in a storage area network |
+US20030220923A1 (en) * | 2002-05-23 | 2003-11-27 | International Business Machines Corporation | Mechanism for running parallel application programs on metadata controller nodes |
+US7840995B2 (en) | 2002-05-23 | 2010-11-23 | International Business Machines Corporation | File level security for a metadata controller in a storage area network |
+US7010528B2 (en) | 2002-05-23 | 2006-03-07 | International Business Machines Corporation | Mechanism for running parallel application programs on metadata controller nodes |
+US8140622B2 (en) | 2002-05-23 | 2012-03-20 | International Business Machines Corporation | Parallel metadata service in storage area network environment |
+US7392341B2 (en) | 2002-05-24 | 2008-06-24 | Hitachi, Ltd. | Disk array system and cache control method |
+US20030221062A1 (en) * | 2002-05-24 | 2003-11-27 | Hitachi, Ltd. | Disk array system and cache control method |
+US7054997B2 (en) * | 2002-05-24 | 2006-05-30 | Hitachi, Ltd. | Disk array system and cache control method |
+US20060174061A1 (en) * | 2002-05-24 | 2006-08-03 | Hitachi, Ltd. | Disk array system and cache control method |
+US20040030822A1 (en) * | 2002-08-09 | 2004-02-12 | Vijayan Rajan | Storage virtualization by layering virtual disk objects on a file system |
+US20060242179A1 (en) * | 2002-08-09 | 2006-10-26 | Chen Raymond C | System and method for restoring a virtual disk from a snapshot |
+US7958168B2 (en) | 2002-08-09 | 2011-06-07 | Netapp, Inc. | System and method for restoring a virtual disk from a snapshot |
+US20040030668A1 (en) * | 2002-08-09 | 2004-02-12 | Brian Pawlowski | Multi-protocol storage appliance that provides integrated support for file and block access protocols |
+US20100198795A1 (en) * | 2002-08-09 | 2010-08-05 | Chen Raymond C | System and method for restoring a virtual disk from a snapshot |
+US7873700B2 (en) | 2002-08-09 | 2011-01-18 | Netapp, Inc. | Multi-protocol storage appliance that provides integrated support for file and block access protocols |
+US7743035B2 (en) | 2002-08-09 | 2010-06-22 | Netapp, Inc. | System and method for restoring a virtual disk from a snapshot |
+US7107385B2 (en) * | 2002-08-09 | 2006-09-12 | Network Appliance, Inc. | Storage virtualization by layering virtual disk objects on a file system |
+US20080147755A1 (en) * | 2002-10-10 | 2008-06-19 | Chapman Dennis E | System and method for file system snapshot of a virtual logical disk |
+US7925622B2 (en) | 2002-10-10 | 2011-04-12 | Netapp, Inc. | System and method for file system snapshot of a virtual logical disk |
+US7069268B1 (en) | 2003-01-13 | 2006-06-27 | Cisco Technology, Inc. | System and method for identifying data using parallel hashing |
+US20040143712A1 (en) * | 2003-01-16 | 2004-07-22 | International Business Machines Corporation | Task synchronization mechanism and method |
+US6990560B2 (en) * | 2003-01-16 | 2006-01-24 | International Business Machines Corporation | Task synchronization mechanism and method |
+US20040143583A1 (en) * | 2003-01-17 | 2004-07-22 | International Business Machines Corporation | Trusted access by an extendible framework method, system, article of manufacture, and computer program product |
+US20080270433A1 (en) * | 2003-01-17 | 2008-10-30 | International Business Machines Corporation | Trusted access by an extendible framework system, article of manufacture, and computer program product |
+US7035860B2 (en) | 2003-01-17 | 2006-04-25 | International Business Machines Corporation | Trusted access by an extendible framework method, system, article of manufacture, and computer program product |
+US7548986B1 (en) * | 2003-03-17 | 2009-06-16 | Hewlett-Packard Development Company, L.P. | Electronic device network providing streaming updates |
+US20040260768A1 (en) * | 2003-04-22 | 2004-12-23 | Makio Mizuno | Storage system |
+US7228384B2 (en) * | 2003-04-22 | 2007-06-05 | Hitachi, Ltd. | Cache storage system that enables exclusion of locking of an area to be accessed |
+US20050039049A1 (en) * | 2003-08-14 | 2005-02-17 | International Business Machines Corporation | Method and apparatus for a multiple concurrent writer file system |
+US7555504B2 (en) | 2003-09-23 | 2009-06-30 | Emc Corporation | Maintenance of a file version set including read-only and read-write snapshot copies of a production file |
+US20050065986A1 (en) * | 2003-09-23 | 2005-03-24 | Peter Bixby | Maintenance of a file version set including read-only and read-write snapshot copies of a production file |
+US7783611B1 (en) | 2003-11-10 | 2010-08-24 | Netapp, Inc. | System and method for managing file metadata during consistency points |
+US7401093B1 (en) | 2003-11-10 | 2008-07-15 | Network Appliance, Inc. | System and method for managing file data during consistency points |
+US7739250B1 (en) | 2003-11-10 | 2010-06-15 | Netapp, Inc. | System and method for managing file data during consistency points |
+US7979402B1 (en) | 2003-11-10 | 2011-07-12 | Netapp, Inc. | System and method for managing file data during consistency points |
+US7721062B1 (en) | 2003-11-10 | 2010-05-18 | Netapp, Inc. | Method for detecting leaked buffer writes across file system consistency points |
+US20080133872A1 (en) * | 2003-11-25 | 2008-06-05 | Network Appliance, Inc. | Adaptive file readahead technique for multiple read streams |
+US9152565B2 (en) * | 2003-11-25 | 2015-10-06 | Netapp, Inc. | Adaptive file readahead technique for multiple read streams |
+US20050114289A1 (en) * | 2003-11-25 | 2005-05-26 | Fair Robert L. | Adaptive file readahead technique for multiple read streams |
+US7333993B2 (en) * | 2003-11-25 | 2008-02-19 | Network Appliance, Inc. | Adaptive file readahead technique for multiple read streams |
+US7698289B2 (en) | 2003-12-02 | 2010-04-13 | Netapp, Inc. | Storage system architecture for striping data container content across volumes of a cluster |
+US20050192932A1 (en) * | 2003-12-02 | 2005-09-01 | Michael Kazar | Storage system architecture for striping data container content across volumes of a cluster |
+US20050193240A1 (en) * | 2004-02-17 | 2005-09-01 | International Business Machines (Ibm) Corporation | Dynamic reconfiguration of memory in a multi-cluster storage control unit |
+US7085907B2 (en) | 2004-02-17 | 2006-08-01 | International Business Machines Corporation | Dynamic reconfiguration of memory in a multi-cluster storage control unit |
+US8578361B2 (en) | 2004-04-21 | 2013-11-05 | Palm, Inc. | Updating an electronic device with update agent code |
+US20050246397A1 (en) * | 2004-04-30 | 2005-11-03 | Edwards John K | Cloning technique for efficiently creating a copy of a volume in a storage system |
+US8533201B2 (en) | 2004-04-30 | 2013-09-10 | Netapp, Inc. | Extension of write anywhere file layout write allocation |
+US9430493B2 (en) | 2004-04-30 | 2016-08-30 | Netapp, Inc. | Extension of write anywhere file layout write allocation |
+US7970770B2 (en) | 2004-04-30 | 2011-06-28 | Netapp, Inc. | Extension of write anywhere file layout write allocation |
+US8903830B2 (en) | 2004-04-30 | 2014-12-02 | Netapp, Inc. | Extension of write anywhere file layout write allocation |
+US20110225364A1 (en) * | 2004-04-30 | 2011-09-15 | Edwards John K | Extension of write anywhere file layout write allocation |
+US20080155220A1 (en) * | 2004-04-30 | 2008-06-26 | Network Appliance, Inc. | Extension of write anywhere file layout write allocation |
+US7430571B2 (en) | 2004-04-30 | 2008-09-30 | Network Appliance, Inc. | Extension of write anywhere file layout write allocation |
+US20050246382A1 (en) * | 2004-04-30 | 2005-11-03 | Edwards John K | Extension of write anywhere file layout write allocation |
+US7409511B2 (en) | 2004-04-30 | 2008-08-05 | Network Appliance, Inc. | Cloning technique for efficiently creating a copy of a volume in a storage system |
+US8526940B1 (en) | 2004-08-17 | 2013-09-03 | Palm, Inc. | Centralized rules repository for smart phone customer care |
+US8005954B2 (en) * | 2004-08-27 | 2011-08-23 | Cisco Technology, Inc. | System and method for managing end user approval for charging in a network environment |
+US20060047814A1 (en) * | 2004-08-27 | 2006-03-02 | Cisco Technology, Inc. | System and method for managing end user approval for charging in a network environment |
+US20060064554A1 (en) * | 2004-09-21 | 2006-03-23 | Fridella Stephen A | Lock management for concurrent access to a single file from multiple data mover computers |
+US7315926B2 (en) | 2004-09-21 | 2008-01-01 | Emc Corporation | Lock management for concurrent access to a single file from multiple data mover computers |
+US20060074940A1 (en) * | 2004-10-05 | 2006-04-06 | International Business Machines Corporation | Dynamic management of node clusters to enable data sharing |
+US9152503B1 (en) | 2005-03-16 | 2015-10-06 | Netapp, Inc. | System and method for efficiently calculating storage required to split a clone volume |
+US7757056B1 (en) | 2005-03-16 | 2010-07-13 | Netapp, Inc. | System and method for efficiently calculating storage required to split a clone volume |
+US7565217B2 (en) | 2005-04-01 | 2009-07-21 | International Business Machines Corporation | Traversal of empty regions in a searchable data structure |
+US20060224600A1 (en) * | 2005-04-01 | 2006-10-05 | Ronen Grosman | Traversal of empty regions in a searchable data structure |
+US20060248379A1 (en) * | 2005-04-29 | 2006-11-02 | Jernigan Richard P Iv | System and method for restriping data across a plurality of volumes |
+US7698501B1 (en) | 2005-04-29 | 2010-04-13 | Netapp, Inc. | System and method for utilizing sparse data containers in a striped volume set |
+US7698334B2 (en) | 2005-04-29 | 2010-04-13 | Netapp, Inc. | System and method for multi-tiered meta-data caching and distribution in a clustered computer environment |
+US8713077B2 (en) | 2005-04-29 | 2014-04-29 | Netapp, Inc. | System and method for multi-tiered meta-data caching and distribution in a clustered computer environment |
+US20100138605A1 (en) * | 2005-04-29 | 2010-06-03 | Kazar Michael L | System and method for multi-tiered meta-data caching and distribution in a clustered computer environment |
+US7904649B2 (en) | 2005-04-29 | 2011-03-08 | Netapp, Inc. | System and method for restriping data across a plurality of volumes |
+US8578090B1 (en) | 2005-04-29 | 2013-11-05 | Netapp, Inc. | System and method for restriping data across a plurality of volumes |
+US20060248088A1 (en) * | 2005-04-29 | 2006-11-02 | Michael Kazar | System and method for multi-tiered meta-data caching and distribution in a clustered computer environment |
+US20060288049A1 (en) * | 2005-06-20 | 2006-12-21 | Fabio Benedetti | Method, System and computer Program for Concurrent File Update |
+US7653682B2 (en) | 2005-07-22 | 2010-01-26 | Netapp, Inc. | Client failure fencing mechanism for fencing network file system data in a host-cluster environment |
+US20070022138A1 (en) * | 2005-07-22 | 2007-01-25 | Pranoop Erasani | Client failure fencing mechanism for fencing network file system data in a host-cluster environment |
+US20070027941A1 (en) * | 2005-07-27 | 2007-02-01 | International Business Machines Corporation | System, method, and service for enforcing resource utilization in a distributed system |
+US20070055702A1 (en) * | 2005-09-07 | 2007-03-08 | Fridella Stephen A | Metadata offload for a file server cluster |
+US7617216B2 (en) | 2005-09-07 | 2009-11-10 | Emc Corporation | Metadata offload for a file server cluster |
+US20070073830A1 (en) * | 2005-09-15 | 2007-03-29 | Burnett Rodney C | Method and apparatus for managing multi-stream input/output requests in a network file server |
+US7567966B2 (en) | 2005-09-15 | 2009-07-28 | International Business Machines Corporation | Method and apparatus for managing multi-stream input/output requests in a network file server |
+US20070244908A1 (en) * | 2005-10-28 | 2007-10-18 | Vijayan Rajan | System and method for optimizing multi-pathing support in a distributed storage system environment |
+US8566845B2 (en) | 2005-10-28 | 2013-10-22 | Netapp, Inc. | System and method for optimizing multi-pathing support in a distributed storage system environment |
+US7536420B2 (en) * | 2005-11-25 | 2009-05-19 | Sony Corporation | Information processing apparatus and method, information recording medium, and computer program |
+US20070136282A1 (en) * | 2005-11-25 | 2007-06-14 | Sony Corporation | Information processing apparatus and method, information recording medium, and computer program |
+US8291502B2 (en) | 2005-11-25 | 2012-10-16 | Sony Corporation | Information processing apparatus and method, information recording medium, and computer program |
+US7590660B1 (en) | 2006-03-21 | 2009-09-15 | Network Appliance, Inc. | Method and system for efficient database cloning |
+US8893110B2 (en) | 2006-06-08 | 2014-11-18 | Qualcomm Incorporated | Device management in a network |
+US20070294311A1 (en) * | 2006-06-16 | 2007-12-20 | Microsoft Corporation | Application program interface to manage media files |
+US7603387B2 (en) * | 2006-06-16 | 2009-10-13 | Microsoft Corporation | Techniques to manage media files |
+US7783686B2 (en) * | 2006-06-16 | 2010-08-24 | Microsoft Corporation | Application program interface to manage media files |
+US20070294324A1 (en) * | 2006-06-16 | 2007-12-20 | Microsoft Corporation | Techniques to manage media files |
+US20070299843A1 (en) * | 2006-06-23 | 2007-12-27 | Microsoft Corporation | Solving table locking problems associated with concurrent processing |
+US7698273B2 (en) * | 2006-06-23 | 2010-04-13 | Microsoft Corporation | Solving table locking problems associated with concurrent processing |
+US8055940B2 (en) | 2006-07-17 | 2011-11-08 | The Mathworks, Inc. | Recoverable error detection for concurrent computing programs |
+US20080016249A1 (en) * | 2006-07-17 | 2008-01-17 | The Mathworks, Inc. | Recoverable error detection for concurrent computing programs |
+US7925791B2 (en) * | 2006-07-17 | 2011-04-12 | The Math Works, Inc. | Recoverable error detection for concurrent computing programs |
+US20090006621A1 (en) * | 2006-07-17 | 2009-01-01 | The Mathworks, Inc. | Recoverable error detection for concurrent computing programs |
+US9081638B2 (en) | 2006-07-27 | 2015-07-14 | Qualcomm Incorporated | User experience and dependency management in a mobile device |
+US8752044B2 (en) | 2006-07-27 | 2014-06-10 | Qualcomm Incorporated | User experience and dependency management in a mobile device |
+US20080071804A1 (en) * | 2006-09-15 | 2008-03-20 | International Business Machines Corporation | File system access control between multiple clusters |
+US8898105B1 (en) * | 2006-12-22 | 2014-11-25 | Amazon Technologies, Inc. | Scalable partitioning in a multilayered data service framework |
+US9239838B1 (en) * | 2006-12-22 | 2016-01-19 | Amazon Technologies, Inc. | Scalable partitioning in a multilayered data service framework |
+US20080189343A1 (en) * | 2006-12-29 | 2008-08-07 | Robert Wyckoff Hyer | System and method for performing distributed consistency verification of a clustered file system |
+US8489811B1 (en) | 2006-12-29 | 2013-07-16 | Netapp, Inc. | System and method for addressing data containers using data set identifiers |
+US8301673B2 (en) | 2006-12-29 | 2012-10-30 | Netapp, Inc. | System and method for performing distributed consistency verification of a clustered file system |
+US8312046B1 (en) | 2007-02-28 | 2012-11-13 | Netapp, Inc. | System and method for enabling a data container to appear in a plurality of locations in a super-namespace |
+US8219821B2 (en) | 2007-03-27 | 2012-07-10 | Netapp, Inc. | System and method for signature based data container recognition |
+US8312214B1 (en) | 2007-03-28 | 2012-11-13 | Netapp, Inc. | System and method for pausing disk drives in an aggregate |
+US20080243963A1 (en) * | 2007-03-30 | 2008-10-02 | Microsoft Corporation | Quota Enforcement With Transacted File Systems |
+US7877424B2 (en) * | 2007-03-30 | 2011-01-25 | Microsoft Corporation | Quota enforcement with transacted file systems |
+US20090034377A1 (en) * | 2007-04-27 | 2009-02-05 | English Robert M | System and method for efficient updates of sequential block storage |
+US8219749B2 (en) | 2007-04-27 | 2012-07-10 | Netapp, Inc. | System and method for efficient updates of sequential block storage |
+US20080270690A1 (en) * | 2007-04-27 | 2008-10-30 | English Robert M | System and method for efficient updates of sequential block storage |
+US7827350B1 (en) | 2007-04-27 | 2010-11-02 | Netapp, Inc. | Method and system for promoting a snapshot in a distributed file system |
+US7882304B2 (en) | 2007-04-27 | 2011-02-01 | Netapp, Inc. | System and method for efficient updates of sequential block storage |
+US7797489B1 (en) | 2007-06-01 | 2010-09-14 | Netapp, Inc. | System and method for providing space availability notification in a distributed striped volume set |
+US8095730B1 (en) | 2007-06-01 | 2012-01-10 | Netapp, Inc. | System and method for providing space availability notification in a distributed striped volume set |
+US20080310267A1 (en) * | 2007-06-12 | 2008-12-18 | Sony Corporation | Information processing apparatus, information processing method and computer program |
+US8861933B2 (en) | 2007-06-12 | 2014-10-14 | Sony Corporation | Information processing apparatus, information processing method and computer program |
+US20090019098A1 (en) * | 2007-07-10 | 2009-01-15 | International Business Machines Corporation | File system mounting in a clustered file system |
+US7890555B2 (en) | 2007-07-10 | 2011-02-15 | International Business Machines Corporation | File system mounting in a clustered file system |
+US8484258B2 (en) | 2007-07-11 | 2013-07-09 | International Business Machines Corporation | Concurrent directory update in a cluster file system |
+US20090019047A1 (en) * | 2007-07-11 | 2009-01-15 | International Business Machines Corporation | Concurrent directory update in a cluster file system |
+US8156164B2 (en) | 2007-07-11 | 2012-04-10 | International Business Machines Corporation | Concurrent directory update in a cluster file system |
+US20090063614A1 (en) * | 2007-08-27 | 2009-03-05 | International Business Machines Corporation | Efficiently Distributing Class Files Over A Network Without Global File System Support |
+US9116900B2 (en) | 2007-10-05 | 2015-08-25 | Imation Corp. | Methods for controlling remote archiving systems |
+US8595253B2 (en) * | 2007-10-05 | 2013-11-26 | Imation Corp. | Methods for controlling remote archiving systems |
+US20120311259A1 (en) * | 2007-10-05 | 2012-12-06 | Imation Corp. | Methods for controlling remote archiving systems |
+US7996636B1 (en) | 2007-11-06 | 2011-08-09 | Netapp, Inc. | Uniquely identifying block context signatures in a storage volume hierarchy |
+US7984259B1 (en) | 2007-12-17 | 2011-07-19 | Netapp, Inc. | Reducing load imbalance in a storage system |
+US7996607B1 (en) | 2008-01-28 | 2011-08-09 | Netapp, Inc. | Distributing lookup operations in a striped storage system |
+US8176246B1 (en) | 2008-01-28 | 2012-05-08 | Netapp, Inc. | Distributing lookup operations in a striped storage system |
+US9280457B2 (en) | 2008-04-18 | 2016-03-08 | Netapp, Inc. | System and method for volume block number to disk block number mapping |
+US8725986B1 (en) | 2008-04-18 | 2014-05-13 | Netapp, Inc. | System and method for volume block number to disk block number mapping |
+US8699178B2 (en) | 2008-07-11 | 2014-04-15 | Imation Corp. | Library system with connector for removable cartridges |
+US20120036394A1 (en) * | 2009-04-15 | 2012-02-09 | Chengdu Huawei Symantec Technologies Co., Ltd. | Data recovery method, data node, and distributed file system |
+US20100281214A1 (en) * | 2009-04-30 | 2010-11-04 | Netapp, Inc. | Data distribution through capacity leveling in a striped file system |
+US8117388B2 (en) | 2009-04-30 | 2012-02-14 | Netapp, Inc. | Data distribution through capacity leveling in a striped file system |
+US8510334B2 (en) | 2009-11-05 | 2013-08-13 | Oracle International Corporation | Lock manager on disk |
+US8484649B2 (en) | 2011-01-05 | 2013-07-09 | International Business Machines Corporation | Amortizing costs of shared scans |
+US9058212B2 (en) * | 2011-03-21 | 2015-06-16 | Microsoft Technology Licensing, Llc | Combining memory pages having identical content |
+US20120246436A1 (en) * | 2011-03-21 | 2012-09-27 | Microsoft Corporation | Combining memory pages having identical content |
+US20130007733A1 (en) * | 2011-06-29 | 2013-01-03 | Microsoft Corporation | Virtual machine block substitution |
+US8819660B2 (en) * | 2011-06-29 | 2014-08-26 | Microsoft Corporation | Virtual machine block substitution |
+US10896071B2 (en) * | 2011-11-19 | 2021-01-19 | International Business Machines Corporation | Partial reading of input files to process business objects |
+US9424271B2 (en) | 2012-08-30 | 2016-08-23 | International Business Machines Corporation | Atomic incremental load for map-reduce systems on append-only file systems |
+US10558615B2 (en) | 2012-08-30 | 2020-02-11 | International Business Machines Corporation | Atomic incremental load for map-reduce systems on append-only file systems |
+US20160004718A1 (en) * | 2014-07-02 | 2016-01-07 | Panzura, Inc. | Using byte-range locks to manage multiple concurrent accesses to a file in a distributed filesystem |
+US9792294B2 (en) * | 2014-07-02 | 2017-10-17 | Panzura, Inc | Using byte-range locks to manage multiple concurrent accesses to a file in a distributed filesystem |
+US9824114B1 (en) * | 2015-03-30 | 2017-11-21 | EMC IP Holding Company LLC | Multiple concurrent cursors for file repair |
+CN109716279A (en) * | 2016-09-15 | 2019-05-03 | 净睿存储股份有限公司 | It is persistent adaptive concurrent for being written |
+CN109716279B (en) * | 2016-09-15 | 2023-02-17 | 净睿存储股份有限公司 | Adaptive concurrency for write persistence |
+US20190384688A1 (en) * | 2017-01-12 | 2019-12-19 | Bull Sas | Method for Analysing the Rules of Changes Between the Levels of Use of Resources of a Computer System |
+RU2673019C1 (en) * | 2017-12-14 | 2018-11-21 | Открытое Акционерное Общество "Информационные Технологии И Коммуникационные Системы" | Method for providing access to shared resource in distributed computing system |
+US10671370B2 (en) * | 2018-05-30 | 2020-06-02 | Red Hat, Inc. | Distributing file system states |
+Also Published As
+Publication number | Publication date |
+---|---|
+EP0890914A3 (en) | 2005-02-23 |
+EP0890914B1 (en) | 2009-08-05 |
+DE69841034D1 (en) | 2009-09-17 |
+EP0890914A2 (en) | 1999-01-13 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US5987477A (en) | Parallel file system and method for parallel write sharing | |
+US5950199A (en) | Parallel file system and method for granting byte range tokens | |
+US5940841A (en) | Parallel file system with extended file attributes | |
+US5956734A (en) | Parallel file system with a quota check utility | |
+US5974424A (en) | Parallel file system and method with a metadata node | |
+US6023706A (en) | Parallel file system and method for multiple node file access | |
+US5893086A (en) | Parallel file system and method with extensible hashing | |
+US5940838A (en) | Parallel file system and method anticipating cache usage patterns | |
+US5946686A (en) | Parallel file system and method with quota allocation | |
+US5963963A (en) | Parallel file system and buffer management arbitration | |
+US5960446A (en) | Parallel file system and method with allocation map | |
+US6021508A (en) | Parallel file system and method for independent metadata loggin | |
+US6032216A (en) | Parallel file system with method using tokens for locking modes | |
+US5999976A (en) | Parallel file system and method with byte range API locking | |
+Levandoski et al. | High performance transactions in deuteronomy | |
+US8484258B2 (en) | Concurrent directory update in a cluster file system | |
+US7454567B2 (en) | Method and apparatus for data storage using striping | |
+US7890555B2 (en) | File system mounting in a clustered file system | |
+CA2242833C (en) | Parallel file system and method using tokens and metadata nodes | |
+KR100292643B1 (en) | Parallel file system and method with byte range locking (BYTE RANGEATI LOCKING) | |
+Cho | Cache coherency and concurrency control in a multisystem data sharing environment | |
+Xia | Logical timestamps in distributed transaction processing systems | |
+McKenzie | Creating a concurrent in-memory b-tree optimized for numa systems | |
+Schijning | The ADABAS Buffer Pool Manager |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:SCHMUCK, FRANK B.;SHMUELI, BOAZ;ZLOTEK, ANTHONY J.;REEL/FRAME:008934/0273;SIGNING DATES FROM 19970929 TO 19980109 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+REMI | Maintenance fee reminder mailed | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026894/0001Effective date: 20110817 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 11 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

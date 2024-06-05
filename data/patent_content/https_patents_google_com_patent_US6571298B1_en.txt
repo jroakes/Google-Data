@@ -1,0 +1,415 @@
+US6571298B1 - System and method for grouping disk access commands in a queue according to proximate disk positions - Google Patents
+System and method for grouping disk access commands in a queue according to proximate disk positions Download PDFInfo
+- Publication number
+- US6571298B1 US6571298B1 US09/481,231 US48123100A US6571298B1 US 6571298 B1 US6571298 B1 US 6571298B1 US 48123100 A US48123100 A US 48123100A US 6571298 B1 US6571298 B1 US 6571298B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- command
+- tandem
+- queue
+- commands
+- time
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0602—Interfaces specially adapted for storage systems specifically adapted to achieve a particular effect
+- G06F3/062—Securing storage systems
+- G06F3/0622—Securing storage systems in relation to access
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0628—Interfaces specially adapted for storage systems making use of a particular technique
+- G06F3/0655—Vertical data movement, i.e. input-output transfer; data movement between one or more hosts and one or more storage devices
+- G06F3/0659—Command handling arrangements, e.g. command buffers, queues, command scheduling
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0668—Interfaces specially adapted for storage systems adopting a particular infrastructure
+- G06F3/0671—In-line storage system
+- G06F3/0673—Single storage device
+- G06F3/0674—Disk device
+Definitions
+- the present invention pertains to a method for sorting seek operations in rotating disk drives. More specifically, the present invention relates to a computer program product for placing commands in a queue by grouping proximate commands, thus improving throughput by reducing drive latency and decreasing the number of iterations run by a scheduling algorithm.
+- Computer systems or other accessories collectively referred to as “computer systems”, generally include data storage devices, such as hard disk drives.
+- a hard disk drive is an electromechanical or an optical-mechanical device that reads from and writes to a hard disk that includes one or more disk platens.
+- the main components of a disk drive are a spindle on which the platens are mounted, a drive motor for spinning the platens, one or more read/write heads, a seek mechanism for positioning the heads over the platens, and a controller which synchronizes read/write commands and transfers information to and from other components of the computer system.
+- the computer system provides logical instructions to its disk drive, to read or write data into memory locations onto the disk.
+- the instructions typically include a logical address for the data, the data is not stored in logical format; rather, the data is stored in a physical address location.
+- the controller typically translates the logical address into a physical address. Once the translation occurs, the controller directs the heads to the physical address location at which the desired data is stored or read.
+- Access time The amount of time from the start of the movement of the heads arm until the start of the read or write phase of an I/O command is referred to as the “access time”.
+- Access time is comprised of two components.
+- the first component is the seek and settling time, which is the time required to move a disk drive's read/write head to a specific track or cylinder on a disk and settling it on the target track.
+- the second component is the rotational latency time, which corresponds to the additional time required for the disk to rotate so that the desired physical address location is located underneath the properly positioned head.
+- the available rotational time of a command is calculated based on the rotational position of the command and the current position of the head. If there is no chance that the command could be accessed at that time because of the radial distance, this rotational time is repeatedly incremented by one revolution time, until there is a positive probability of a successful access.
+- Each disk typically includes a plurality of concentric tracks, on one or both surfaces, from which information is read, or onto which information is written by a read/write element.
+- each track is further divided into a plurality of sectors.
+- a cylinder is formed by a plurality of tracks with the same radial coordinate on the stack of disks.
+- a disk drive a disk rotates at a high speed while the read/write element “flies” over the surface of the rotating disk.
+- the read/write element is positioned over specific areas or sectors of the disk in accordance with commands received from the computer system.
+- the numerous commands of the computer system usually exceed the drive's ability to execute the commands immediately upon receipt, in which case a queue is formed.
+- the set of commands available for execution by the disk drive is referred to as the “command queue”.
+- controllers have been developed to reorder the command queue according to a positional sequence. Examples include reducing the number of changes in the direction of the movement of the head, ordering according to the shortest calculated head movement regardless of direction, and more commonly ordering according to the shortest overall access time between successive commands.
+- the command with the shortest time difference is removed from the queue and the next command becomes the first command.
+- the ordering algorithm is then repeated to determine a new next command.
+- Still another disk scheduling method is illustrated in U.S. Pat. No. 5,854,941 to Ballard et al., that describes a disk scheduling queue for sorting pending disk I/O commands according to an estimated access time.
+- the estimated access time is calculated from first and second rotational times that are derived from a rotational time table based on logical address and head movement time. Once the command is executed, the rotational positioning algorithm is repeated and the queue is resorted.
+- the estimate results in a deterministic value rather than a weighted average that takes into account the probabilities of the possible values.
+- the FSD time includes the scanning time of the scheduling algorithm of the entire queue between every two commands, for example several hundred microseconds (e.g. 500 usec.), since the scheduling algorithm is expected to run between the end time of the current command and the start time of the candidate command.
+- the anticipated start time of a candidate command is earlier than the end time of the current command plus the FSD, then the anticipated start time of the candidate command is incremented by one revolution time, and this candidate command may no longer be considered a good candidate to be the next command.
+- the effect of a long FSD is therefore a reduced drive throughput.
+- a computer program product is provided as a scheduling algorithm for use in disk drives to place I/O commands in a rotational position queue.
+- the scheduling strategy is implemented by selecting commands based on a probabilistic approach that minimizes the expected next command access time.
+- the present scheduling algorithm allowa data to be accessed in the shortest expected amount of time possible, maximizes the throughput of the drive and improves the overall performance of the computer system.
+- the scheduling algorithm of the present invention improves the disk I/O average access time by estimating the expected access time (EAT) for the queued commands, and by selecting these commands so that the command with the least EAT (LEAT) is executed first.
+- EAT expected access time
+- the probabilistic approach of the present invention does not postpone the execution of commands due to this uncertainty, but rather relies upon, and incorporates such uncertainty as a useful criterion in the comparison of commands.
+- An exemplary criterion used in a preferred embodiment of the present invention is the least expected access time.
+- the least expected access time is a concept which is introduced herein, and which is derived by having the disk scheduling algorithm sort pending disk I/O commands into a disk scheduling queue according to the expected time necessary to reach the target positions on the disk.
+- the probabilistic algorithm weights the possible access times of commands sorted in the disk scheduling queue, and accounts for the probability of the drive executing a command during the first possible revolution as well as the probability of the drive executing the command in the second possible revolution. Both of these probabilities are taken into consideration in reaching a final determination as to the queue order of the commands. This would eliminate the rigid deterministic (e.g. duality of decision) approach followed by conventional scheduling algorithms and allow for taking calculated risks in scheduling commands so as to minimize the long-term average latency.
+- the scheduling algorithm assigns an Expected Access Time EAT(i) to an ith command as follows:
+- p(i) is the probability that a revolution will be missed
+- r is the one revolution time
+- s(i) is the minimum time it would take to achieve the correct rotational position with nonzero probability of completing the seek and settling.
+- the probability p(i) reflects various types of uncertainties, both intrinsic and resulting from the lack of computational resources. For simplicity purposes, the possibility of missing more than one revolution was neglected, though those skilled in the art could account for this factor without departing from the scope of the present invention.
+- the scheduling algorithm will assign an EAT to each of the commands in the queue.
+- each of the queued commands will be provided with a single number rather than two numbers as explained above in connection with the conventional deterministic approach.
+- the scheduling algorithm will then reorder the queue commands according to a desired LEAT scheme, for example according to ascending expected access times, so that the command with the LEAT will be executed next.
+- the probability p(i) does not have to be computed for every single command in the queue. Rather, depending on the current best candidate, if a command certainly cannot be accessed faster than the current best candidate, then this command will not be assigned an EAT.
+- the scheduling algorithm improves the disk drive throughput, that is the average number of commands per time unit. This is achieved by searching the rotational position queue and by identifying pairs of commands with short access times between them. Once identified, these commands are paired and executed in tandem. Executing a set of commands in tandem increases the drive throughput by reducing rotational latency and decreasing the number of iterations that the scheduling algorithm must run. This embodiment reduces, if not eliminates the “file start delay” (FSD) between proximate commands, which commands would have otherwise been delayed.
+- FSD file start delay
+- Rotational latency is reduced because commands with proximate physical addresses can be executed without waiting for the disk to complete a full revolution (if the scheduling algorithm were run between them), and when they are chosen to be executed in tandem, the access time is relatively much shorter than usual.
+- the present invention offers a departure from conventional scheduling algorithms that are run after the execution of each command.
+- the pairing of proximate commands significantly reduces the total time to execute the queue of commands, and further increases the overall drive throughput. This improvement is expected to be significant when the workload is in a narrow range of the disk, such as the 100 MB test, where the frequency of occurrences of proximate commands is high.
+- the tandem identification algorithm checks whether the command x can be made part of a tandem. If the queue includes a candidate command y that can be executed within a predetermined time after the command x, and that predetermined time is less than the FSD or time required to run the scheduling algorithm, then the two commands x and y are paired in tandem to execute y immediately after x without the need to run the scheduling algorithm when x becomes the active command. If the queue includes a command z such that the access time from z to x is sufficiently short, then z and x are paired in tandem to execute x immediately after z. In summary, the tandem identification algorithm allows for the execution of commands with shorter access times that otherwise could not be executed with such short access times and thereby increases the throughput of the drive.
+- the identification of tandem commands is achieved as follows.
+- the tandem identification algorithm establishes a threshold time for declaring the commands tandem. This threshold time pertains to the physical proximity of the commands as weighted against the time to execute the scheduling algorithm.
+- the tandem identification algorithm then calculates the access times to the new command x from each member z of the queue and from the new command to each member y of the queue. As soon as the algorithm discovers that any of those access times is less than the threshold time, the algorithm declares the respective commands z and x, or x and y to be tandem, and stops searching for any other tandem possibilities that involve the new command x.
+- the tandem commands are subsequently formed into a single command for the purpose of execution, and possible involvement in yet a larger tandem that involves a third command.
+- FIG. 1 is a schematic illustration of a disk drive that implements a scheduling algorithm according to the present invention
+- FIG. 2 is a schematic, top plan view of the disk drive of FIG. 1 viewed from a different angle;
+- FIG. 3 is comprised of FIGS. 3A and 3B, and represents a flow chart that illustrates the operation of a preferred embodiment of the scheduling algorithm
+- FIG. 4 is a graph that illustrates “mintime” versus maximum seek length for a disk, and which is stored in tabular form in a processor of the disk drive of FIG. 1;
+- FIG. 5 is a flow chart that illustrates an access operation implemented by the scheduling algorithm of the present invention.
+- FIG. 6 illustrates three profiles that plot the probability of a successful access operation (FIG. 5) versus available rotational time, two of these profiles illustrate the seek operation in an aggressive mode and a conservative mode and are stored in tabular form in a servo processor of the disk drive of FIG. 1, and the third profile is a hybrid plot which is shifted from its original position for clarity of illustration; and
+- FIG. 7 is a flow chart that illustrates the operation of grouping proximate commands as implemented by the scheduling algorithm of the present invention.
+- FIGS. 1 and 2 illustrate a disk drive 10 comprised of a head stack assembly 12 and a stack of spaced apart magnetic, optical and/or MO data storage disks or media 14 that are rotatable about a common shaft 16 .
+- the head stack assembly 12 includes a number of actuator arms 20 that extend into spacings between the disks 14 , with only one disk 14 and one actuator arm 20 being illustrated for simplicity of illustration.
+- the head stack assembly 12 also includes an E-shaped block 24 and a magnetic rotor 26 attached to the block 24 in a position diametrically opposite to the actuator arms 20 .
+- the rotor 26 cooperates with a stator (not shown) for the actuator arms 20 to rotate in a substantially radial direction, along an arcuate path in the direction of an arrow A.
+- Energizing a coil of the rotor 26 with a direct current in one polarity or the reverse polarity causes the head stack assembly 12 , including the actuator arms 20 , to rotate around axis P in a direction substantially radial to the disks 14 .
+- a transducer head 40 is mounted on the free end of each actuator arm 20 for pivotal movement around axis P.
+- the magnetic rotor 26 controls the movement of the head 40 in a radial direction, in order to position the head 40 in registration with data information tracks or data cylinders 42 to be followed, and to access particular data sectors 44 on these tracks 42 .
+- a data cylinder includes a set of corresponding data information tracks 42 for the data surfaces of the stacked disks 14 .
+- Data information tracks 42 include a plurality of segments or data sectors 44 , each containing a predefined size of individual groups of data records that are saved for later retrieval and updates.
+- the data information tracks 42 can be disposed at predetermined positions relative to a servo reference index.
+- each sector 44 is identified by a sector identification (SID) read by the head 40 from the disk surface.
+- SID sector identification
+- Each command is stored as an object of a linked list (or a data structure) representing the queue, and is characterized by a physical location on the surface of the disk 14 , which occupies one or more data sectors 44 .
+- Each data sector is identified by a radial coordinate and an angular coordinate (also referred to as rotational position).
+- the disk drive 10 further includes an interface processor 50 which is coupled to a command queue controller 55 that links the interface processor 50 to the head stack assembly 12 , via a servo processor 57 .
+- the interface processor 50 implements a scheduling algorithm that sets a queue execution order of the pending commands when the current I/O command is being executed.
+- the command queue controller 55 receives the logical addresses of the commands from the interface processor 50 , and translates them into physical addresses on the disks 14 .
+- the command queue controller 55 then sends control signals to the servo processor 57 to move the heads 40 .
+- the interface processor 50 , the command queue controller 55 and the servo processor 57 are shown to constitute part of the disk drive 10 . However, persons skilled in the art will recognize that these components may be provided as part of a separate host computer system.
+- the present scheduling algorithm is implemented by the command queue controller 55 for sorting and scheduling commands in a command queue, to substantially minimize the long-term average access time of commands.
+- the algorithm identifies a candidate command from the command queue with the least expected access time (LEAT), and reorders the command queue accordingly, so that this candidate command is executed following the current command. Using the LEAT leads to a minimum average access time in the long run.
+- LEAT least expected access time
+- the scheduling algorithm is represented by a method 100 and illustrated in FIGS. 3A and 3B.
+- the scheduling algorithm starts at block or step 105 by marking the end of the execution of the current command by the head 40 .
+- an exemplary current command is denoted by the numeral reference 60 .
+- the scheduling algorithm initializes “mintime”, by setting it to a predetermined large value.
+- mintime denotes a program variable which is gradually decreased until it reaches a final minimum value.
+- the scheduling algorithm acquires the first rotational time of a candidate command in the queue.
+- an exemplary candidate command is denoted by the numeral reference 65 .
+- the rotational time of the candidate command 65 is measured by the angular difference between the candidate command 65 relative to the end of the current command 60 .
+- the rotational time of the candidate command 65 is the amount of time until the first time after the end of the current command that the rotational position of the candidate command will coincide with the rotational position of the head 40 .
+- the scheduling algorithm inquires whether the rotational time determined in step 15 is greater than a current “mintime”, which is the shortest expected time for the drive 10 to access a candidate command among those that the command queue controller 55 has scanned so far. If the scheduling algorithm determines that the rotational time is greater than or equal to the current “mintime”, which implies the existence of another command in the queue which is at least as appropriate for execution, then the scheduling algorithm bypasses the candidate command 65 and proceeds to the next command in the queue (step 125 ).
+- a current “mintime” is the shortest expected time for the drive 10 to access a candidate command among those that the command queue controller 55 has scanned so far. If the scheduling algorithm determines that the rotational time is greater than or equal to the current “mintime”, which implies the existence of another command in the queue which is at least as appropriate for execution, then the scheduling algorithm bypasses the candidate command 65 and proceeds to the next command in the queue (step 125 ).
+- the scheduling algorithm then inquires, at decision step 130 , whether the end of the queue has been reached, that is whether the scheduling algorithm has completed the scanning of all the commands in the queue. If it has, then it proceeds to step 135 where it returns the best found result or command with the least expected access time (LEAT). If, on the other hand, the end of the queue has not been reached, the scheduling algorithm returns to the beginning of the loop and considers the next command in the queue.
+- LEAT least expected access time
+- the scheduling algorithm determines that the rotational time is less than the current “mintime”, which implies that the candidate command 65 might be better than any previously scanned command
+- the scheduling algorithm checks additional conditions that would confirm, with a higher degree of certainty, whether or not the candidate command 65 has the least expected access time (LEAT) among previously scanned commands.
+- the scheduling algorithm proceeds to step 140 where it acquires various parameters specific to the candidate command 65 . These parameters include, for example, the cylinder difference, the read/write type, the direction of the movement of the head (inward or outward) and the head number.
+- the scheduling algorithm determines the maximum possible seek length within the current “mintime” at step 145 . It then proceeds to decision step 150 (FIG. 3B) where it compares the required seek time for the candidate command 65 (obtained at step 140 ) with the maximum possible seek length within the current “mintime” (obtained at step 145 ).
+- This approach allows the scheduling algorithm to optimize the calculation of seek time in that the scheduling algorithm is no longer required to dedicate time referring to look-up tables stored in the interface processor 50 for each candidate command 65 . Rather, the scheduling algorithm checks only once the maximum seek time corresponding to the “mintime”, and then compares the required seek time for the candidate command 65 to the maximum possible seek length within the current “mintime”.
+- FIG. 4 it illustrates an exemplary graph 200 that charts the maximum possible seek length versus available rotational time which is stored as a look-up table in the memory of the interface processor 50 .
+- the shaded area defined by the coordinates of the available rotational time and the coordinate axes, represents the maximum seek length values (measured in cylinders) for candidate commands, that are less than the maximum possible seek length corresponding to the rotational time.
+- step 150 If at step 150 the required seek time for the candidate command 65 is greater than the maximum seek length that is possible within the current “mintime”, as exemplified by the value 220 that lies above the shaded area, the scheduling algorithm bypasses the candidate command 65 for not possessing the LEAT, i.e., the currently best known command is more appropriate than the candidate command. The scheduling algorithm then proceeds to step 125 (FIG. 3A) and runs the sequence of steps as described above. If, however, at step 150 the required seek time for the candidate command 65 is found to be less than or equal to the maximum possible seek length within the current “mintime”, as exemplified by the value 210 that lies within the shaded area (FIG. 4 ), the scheduling algorithm proceeds to perform more refined calculations that would confirm, with an even higher degree of accuracy, whether or not the candidate command 65 has the least expected access time.
+- the scheduling algorithm consults a table stored in the memory of the interface processor 50 , and inquires at step 155 if, based on the parameters discovered so far, the candidate command may require an additional revolution to be added to the access time corresponding to required seek length determined at step 140 .
+- the stored look-up table provides two or more (e.g. five) columns of numbers that provide the probability of a successful execution of the candidate command 65 . For example, one column provides the shortest seek length with the zero probability of success, and another column provides the length of the longest seek with unity probability of success.
+- the scheduling algorithm compares the seek length of the candidate command 65 to the column with zero probability of success, and, if it determines that the seek of the candidate command is longer than the seek length in that column, then the candiate command time is increased by one revolution at step 160 , and the scheduling algorithm proceeds to decision step 170 . If at step 155 the scheduling algorithm determines that the seek of the candidate command is shorter than the seek length in the column with the zero probability of success, it does not increase the candidate command time by a revolution, but proceeds to decision step 165 .
+- the scheduling algorithm determines at decision step 165 whether the command time suffices with certainty for the seek. To this end, the scheduling algorithm compares the seek of the candidate command with the seek length in the column time with unity probability of success, and if it determines that the candidate seek is shorter than, or equal to the seek length in that column, then the candidate command 65 is deemed to satisfy the condition of decision step 165 , and the scheduling algorithm proceeds to step 170 .
+- step 175 the scheduling algorithm proceeds to step 175 , where it adds the expected lost time from look-up tables stored in the memory of the interface processor 50 .
+- This step is carried out as follows: Suppose the rotational time between the end of the current command 60 (FIG. 2) and the start of the candidate command is s. More precisely, it would take s time units for the rotational position of the head to change from that of the end of the current command 60 to that of the start of start of the candidate command.
+- the quantity s is a constant depending on the difference in rotational locations.
+- r is the (constant) time it takes to complete a full revolution.
+- p the probability of the candidate command missing a revolution
+- the probability p reflects various uncertainties, both intrinsic and due to the lack of computational resources for a more accurate evaluation.
+- a command (i) in the queue has rotational time s(i) and probability of success p(i) during the first revolution, its expected access time (EAT) t(i) is expressed by the following equation:
+- the scheduling algorithm then proceeds to decision step 170 , where it inquires whether the expected access time for the candidate command 65 obtained in step 140 is less than the current “mintime”. If it is not, the scheduling algorithm bypasses the candidate command 65 and proceeds to the next command in the queue at step 125 as explained above. If, on the other hand, the expected access time for the candidate command 65 obtained in step 140 is less than the current “mintime”, the scheduling algorithm proceeds to step 180 , and updates the current “mintime” with the value of the current candidate command 65 . It also stores the identity of the current command as the currently best known command.
+- the scheduling algorithm returns to steps 125 and 130 (FIG. 3 A), as explained above, and terminates by selecting the command with the least expected access time (LEAT) or t(i) at step 135 .
+- LEAT least expected access time
+- throughput means the average number of commands per unit of time.
+- the scheduling algorithm includes an efficient implementation of the LEAT criterion, namely, that the probability of a missed revolution p(i) does not have to be computed for every single command in the queue. Depending on the current best candidate, a command can be seen to have no chance of being the best candidate in the queue, regardless of its probability p(i) of a missed revolution.
+- FIG. 6 illustrates three profiles 375 , 380 , 385 that plot the probability of a successful seek operation (FIG. 5) versus available rotational time.
+- the first profile 375 illustrates the access operation in an aggressive mode, and is stored in tabular form in the memory of the servo processor 57 of the disk drive 10 of FIG. 1 .
+- the second profile 380 illustrates the seek operation in a conservative mode, and is also stored in tabular form in the memory of the servo processor 57 .
+- the data in the look-up tables represented by profiles 375 , 380 are developed off-line by the disk drive manufacturer for sector 44 on the disk 14 .
+- the profiles 375 and 380 intersect at a cross-over (or intersection) point 390 .
+- the third profile 385 is a hybrid graph derived from the first two profiles 375 , 380 , and is shifted from its original position for clarity of illustration.
+- SID time is the number of SIDs or SID units that separate two sectors 44 or commands 60 , 65 .
+- SID time bears a direct correlation to the rotational time, or angle between the sectors 44 and two commands (e.g, 60 , 65 ).
+- the maximum SID time corresponds to the longest seek in the drive, i.e., from one boundary to the other, and is usually no more than two revolutions time.
+- One SID time is expressed as follows:
+- N is a constant selected by the drive manufacturer, and denotes the number of SIDs (or sectors 44 ) constituting one disk revolution. In one example, “N” is set to 90.
+- “1 Revolution time” is equal to the time it takes the disk 14 to complete one revolution, i.e., 1 minute divided by the disk rotational speed. For example, for a rotational speed of 10,000 RPM, “1 Revolution time” is equal to 1/10,000 minutes, and 1 SID time is equal to 1/90,000 minute.
+- Profiles 375 and 380 illustrate the fact that a longer rotational time from a first command to a second commands implies a higher probability of a successful movement of the head 40 from the track of the first command to the track of the second command. Similarly, a shorter rotational time from the start sector to the target sector implies a smaller probability of a successful seek 40 from the start track to the target track.
+- the profile 375 illustrates the aggressive mode of operation whereby the movement of the head is done in the fastest possible way.
+- the profile 380 illustrates the conservative mode of operation whereby the movement of the head is done more slowly and accurately.
+- the profile 385 is a hybrid graph that combines the characteristics of profiles 375 and 380 , in that when a longer rotational time between two sectors or commands is available, the seek will be in the conservative mode of operation, while when a shorter is available rotational time, the seek will be in the aggressive mode of operation.
+- the profile 385 is comprised of two sections: a conservative section 392 that covers data points on the profile 375 below the cross-over point 390 , and an aggressive section 395 that covers data points on the profile 380 above the cross-over point 390 .
+- the crossover point 390 corresponds to the minimum available rotational time under which a conservative mode will be chosen for a given seek length.
+- a cross-over point can be derived from a given available rotational time, in which case the cross-over point can be expressed as the maximum seek length that should be done in the conservative mode, given the available rotational time.
+- the cross-over points are stored in a table in the memory of the interface processor 50 .
+- the method 300 for profiling the seek of an I/O command based on its available rotational time is implemented by the scheduling algorithm which runs on the interface processor 50 .
+- the implementation of the seek is carried out by the servo processor 57 .
+- the method 300 starts after the command to be executed next has been determined at step 305 .
+- the process of selecting the next command is explained herein in connection with FIG. 3 (refer to step 135 ).
+- the method 300 uses the available rotational time of the command to be executed next.
+- the method 300 compares, at step 310 , the rotational time of the chosen command acquired at step 305 to the cross-over point 390 , and inquires if the seek is longer than the crossover value that corresponds to the rotational time of the chosen command. If the method 300 determines that the seek is shorter than the cross-over value, it presumes that the head 40 has sufficient time to arrive to the destination command's track, and selects the conservative (or slower) servo mode of operation to move the head 40 (step 320 ). Thus, the probability of missing the revolution is minimized.
+- the method 300 determines that the seek is longer than the cross-over value, it presumes that the head 40 does not have sufficient time to arrive at the target track by using the conservative mode, and selects the aggressive (or faster) servo mode of operation to move the head 40 (step 325 ). Thus, the conditional probability of missing the revolution, given the next command has been determined, is minimized.
+- the method 300 instructs the servo processor 57 at step 330 , of this choice as one bit of information.
+- the scheduling algorithm sets the bit “1” for the aggressive servo mode and the bit “0” for the conservative servo mode.
+- a method 400 is implemented by the scheduling algorithm or by a separate module, for reordering I/O commands in a queue by grouping proximate commands, for reducing the drive latency and decreasing the number of iterations run by the scheduling algorithm, will now be described in connection with FIG. 7 .
+- the objective behind the method 400 is to identify early command opportunities, and mark them in advance to be processed “in tandem” with other commands.
+- an “early command” includes a command whose anticipated start time is earlier than the end time of the current command plus a “file start delay” (FSD).
+- the method 400 starts at step 405 with the advent of a new command x (i.e., 65 ), and the tandem identification algorithm determines, at step 410 , whether there is sufficient time for a partial or complete scanning of the command queue, so as to determine the proximity of the new command x (or a plurality of commands) to a queue command y (i.e., 44 ) to be executed after the new command 60 , or for the new command x to be executed after a queue command z.
+- proximity refers to the access time from x to y or from z to x, compared to the FSD. If there is not enough time for a complete scan, the algorithm may perform a partial scan. The scan terminates as soon as a sufficiently proximate pair is found. Otherwise, the algorithm continues to run at a low priority compared to the other modules that are being run by the interface processor.
+- the tandem identification algorithm scans the queue 425 , it calculates the access time “Txy” from the new command x to the queue member y.
+- the algorithm inquires at step 430 if the access time “Txy” is less than a predetermined threshold time, for example 100 microseconds. If this condition is met, the algorithm declares a tandem between the new command x and the queue command y, at step 435 .
+- the command pair (x,y) is designated for execution in tandem without later running the scheduling algorithm between the executions of the two commands x and y, and the command pair (x,y) is treated as a single command for the purpose of command scheduling.
+- the method 400 then exits at 440 and awaits the arrival of another new command.
+- the scheduling algorithm proceeds to step 450 and calculates the access time “Tyx” from the queue command y to the new command x.
+- the scheduling algorithm inquires at step 460 if the access time “Tyx” is less than the threshold time. If this condition is met, the scheduling algorithm declares a tandem between the queue command y and the new command x, at step 435 .
+- the command pair (y,x) is designated for execution in tandem without later running the scheduling algorithm between the executions of the two commands y and x, and the command pair (y,x) is treated as a single command for the purpose of command scheduling.
+- the method 400 then exits at 440 and awaits the arrival of another new command.
+- the scheduling algorithm disregards the queue command y and proceeds to decision step 465 , where it inquires if the end of the queue has been reached. If it has, then the method 400 exits at 470 , and awaits the arrival of another new command.
+- the method 400 considers the next command in the queue at step 475 , and then returns to step 425 to process the next command as explained above.
+Abstract
+Description
+Claims (24)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/481,231 US6571298B1 (en) | 2000-01-11 | 2000-01-11 | System and method for grouping disk access commands in a queue according to proximate disk positions |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/481,231 US6571298B1 (en) | 2000-01-11 | 2000-01-11 | System and method for grouping disk access commands in a queue according to proximate disk positions |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US6571298B1 true US6571298B1 (en) | 2003-05-27 |
+Family
+ID=23911156
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/481,231 Expired - Lifetime US6571298B1 (en) | 2000-01-11 | 2000-01-11 | System and method for grouping disk access commands in a queue according to proximate disk positions |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US6571298B1 (en) |
+Cited By (30)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020108016A1 (en) * | 2000-12-13 | 2002-08-08 | Seagate Technology Llc | System for characterizing performance of data handling systems under particular stimuli |
+US20020129083A1 (en) * | 2001-03-09 | 2002-09-12 | International Business Machines Corporation | System, method, and program for controlling execution sequencing of multiple jobs |
+US20030023778A1 (en) * | 2001-07-26 | 2003-01-30 | International Business Machines Corporation | System and method for scheduling of random commands to minimize impact of locational uncertainty |
+US20030056034A1 (en) * | 2001-09-14 | 2003-03-20 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US20030115407A1 (en) * | 2001-11-27 | 2003-06-19 | International Business Machines Corporation | Command aging method for data storage devices |
+US20030158996A1 (en) * | 2002-01-25 | 2003-08-21 | International Business Machines Corporation | System and method for efficiently sorting DASD queued commands with unknown rotational latency |
+US20030177261A1 (en) * | 2002-03-14 | 2003-09-18 | Takaaki Sekiguchi | Storage system, program and method for operating storage system, information processing terminal, program for operating the same, and data management system |
+US6654852B2 (en) * | 2000-01-27 | 2003-11-25 | International Business Machines Corporation | Method and system of reading and writing data by a disk drive apparatus |
+US20030225969A1 (en) * | 2002-04-03 | 2003-12-04 | International Business Machines Corp. | Data storage device, command queue re-ordering method, and data processing method and program |
+US20040015653A1 (en) * | 2002-07-22 | 2004-01-22 | Trantham Jon D. | Method and apparatus for determining the order of execution of queued commands in a data storage system |
+US6725327B1 (en) * | 2000-08-14 | 2004-04-20 | Hitachi Global Storage Technologies Netherlands B.V. | Space-efficient expected access time algorithm for hard disk drive command queue ordering |
+US20040255685A1 (en) * | 2003-02-03 | 2004-12-23 | Pekar Robert W. | Inflatable manometers |
+US20060047897A1 (en) * | 2004-08-31 | 2006-03-02 | Thiessen Mark A | Method for improving data throughput for a data storage device |
+US20060288184A1 (en) * | 2005-06-17 | 2006-12-21 | Seagate Technology Llc | Admission control in data storage devices |
+US20070160152A1 (en) * | 2003-12-08 | 2007-07-12 | Kanazawa University Technology Licensing Organization Ltd. | System for encoding/decoding motion picture and method for encoding/decoding motion picture |
+US20080005458A1 (en) * | 2006-06-29 | 2008-01-03 | Seagate Technology Llc | Command queue ordering with directional and floating write bands |
+US20080005463A1 (en) * | 2006-06-30 | 2008-01-03 | Seagate Technology Llc | Command queue ordering by flipping active write zones |
+US20080059708A1 (en) * | 2006-06-30 | 2008-03-06 | Seagate Technology Llc | Command queue ordering by positionally pushing access commands |
+US7376784B2 (en) | 2004-01-26 | 2008-05-20 | Hitachi Global Storage Technologies Netherlands B.V. | System and method for selecting command for execution in HDD based on benefit |
+US20080162803A1 (en) * | 2006-12-27 | 2008-07-03 | Kabushiki Kaisha Toshiba | Magnetic disk apparatus and method of controlling the same |
+US20090031079A1 (en) * | 2007-07-25 | 2009-01-29 | Sun Microsystems, Inc. | Logging latency reduction |
+US20090034377A1 (en) * | 2007-04-27 | 2009-02-05 | English Robert M | System and method for efficient updates of sequential block storage |
+US20100077175A1 (en) * | 2008-09-19 | 2010-03-25 | Ching-Yi Wu | Method of Enhancing Command Executing Performance of Disc Drive |
+US20100128381A1 (en) * | 2008-11-25 | 2010-05-27 | William Guthrie | Method and system for reducing power consumption by command selection in a hard disk drive |
+US20110196996A1 (en) * | 2010-02-08 | 2011-08-11 | Red Hat, Inc. | Methods for accounting seek time of disk accesses |
+US10303373B2 (en) | 2017-06-12 | 2019-05-28 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US10310923B1 (en) | 2014-08-28 | 2019-06-04 | Seagate Technology Llc | Probabilistic aging command sorting |
+US10831403B2 (en) | 2017-05-19 | 2020-11-10 | Seagate Technology Llc | Probabalistic command aging and selection |
+US10930310B1 (en) * | 2020-02-04 | 2021-02-23 | Western Digital Technologies, Inc. | Data storage device sorting access commands based on peak current for multiple actuators |
+TWI822386B (en) * | 2022-10-11 | 2023-11-11 | 慧榮科技股份有限公司 | Bridge control chip and associated signal processing method |
+Citations (12)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4636883A (en) | 1983-10-21 | 1987-01-13 | Kabushiki Kaisha Toshiba | Magnetic head control apparatus |
+US4899234A (en) | 1988-04-04 | 1990-02-06 | Magnetic Peripherals Inc. | Adaptive velocity profile for disk actuator control |
+US5132855A (en) | 1989-11-28 | 1992-07-21 | Seagate Technology, Inc. | Adaptive velocity profile selection based on torque constant measurement |
+US5381282A (en) | 1991-10-18 | 1995-01-10 | International Business Machines Corporation | Inter-sample switching of servo control in direct access storage devices |
+US5570332A (en) | 1995-05-25 | 1996-10-29 | Seagate Technology, Inc. | Method for reducing rotational latency in a disc drive |
+US5664143A (en) | 1994-11-23 | 1997-09-02 | International Business Machines Corporation | Method and apparatus for sorting disk access commands in a rotational position queue according to time differences between the commands |
+US5729718A (en) * | 1993-11-10 | 1998-03-17 | Quantum Corporation | System for determining lead time latency as function of head switch, seek, and rotational latencies and utilizing embedded disk drive controller for command queue reordering |
+US5854941A (en) * | 1996-05-31 | 1998-12-29 | Acceleration Software International Corporation | System for estimating access time by deriving from first and second rotational time from rotational time table based on logical address and head movement time |
+US6002540A (en) | 1995-05-18 | 1999-12-14 | International Business Machines Corporation | Method and apparatus for rotary actuator arc compensation correction in a direct access storage device |
+US6170042B1 (en) * | 1998-02-24 | 2001-01-02 | Seagate Technology Llc | Disc drive data storage system and method for dynamically scheduling queued commands |
+US6311256B2 (en) * | 1997-06-30 | 2001-10-30 | Emc Corporation | Command insertion and reordering at the same storage controller |
+US6442648B1 (en) * | 1998-09-03 | 2002-08-27 | International Business Machines Corporation | Method of and system for the dynamic scheduling of requests to access a storage system |
+-
+2000
+- 2000-01-11 US US09/481,231 patent/US6571298B1/en not_active Expired - Lifetime
+Patent Citations (12)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4636883A (en) | 1983-10-21 | 1987-01-13 | Kabushiki Kaisha Toshiba | Magnetic head control apparatus |
+US4899234A (en) | 1988-04-04 | 1990-02-06 | Magnetic Peripherals Inc. | Adaptive velocity profile for disk actuator control |
+US5132855A (en) | 1989-11-28 | 1992-07-21 | Seagate Technology, Inc. | Adaptive velocity profile selection based on torque constant measurement |
+US5381282A (en) | 1991-10-18 | 1995-01-10 | International Business Machines Corporation | Inter-sample switching of servo control in direct access storage devices |
+US5729718A (en) * | 1993-11-10 | 1998-03-17 | Quantum Corporation | System for determining lead time latency as function of head switch, seek, and rotational latencies and utilizing embedded disk drive controller for command queue reordering |
+US5664143A (en) | 1994-11-23 | 1997-09-02 | International Business Machines Corporation | Method and apparatus for sorting disk access commands in a rotational position queue according to time differences between the commands |
+US6002540A (en) | 1995-05-18 | 1999-12-14 | International Business Machines Corporation | Method and apparatus for rotary actuator arc compensation correction in a direct access storage device |
+US5570332A (en) | 1995-05-25 | 1996-10-29 | Seagate Technology, Inc. | Method for reducing rotational latency in a disc drive |
+US5854941A (en) * | 1996-05-31 | 1998-12-29 | Acceleration Software International Corporation | System for estimating access time by deriving from first and second rotational time from rotational time table based on logical address and head movement time |
+US6311256B2 (en) * | 1997-06-30 | 2001-10-30 | Emc Corporation | Command insertion and reordering at the same storage controller |
+US6170042B1 (en) * | 1998-02-24 | 2001-01-02 | Seagate Technology Llc | Disc drive data storage system and method for dynamically scheduling queued commands |
+US6442648B1 (en) * | 1998-09-03 | 2002-08-27 | International Business Machines Corporation | Method of and system for the dynamic scheduling of requests to access a storage system |
+Cited By (49)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6654852B2 (en) * | 2000-01-27 | 2003-11-25 | International Business Machines Corporation | Method and system of reading and writing data by a disk drive apparatus |
+US6725327B1 (en) * | 2000-08-14 | 2004-04-20 | Hitachi Global Storage Technologies Netherlands B.V. | Space-efficient expected access time algorithm for hard disk drive command queue ordering |
+US20020108016A1 (en) * | 2000-12-13 | 2002-08-08 | Seagate Technology Llc | System for characterizing performance of data handling systems under particular stimuli |
+US20020129083A1 (en) * | 2001-03-09 | 2002-09-12 | International Business Machines Corporation | System, method, and program for controlling execution sequencing of multiple jobs |
+US7159218B2 (en) * | 2001-03-09 | 2007-01-02 | Lenovo (Singapore) Pte. Ltd. | System, method, and program for controlling execution sequencing of multiple jobs |
+US20030023778A1 (en) * | 2001-07-26 | 2003-01-30 | International Business Machines Corporation | System and method for scheduling of random commands to minimize impact of locational uncertainty |
+US6763404B2 (en) * | 2001-07-26 | 2004-07-13 | International Business Machines Corporation | System and method for scheduling of random commands to minimize impact of locational uncertainty |
+US20030056034A1 (en) * | 2001-09-14 | 2003-03-20 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US8327093B2 (en) * | 2001-09-14 | 2012-12-04 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US6826630B2 (en) * | 2001-09-14 | 2004-11-30 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US20050055517A1 (en) * | 2001-09-14 | 2005-03-10 | Seagate Technology Llc, A Delaware Corporation | Prioritizing commands in a data storage device |
+US20030115407A1 (en) * | 2001-11-27 | 2003-06-19 | International Business Machines Corporation | Command aging method for data storage devices |
+US6848020B2 (en) * | 2001-11-27 | 2005-01-25 | International Business Machines Corporation | Command aging method for data storage devices |
+US6681289B2 (en) * | 2002-01-25 | 2004-01-20 | International Business Machines Corporation | System and method for efficiently sorting DASD queued commands with unknown rotational latency |
+US20030158996A1 (en) * | 2002-01-25 | 2003-08-21 | International Business Machines Corporation | System and method for efficiently sorting DASD queued commands with unknown rotational latency |
+US20030177261A1 (en) * | 2002-03-14 | 2003-09-18 | Takaaki Sekiguchi | Storage system, program and method for operating storage system, information processing terminal, program for operating the same, and data management system |
+US7010653B2 (en) * | 2002-04-03 | 2006-03-07 | Hitachi Global Storage Technologies Netherlands B.V. | Data storage device, command queue re-ordering method, and data processing method and program |
+US20030225969A1 (en) * | 2002-04-03 | 2003-12-04 | International Business Machines Corp. | Data storage device, command queue re-ordering method, and data processing method and program |
+US7043567B2 (en) * | 2002-07-22 | 2006-05-09 | Seagate Technology Llc | Method and apparatus for determining the order of execution of queued commands in a data storage system |
+US20040015653A1 (en) * | 2002-07-22 | 2004-01-22 | Trantham Jon D. | Method and apparatus for determining the order of execution of queued commands in a data storage system |
+US20040255685A1 (en) * | 2003-02-03 | 2004-12-23 | Pekar Robert W. | Inflatable manometers |
+US20070160152A1 (en) * | 2003-12-08 | 2007-07-12 | Kanazawa University Technology Licensing Organization Ltd. | System for encoding/decoding motion picture and method for encoding/decoding motion picture |
+US7376784B2 (en) | 2004-01-26 | 2008-05-20 | Hitachi Global Storage Technologies Netherlands B.V. | System and method for selecting command for execution in HDD based on benefit |
+US20060047897A1 (en) * | 2004-08-31 | 2006-03-02 | Thiessen Mark A | Method for improving data throughput for a data storage device |
+US7464218B2 (en) * | 2004-08-31 | 2008-12-09 | Seagate Technology Llc | Method for improving data throughput for a data storage device |
+US20060288184A1 (en) * | 2005-06-17 | 2006-12-21 | Seagate Technology Llc | Admission control in data storage devices |
+US7890696B2 (en) | 2006-06-29 | 2011-02-15 | Seagate Technology Llc | Command queue ordering with directional and floating write bands |
+US20080005458A1 (en) * | 2006-06-29 | 2008-01-03 | Seagate Technology Llc | Command queue ordering with directional and floating write bands |
+US20080059708A1 (en) * | 2006-06-30 | 2008-03-06 | Seagate Technology Llc | Command queue ordering by positionally pushing access commands |
+US7644206B2 (en) * | 2006-06-30 | 2010-01-05 | Seagate Technology Llc | Command queue ordering by positionally pushing access commands |
+US20080005463A1 (en) * | 2006-06-30 | 2008-01-03 | Seagate Technology Llc | Command queue ordering by flipping active write zones |
+US8244975B2 (en) | 2006-06-30 | 2012-08-14 | Seagate Technology Llc | Command queue ordering by flipping active write zones |
+US20080162803A1 (en) * | 2006-12-27 | 2008-07-03 | Kabushiki Kaisha Toshiba | Magnetic disk apparatus and method of controlling the same |
+US7853761B2 (en) * | 2006-12-27 | 2010-12-14 | Kabushiki Kaisha Toshiba | Classifying write commands into groups based on cumulated flush time |
+US20090034377A1 (en) * | 2007-04-27 | 2009-02-05 | English Robert M | System and method for efficient updates of sequential block storage |
+US7882304B2 (en) * | 2007-04-27 | 2011-02-01 | Netapp, Inc. | System and method for efficient updates of sequential block storage |
+US8069305B2 (en) * | 2007-07-25 | 2011-11-29 | Oracle America, Inc. | Logging latency reduction |
+US20090031079A1 (en) * | 2007-07-25 | 2009-01-29 | Sun Microsystems, Inc. | Logging latency reduction |
+US8332608B2 (en) * | 2008-09-19 | 2012-12-11 | Mediatek Inc. | Method of enhancing command executing performance of disc drive |
+US20100077175A1 (en) * | 2008-09-19 | 2010-03-25 | Ching-Yi Wu | Method of Enhancing Command Executing Performance of Disc Drive |
+US20100128381A1 (en) * | 2008-11-25 | 2010-05-27 | William Guthrie | Method and system for reducing power consumption by command selection in a hard disk drive |
+US8364992B2 (en) | 2008-11-25 | 2013-01-29 | Hgst, Netherlands B.V. | Method and system for reducing power consumption by command selection in a hard disk drive |
+US8219716B2 (en) * | 2010-02-08 | 2012-07-10 | Red Hat, Inc. | Methods for accounting seek time of disk accesses |
+US20110196996A1 (en) * | 2010-02-08 | 2011-08-11 | Red Hat, Inc. | Methods for accounting seek time of disk accesses |
+US10310923B1 (en) | 2014-08-28 | 2019-06-04 | Seagate Technology Llc | Probabilistic aging command sorting |
+US10831403B2 (en) | 2017-05-19 | 2020-11-10 | Seagate Technology Llc | Probabalistic command aging and selection |
+US10303373B2 (en) | 2017-06-12 | 2019-05-28 | Seagate Technology Llc | Prioritizing commands in a data storage device |
+US10930310B1 (en) * | 2020-02-04 | 2021-02-23 | Western Digital Technologies, Inc. | Data storage device sorting access commands based on peak current for multiple actuators |
+TWI822386B (en) * | 2022-10-11 | 2023-11-11 | 慧榮科技股份有限公司 | Bridge control chip and associated signal processing method |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6571298B1 (en) | System and method for grouping disk access commands in a queue according to proximate disk positions | |
+US6574676B1 (en) | System and method for scheduling disk drive commands by expected total access time | |
+US5570332A (en) | Method for reducing rotational latency in a disc drive | |
+US5991825A (en) | System for handling missed revolution in a disk drive by aborting the execution of primary command and executing secondary command if a missed revolution occurs | |
+US6845405B1 (en) | Disk drive executing part of a linked disk command | |
+US5729718A (en) | System for determining lead time latency as function of head switch, seek, and rotational latencies and utilizing embedded disk drive controller for command queue reordering | |
+US5734861A (en) | Log-structured disk array with garbage collection regrouping of tracks to preserve seek affinity | |
+US6339811B1 (en) | Rotationally optimized seek initiation | |
+US6851011B2 (en) | Reordering hardware for mass storage command queue | |
+US6732292B2 (en) | Adaptive bi-directional write skip masks in a data storage device | |
+US20030023815A1 (en) | Cache buffer control method for hard disk drives | |
+US20010028524A1 (en) | Command queue processor | |
+US20030056059A1 (en) | Optimizing data transfer performance through partial write command purging in a disc drive | |
+EP1134648A2 (en) | Host-based virtual disk drive for improving the performance of a hard disk drive's input/output | |
+US6957311B2 (en) | Data storage apparatus, computer apparatus, data processing apparatus, and data processing method | |
+US10777218B2 (en) | Disk-drive with efficient command reordering | |
+US6868477B2 (en) | Method and apparatus for optimizing skip mask operations in a disc drive | |
+US20060047897A1 (en) | Method for improving data throughput for a data storage device | |
+US6553454B1 (en) | Storage device and method of reordering commands from a command queue | |
+US6898665B1 (en) | System and method for profiling access to disk drive commands based on a dual servo mode model | |
+US6654852B2 (en) | Method and system of reading and writing data by a disk drive apparatus | |
+US20030158996A1 (en) | System and method for efficiently sorting DASD queued commands with unknown rotational latency | |
+US6578107B1 (en) | Method and system for prefetching data where commands are reordered for execution | |
+US6725327B1 (en) | Space-efficient expected access time algorithm for hard disk drive command queue ordering | |
+EP0675490B1 (en) | Method for reducing rotational latency in a disc drive |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:MEGIDDO, NIMROD;REEL/FRAME:010515/0752Effective date: 20000110 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026664/0866Effective date: 20110503 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

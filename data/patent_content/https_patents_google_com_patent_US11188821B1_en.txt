@@ -1,0 +1,621 @@
+US11188821B1 - Control policies for collective robot learning - Google Patents
+Control policies for collective robot learning Download PDFInfo
+- Publication number
+- US11188821B1 US11188821B1 US15/705,601 US201715705601A US11188821B1 US 11188821 B1 US11188821 B1 US 11188821B1 US 201715705601 A US201715705601 A US 201715705601A US 11188821 B1 US11188821 B1 US 11188821B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- local
+- global
+- worker
+- workers
+- neural network
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- B—PERFORMING OPERATIONS; TRANSPORTING
+- B25—HAND TOOLS; PORTABLE POWER-DRIVEN TOOLS; MANIPULATORS
+- B25J—MANIPULATORS; CHAMBERS PROVIDED WITH MANIPULATION DEVICES
+- B25J9/00—Programme-controlled manipulators
+- B25J9/16—Programme controls
+- B25J9/1628—Programme controls characterised by the control loop
+- B25J9/163—Programme controls characterised by the control loop learning, adaptive, model based, rule based expert control
+-
+- B—PERFORMING OPERATIONS; TRANSPORTING
+- B25—HAND TOOLS; PORTABLE POWER-DRIVEN TOOLS; MANIPULATORS
+- B25J—MANIPULATORS; CHAMBERS PROVIDED WITH MANIPULATION DEVICES
+- B25J9/00—Programme-controlled manipulators
+- B25J9/16—Programme controls
+- B25J9/1602—Programme controls characterised by the control system, structure, architecture
+- B25J9/161—Hardware, e.g. neural networks, fuzzy logic, interfaces, processor
+-
+- B—PERFORMING OPERATIONS; TRANSPORTING
+- B25—HAND TOOLS; PORTABLE POWER-DRIVEN TOOLS; MANIPULATORS
+- B25J—MANIPULATORS; CHAMBERS PROVIDED WITH MANIPULATION DEVICES
+- B25J9/00—Programme-controlled manipulators
+- B25J9/16—Programme controls
+- B25J9/1656—Programme controls characterised by programming, planning systems for manipulators
+- B25J9/1664—Programme controls characterised by programming, planning systems for manipulators characterised by motion, path, trajectory planning
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N20/00—Machine learning
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/04—Architecture, e.g. interconnection topology
+- G06N3/045—Combinations of networks
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/06—Physical realisation, i.e. hardware implementation of neural networks, neurons or parts of neurons
+- G06N3/063—Physical realisation, i.e. hardware implementation of neural networks, neurons or parts of neurons using electronic means
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N3/00—Computing arrangements based on biological models
+- G06N3/02—Neural networks
+- G06N3/08—Learning methods
+-
+- G—PHYSICS
+- G05—CONTROLLING; REGULATING
+- G05B—CONTROL OR REGULATING SYSTEMS IN GENERAL; FUNCTIONAL ELEMENTS OF SUCH SYSTEMS; MONITORING OR TESTING ARRANGEMENTS FOR SUCH SYSTEMS OR ELEMENTS
+- G05B2219/00—Program-control systems
+- G05B2219/30—Nc systems
+- G05B2219/33—Director till display
+- G05B2219/33044—Supervised learning with second artificial neural network
+-
+- G—PHYSICS
+- G05—CONTROLLING; REGULATING
+- G05B—CONTROL OR REGULATING SYSTEMS IN GENERAL; FUNCTIONAL ELEMENTS OF SUCH SYSTEMS; MONITORING OR TESTING ARRANGEMENTS FOR SUCH SYSTEMS OR ELEMENTS
+- G05B2219/00—Program-control systems
+- G05B2219/30—Nc systems
+- G05B2219/39—Robotics, robotics to robotics hand
+- G05B2219/39298—Trajectory learning
+Definitions
+- This specification relates to selecting actions to be performed by a robotic agent.
+- Robotic agents interact with an environment by receiving data characterizing a state of the environment, and in response, performing an action in order to attempt to perform a robotic task.
+- Some robotic agents use neural networks to select the action to be performed in response to receiving any given observation.
+- Neural networks are machine learning models that employ one or more layers of nonlinear units to predict an output for a received input.
+- Some neural networks are deep neural networks that include one or more hidden layers in addition to an output layer. The output of each hidden layer is used as input to the next layer in the network, i.e., the next hidden layer or the output layer.
+- Each layer of the network generates an output from a received input in accordance with current values of a respective set of parameters.
+- This specification describes technologies that relate to selecting actions to be performed by a robotic agent.
+- a distributed training system can effectively and directly learn complex feedback control policies that map from high-dimensional sensory inputs to motor torques for manipulation tasks with discontinuous contact dynamics, i.e., by training a global policy neural network as described in this specification.
+- the distributed training system can effectively learn a distributed training policy even for contact-rich tasks that require fine action control.
+- the distributed training system can learn an effective policy both from observations that are low-dimensional observations and from observations that are high-dimensional pixel inputs.
+- the distributed training system can train the global policy neural network efficiently through distributed learning across multiple local workers that operate asynchronously from each other.
+- the distributed training system as described in this specification provides a solution that breaks dependencies of each worker at a point that effectively leverages the distributed nature of the system to improve the training of the global policy neural network. That is, it is difficult to determine what elements of the system can be accessed, delayed, utilized, etc., by each worker without affecting the performance of the other workers and the overall system as accomplished by the distributed training system described in this specification. Additionally, assumptions of the training algorithm are necessarily violated when applied to this distributed learning process, and the distributed training system as described in this specification effectively trains the global policy neural network despite these violations by effectively dividing the training process across local and global workers. For example, assumptions that the global policy is constantly up-to-date relative to local policies are violated by distributing the training across multiple asynchronous workers.
+- the distributed training system as described in this specification distributes the training in such a way that the benefit of a greater data set size obtained by using multiple local workers outweighs the additional bias introduced by asynchronous training, as may occur with other distributed frameworks.
+- the distributed training system as described in this specification effectively leverages the increased amount of data that can be generated to accelerate the training of a global policy neural network that implements a complex, nonlinear neural network policy.
+- the distributed training system efficiently makes use of the computational resources allocated to the system to more quickly train the global policy neural network and therefore learn a control policy for a robotic agent.
+- FIG. 1 shows an example distributed training system.
+- FIG. 2 is a flow diagram of an example process for training a global policy neural network.
+- FIG. 3 is a flow diagram of an example process for performing a local step of a distributed training procedure.
+- FIG. 4 is a flow diagram of an example process for performing a global step of a distributed training procedure.
+- FIG. 5 is a flow diagram of an example process for updating the values of the parameters of the global policy neural network during the training of the global policy neural network.
+- This specification generally describes a distributed training system that trains a global policy neural network for use in selecting actions to be performed by a robotic agent interacting with a real-world environment to perform a robotic task, such as opening a door, picking up an object and placing it down, and so on.
+- the robotic task can have discontinuous dynamics, i.e., the dynamics of the environment are discontinuous at certain states of the environment.
+- the robotic agent receives or generates data characterizing the current state of the environment and performs an action in response to the data.
+- the global policy neural network is configured to receive as input an observation, i.e., data characterizing a state of the environment, and to process the observation to generate a global policy output in accordance with current values of the parameters of the global neural policy neural network.
+- the observation can include high-dimensional data characterizing the state of the environment, e.g., raw sensor data captured by one or more sensors of the robotic agent, such as visual data, inertial measurement unit (IMU) readings, and so on.
+- the global policy output defines a distribution over possible actions to be performed by the agent in response to the observation.
+- the global policy output may include a mean action vector and covariances of the entries of the mean action vector.
+- an action may include a respective torque to be applied to each of multiple joints of the robotic agent.
+- the global policy output includes a mean action vector that includes a respective entry, i.e., a respective mean torque, for each joint and covariances of the entries of the mean action vector.
+- FIG. 1 shows an example distributed training system 100 .
+- the distributed training system 100 is an example of a system implemented as computer programs on one or more computers in one or more locations in which the systems, components, and techniques described below are implemented.
+- the distributed training system 100 is a system for distributed training of a global policy neural network and includes multiple local workers 130 a - n , multiple global workers 140 a - n , and a parameter server 190 .
+- the distributed training system 100 trains the global policy neural network to allow the neural network to effectively be used to select actions performed by a robotic agent interacting with a real-world environment.
+- Each local worker 130 a - n corresponds to one of multiple robotic agents 102 a - n that interacts with a respective instance of the real-world environment 104 a - n .
+- each of the multiple local workers 130 a - n repeatedly performs a local step of an optimization algorithm asynchronously from each of the other local workers 130 a - n .
+- each local worker operates asynchronously from each other worker because each local worker performs the local step of the optimization algorithm without waiting for other local workers, i.e., each local worker can move on to the next iteration of the local step without waiting for the other local workers to finish the current iteration.
+- each of the local workers 130 a - n is implemented on a respective computer. In other implementations, two or more of the local workers 130 a - n are implemented on the same computer but each of these workers execute in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the worker.
+- each local worker 130 a - n uses a trajectory-centric algorithm to learn simple policy controllers, or local policy controllers 120 a - n , for trajectories with various initial conditions of the robotic task being performed by the robotic agent 102 a - n corresponding to the local worker.
+- each local worker 130 a - n initializes a particular instance of the robotic task and generates a trajectory of state-action pairs by selecting actions to be performed by the corresponding robotic agent 102 a - n while the robotic agent 102 a - n is performing the instance of the robotic task.
+- different instances of a task are instances of the task that have different initial conditions.
+- the distributed training system 100 can initialize different instances of a particular robotic task by randomly selecting an initial state of the instance of the environment 104 a - n corresponding to the local worker 130 a - n .
+- the system 100 can randomly select an initial position of an object, such as an initial rotation of the handle of a door, an initial position of a bottle on a table, etc., in the environment instance 104 a - n .
+- the initial state of the task for a new instance is generated by an external system or by a user.
+- Each local worker 130 a - n generates a trajectory of state-action pairs by selecting actions to be performed by the instance of the robotic agent corresponding to the local worker while performing the instance of the robotic task.
+- the state-action pairs in the trajectory are data identifying states of the environment that occurred during the instance of the task, and, for each of the states, the action performed by the agent while the environment was in the state. Generating the trajectory is described in more detail below with reference to FIG. 3 .
+- the local worker 130 a - n then optimizes a corresponding local policy controller 120 a - n . That is, for each instance, the corresponding local worker 130 a - n optimizes a controller that is specific to the instance on the trajectory of state-action pairs for the instance.
+- Each local policy controller 120 a - n can generate a local policy output that defines a distribution over the possible actions based on low-dimensional data characterizing the state of the environment.
+- the local policy controller 120 a - n that is specific to the instance can be a time-varying linear-Gaussian controller. Optimizing a local policy controller is described in more detail below with reference to FIG. 3 .
+- the local worker 130 a - n then generates an optimized trajectory using the optimized local policy controller 120 a - n and stores the optimized trajectory in a replay memory 150 a - n associated with the local worker 130 a - n .
+- an optimized trajectory for a given trajectory includes observations characterizing the states encountered by the agent during the trajectory, and, for each observation, the output generated by the optimized local policy controller for a low-dimensional input characterizing the state. That is, for a given observation characterizing a given state, the optimized trajectory includes the observation and the output generated by the local policy controller based on low-dimensional data characterizing the given state after the controller has been optimized on the trajectory.
+- the optimized trajectory can also include data tracking which local policies generated the optimized trajectory in order to reweight the data in the replay memory with importance sampling.
+- each of the replay memories 150 a - n can be a buffer that contains previously collected experience data from which the global policy neural network is trained.
+- Each of the multiple global workers 140 a - n maintains a respective replica 110 a - n of the global policy neural network.
+- Each of the replicas 110 a - n is an instance of the global policy neural network, with possibly different parameter values at any given time during the training. That is, each replica has an identical architecture, but with possibly different parameter values.
+- each global worker 140 a - n repeatedly performs a global step of the optimization algorithm to collectively train the network.
+- the distributed training system 100 uses the stored optimized trajectories generated by the local workers 130 a - n to train multiple replicas of the global policy neural network associated with multiple global workers 140 a - n for learning a complex high-dimensional global policy in a supervised manner.
+- This framework maximizes utilization of each local worker 130 a - n by continually executing and optimizing local policies 120 a - n without having the local workers 130 a - n be directly involved in the updating of the parameters of the global policy neural network.
+- the system 100 includes the same number of global workers 140 a - n as local workers 130 a - n and each global worker 140 a - n corresponds to a different one of the robotic agents 102 a - n .
+- each global worker 140 a - n can be associated with the same replay memory 150 a - n as the corresponding local worker 130 a - n .
+- the system 100 includes a different number of global workers 140 a - n from local workers 130 a - n , and each global worker 140 a - n corresponds to a possibly overlapping subset of the local workers 130 a - n and can access the replay memories of any of the local workers in the corresponding subset.
+- Each of the multiple global workers 140 a - n trains the corresponding global policy neural network replica 110 a - n of the global policy neural network in a supervised manner.
+- each global worker 140 a - n samples a stored optimized trajectory from one of the one or more replay memories 150 a - n accessible to the global worker 140 a - n.
+- Each global worker 140 a - n trains the replica of the global policy neural network 110 a - n maintained by the global worker on the sampled optimized trajectory to determine delta values for the parameters of the global policy neural network, e.g., using supervised learning. Determining delta values is described in more detail below with reference to FIG. 4 .
+- the global worker 140 a - n sends the delta values to the parameter server 190 .
+- the parameter server 190 receives delta values from the global workers 140 a - n , updates current values of the parameters of the global policy neural network using the delta values, and provides the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers.
+- the operations performed by the parameter server 190 during the training of the global policy neural network are described in more detail below with reference to FIG. 5 .
+- each global worker operates asynchronously from each other global worker. That is, each global worker performs the global step of the optimization algorithm without waiting for other global workers, i.e., each global worker can move on to the next iteration of the global step without waiting for the other global workers to finish the current iteration.
+- the global workers are synchronized. That is, after an iteration of the global step is completed, each global worker sends their delta values to the parameter server and waits to obtain updated parameter values before beginning the next iteration.
+- each global worker operates asynchronously from the local workers because the global worker reads asynchronously from the replay memory while the local worker writes to it. That is, a given global worker reads from the memory without waiting for a corresponding local worker to write to the memory and the local worker can write to the memory without waiting for the global worker to have read what the local worker has previously written to the memory.
+- each of the global workers is implemented on a respective computer.
+- two or more of the global workers are implemented on the same computer but each of these global workers execute in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the global worker.
+- some or all of the global workers are implemented on the same computer as one or more corresponding local workers, with each worker that is implemented on the computer executing in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the worker.
+- the distributed training system 100 or another system can effectively use the trained global policy neural network to select actions to be performed by the robotic agent.
+- the distributed training system 100 or the other system can process the observation using the trained values of the parameters of the global policy neural network, i.e., values that are the same as the final values stored in the parameter server 190 at the completion of the training procedure, to generate a global policy output used to select a next action to be performed by a robotic agent in accordance with the trained values of the parameters of the global policy neural network.
+- each worker 140 a - n can directly write updates to and read values from a shared memory.
+- FIG. 2 is a flow diagram of an example process 200 for distributed training of a global policy neural network FIG. 1 .
+- the process 200 will be described as being performed by a system of one or more computers located in one or more locations.
+- a distributed training system e.g., the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can perform the process 200 .
+- Each of multiple local workers of the system performs iterations of a local step of the distributed training procedure asynchronously from each other local worker (step 202 ). During an iteration of the local step, each local worker generates and stores an optimized trajectory in a replay memory associated with the local worker. Performing an iteration of the local step of the training procedure is described in more detail below with reference to FIG. 3 .
+- Each of multiple global workers of the system performs iterations of a global step of the distributed training procedure (step 204 ).
+- each global worker samples an optimized trajectory from a replay memory associated with the global worker and trains a replica of the global policy neural network on the optimized trajectory to determine delta values for the parameters of the global policy neural network.
+- Performing an iteration of the global step is described in more detail below with reference to FIG. 4 .
+- a parameter server receives delta values from the global workers and updates the maintained values of the parameters of the global policy neural network using the received delta values (step 206 ). Updating the maintained values is described in more detail below with reference to FIG. 5 .
+- FIG. 3 is a flow diagram of an example process 300 for performing the local step of a distributed training procedure.
+- the process 300 will be described as being performed by a system of one or more computers located in one or more locations.
+- each of multiple local workers in a distributed training system e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 300 asynchronously from each other local worker during the training of the global policy neural network.
+- the local worker initializes an instance of the particular task (step 302 ). As described above, the local worker can initialize an instance of the task with the initial state of the real-world environment corresponding to the local worker being randomly selected.
+- the local worker generates a trajectory of state-action pairs (step 304 ).
+- the local worker selects actions to be performed by the corresponding robotic agent while the robotic agent is performing the instance of the robotic task.
+- the local worker selects actions using the local policy controller as previously optimized by the local worker, i.e., the local policy controller as optimized during a preceding iteration of the process 300 .
+- the local worker also maintains or has access to a replica of the global policy neural network and selects actions to be performed by the corresponding robotic agent while performing the instance of the robotic task using the replica of the global policy neural network.
+- the local worker optimizes a local policy controller on the trajectory (step 306 ).
+- the local policy controller can be a time-varying linear Gaussian controller.
+- the local worker can optimize the local policy controller by performing one or more optimization steps of a local policy optimization algorithm on the trajectory of state-action pairs to optimize a local policy controller.
+- the local policy optimization algorithm can be any appropriate trajectory optimization algorithm.
+- the trajectory optimization algorithm can be a policy improvement with path integrals (PI2) algorithm. Performing an optimization step using the PI2 is described in more detail in F. Stulp and O. Sigaud. Path integral policy improvement with covariance matrix adaptation. In ICML, 2012
+- the trajectory optimization algorithm can be a linear-quadratic regulators (LQR) algorithm. Performing an optimization step using an LQR algorithm is described in more detail in S. Levine, C. Finn, T. Darrell, and P. Abbeel. End-to-end training of deep visuomotor policies. JMLR, 17(1), 2016.
+- an optimized trajectory for a given trajectory includes observations characterizing the states encountered by the agent during the trajectory, and, for each observation, the output generated by the optimized local policy controller for the state. That is, for a given observation characterizing a given state, the optimized trajectory includes the observation and the output generated by the local policy controller based on low-dimensional data characterizing the given state after the controller has been optimized on the trajectory.
+- the optimized trajectory can also include data tracking which local policies generated the optimized trajectory in order to reweight the data in the replay memory with importance sampling.
+- the local worker stores the optimized trajectory in the replay memory associated with the local worker (step 310 ).
+- FIG. 4 is a flow diagram of an example process 400 for performing the global step of a distributed training procedure.
+- the process 400 will be described as being performed by a system of one or more computers located in one or more locations.
+- each of multiple global workers in a distributed training system e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 400 during the training of the global policy neural network.
+- the global worker obtains current values of the parameters of the global policy neural network from the parameter server (step 402 ). In some implementations, the global worker obtains new values of the parameters from the parameter server after each iteration of the process 400 . In some other implementations, the global worker can re-use the values from the previous iteration of the process 400 until criteria for requesting new values from the parameter server have been satisfied.
+- the global worker samples an optimized trajectory from a replay memory associated with the global worker (step 404 ).
+- the global worker is associated with a single replay memory while in other cases the global worker selects, e.g., randomly, a replay memory from multiple replay memories associated with the global worker and samples an optimized trajectory from the selected replay memory.
+- the global worker trains the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory to determine delta values for the current values of the parameters (step 406 ).
+- each delta value is an update to a respective current parameter value.
+- the global worker trains the replica using a supervised learning technique on the observations and the outputs in the optimized trajectory to determine the delta values by optimizing an objective function.
+- the objective function can be a mirror descent guided policy search objective function, a Bregman alternating direction method of multipliers (BADMM)-based guided policy search objective function, and so on.
+- the global worker provides the delta values to the parameter server (step 408 ). In some cases, the global worker provides the delta values after each iteration of the process 400 . In some other cases, the global worker accumulates delta values locally until criteria for providing the delta values are satisfied and then provides the accumulated delta values to the parameter server.
+- FIG. 5 is a flow diagram of an example process 500 for updating values of the parameters of the global policy neural network during the training of the global policy neural network.
+- the process 500 will be described as being performed by a system of one or more computers located in one or more locations.
+- a parameter server in a distributed training system e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 500 during the training of the global policy neural network.
+- the parameter server receives delta values from the global workers (step 502 ).
+- the parameter server can receive the values asynchronously, i.e., can receive delta values from different global workers at different times, and can receive delta values computed as part of iteration k of the global step of the training procedure from one worker before receiving delta values computed as part of iteration k ⁇ 1 of the global step from another worker.
+- the delta values being received from the global workers are computed as part of the same iteration of the global step.
+- the parameter server updates the parameters maintained by the parameter server using the received delta values (step 504 ). Generally, the parameter server adds the delta values or values derived from received delta values to the current values of the parameters. In some cases, the parameter server multiplies the received delta values by a learning rate and then adds the resulting product to the values of the parameters. In implementations where the delta values are received asynchronously, the parameter server also updates the parameter values asynchronously. In some implementations where the global workers are synchronized, the parameter server waits until delta values from the current iteration have been received from all of the global workers before updating the parameters.
+- the parameter server waits until delta values from the current iteration have been received from a threshold number of the global workers and then updates the parameters using the delta values received from the threshold number of workers. The parameter server then discards delta values that are received from the remaining global workers.
+- Such an updating scheme is described in more detail in Jianmin Chen et al, REVISITING DISTRIBUTED SYNCHRONOUS SGD, available at https://arxiv.org/pdf/1604.00981.pdf.
+- the parameter server provides the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers (step 506 ).
+- Embodiments of the subject matter and the functional operations described in this specification can be implemented in digital electronic circuitry, in tangibly-embodied computer software or firmware, in computer hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them.
+- Embodiments of the subject matter described in this specification can be implemented as one or more computer programs, i.e., one or more modules of computer program instructions encoded on a tangible non transitory storage medium for execution by, or to control the operation of, data processing apparatus.
+- the computer storage medium can be a machine-readable storage device, a machine-readable storage substrate, a random or serial access memory device, or a combination of one or more of them.
+- the program instructions can be encoded on an artificially generated propagated signal, e.g., a machine-generated electrical, optical, or electromagnetic signal, that is generated to encode information for transmission to suitable receiver apparatus for execution by a data processing apparatus.
+- data processing apparatus refers to data processing hardware and encompasses all kinds of apparatus, devices, and machines for processing data, including by way of example a programmable processor, a computer, or multiple processors or computers.
+- the apparatus can also be, or further include, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- the apparatus can optionally include, in addition to hardware, code that creates an execution environment for computer programs, e.g., code that constitutes processor firmware, a protocol stack, a database management system, an operating system, or a combination of one or more of them.
+- a computer program which may also be referred to or described as a program, software, a software application, an app, a module, a software module, a script, or code, can be written in any form of programming language, including compiled or interpreted languages, or declarative or procedural languages; and it can be deployed in any form, including as a stand alone program or as a module, component, subroutine, or other unit suitable for use in a computing environment.
+- a program may, but need not, correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data, e.g., one or more scripts stored in a markup language document, in a single file dedicated to the program in question, or in multiple coordinated files, e.g., files that store one or more modules, sub programs, or portions of code.
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a data communication network.
+- the term “database” is used broadly to refer to any collection of data: the data does not need to be structured in any particular way, or structured at all, and it can be stored on storage devices in one or more locations.
+- the index database can include multiple collections of data, each of which may be organized and accessed differently.
+- engine is used broadly to refer to a software-based system, subsystem, or process that is programmed to perform one or more specific functions.
+- an engine will be implemented as one or more software modules or components, installed on one or more computers in one or more locations. In some cases, one or more computers will be dedicated to a particular engine; in other cases, multiple engines can be installed and running on the same computer or computers.
+- the processes and logic flows described in this specification can be performed by one or more programmable computers executing one or more computer programs to perform functions by operating on input data and generating output.
+- the processes and logic flows can also be performed by special purpose logic circuitry, e.g., an FPGA or an ASIC, or by a combination of special purpose logic circuitry and one or more programmed computers.
+- Computers suitable for the execution of a computer program can be based on general or special purpose microprocessors or both, or any other kind of central processing unit.
+- a central processing unit will receive instructions and data from a read only memory or a random access memory or both.
+- the essential elements of a computer are a central processing unit for performing or executing instructions and one or more memory devices for storing instructions and data.
+- the central processing unit and the memory can be supplemented by, or incorporated in, special purpose logic circuitry.
+- a computer will also include, or be operatively coupled to receive data from or transfer data to, or both, one or more mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks. However, a computer need not have such devices.
+- a computer can be embedded in another device, e.g., a mobile telephone, a personal digital assistant (PDA), a mobile audio or video player, a game console, a Global Positioning System (GPS) receiver, or a portable storage device, e.g., a universal serial bus (USB) flash drive, to name just a few.
+- PDA personal digital assistant
+- GPS Global Positioning System
+- USB universal serial bus
+- Computer readable media suitable for storing computer program instructions and data include all forms of non volatile memory, media and memory devices, including by way of example semiconductor memory devices, e.g., EPROM, EEPROM, and flash memory devices; magnetic disks, e.g., internal hard disks or removable disks; magneto optical disks; and CD ROM and DVD-ROM disks.
+- semiconductor memory devices e.g., EPROM, EEPROM, and flash memory devices
+- magnetic disks e.g., internal hard disks or removable disks
+- magneto optical disks e.g., CD ROM and DVD-ROM disks.
+- embodiments of the subject matter described in this specification can be implemented on a computer having a display device, e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor, for displaying information to the user and a keyboard and a pointing device, e.g., a mouse or a trackball, by which the user can provide input to the computer.
+- a display device e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor
+- keyboard and a pointing device e.g., a mouse or a trackball
+- Other kinds of devices can be used to provide for interaction with a user as well; for example, feedback provided to the user can be any form of sensory feedback, e.g., visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, or tactile input.
+- a computer can interact with a user by sending documents to and receiving documents from a device that is used by the user; for example, by sending web pages to a web browser on a user's device in response to requests received from the web browser.
+- a computer can interact with a user by sending text messages or other forms of message to a personal device, e.g., a smartphone that is running a messaging application, and receiving responsive messages from the user in return.
+- Data processing apparatus for implementing machine learning models can also include, for example, special-purpose hardware accelerator units for processing common and compute-intensive parts of machine learning training or production, i.e., inference, workloads.
+- Machine learning models can be implemented and deployed using a machine learning framework, .e.g., a TensorFlow framework, a Microsoft Cognitive Toolkit framework, an Apache Singa framework, or an Apache MXNet framework.
+- a machine learning framework .e.g., a TensorFlow framework, a Microsoft Cognitive Toolkit framework, an Apache Singa framework, or an Apache MXNet framework.
+- Embodiments of the subject matter described in this specification can be implemented in a computing system that includes a back end component, e.g., as a data server, or that includes a middleware component, e.g., an application server, or that includes a front end component, e.g., a client computer having a graphical user interface, a web browser, or an app through which a user can interact with an implementation of the subject matter described in this specification, or any combination of one or more such back end, middleware, or front end components.
+- the components of the system can be interconnected by any form or medium of digital data communication, e.g., a communication network. Examples of communication networks include a local area network (LAN) and a wide area network (WAN), e.g., the Internet.
+- LAN local area network
+- WAN wide area network
+- the computing system can include clients and servers.
+- a client and server are generally remote from each other and typically interact through a communication network. The relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other.
+- a server transmits data, e.g., an HTML page, to a user device, e.g., for purposes of displaying data to and receiving user input from a user interacting with the device, which acts as a client.
+- Data generated at the user device e.g., a result of the user interaction, can be received at the server from the device.
+Abstract
+Methods, systems, and apparatus, including computer programs encoded on computer storage media, of training a global policy neural network. One of the methods includes initializing an instance of the robotic task for multiple local workers, generating a trajectory of state-action pairs by selecting actions to be performed by the robotic agent while performing the instance of the robotic task, optimizing a local policy controller on the trajectory, generating an optimized trajectory using the optimized local controller, and storing the optimized trajectory in a replay memory associated with the local worker. The method includes sampling, for multiple global workers, an optimized trajectory from one of one or more replay memories associated with the global worker, and training the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory to determine delta values for the parameters of the global policy neural network.
+Description
+This specification relates to selecting actions to be performed by a robotic agent.
+Robotic agents interact with an environment by receiving data characterizing a state of the environment, and in response, performing an action in order to attempt to perform a robotic task. Some robotic agents use neural networks to select the action to be performed in response to receiving any given observation.
+Neural networks are machine learning models that employ one or more layers of nonlinear units to predict an output for a received input. Some neural networks are deep neural networks that include one or more hidden layers in addition to an output layer. The output of each hidden layer is used as input to the next layer in the network, i.e., the next hidden layer or the output layer. Each layer of the network generates an output from a received input in accordance with current values of a respective set of parameters.
+This specification describes technologies that relate to selecting actions to be performed by a robotic agent.
+The subject matter described in this specification can be implemented in particular embodiments so as to realize one or more of the following advantages. A distributed training system can effectively and directly learn complex feedback control policies that map from high-dimensional sensory inputs to motor torques for manipulation tasks with discontinuous contact dynamics, i.e., by training a global policy neural network as described in this specification. In particular, by training the global policy neural network as described in this specification, the distributed training system can effectively learn a distributed training policy even for contact-rich tasks that require fine action control. Additionally, the distributed training system can learn an effective policy both from observations that are low-dimensional observations and from observations that are high-dimensional pixel inputs. The distributed training system can train the global policy neural network efficiently through distributed learning across multiple local workers that operate asynchronously from each other.
+The distributed training system as described in this specification provides a solution that breaks dependencies of each worker at a point that effectively leverages the distributed nature of the system to improve the training of the global policy neural network. That is, it is difficult to determine what elements of the system can be accessed, delayed, utilized, etc., by each worker without affecting the performance of the other workers and the overall system as accomplished by the distributed training system described in this specification. Additionally, assumptions of the training algorithm are necessarily violated when applied to this distributed learning process, and the distributed training system as described in this specification effectively trains the global policy neural network despite these violations by effectively dividing the training process across local and global workers. For example, assumptions that the global policy is constantly up-to-date relative to local policies are violated by distributing the training across multiple asynchronous workers. Furthermore, the distributed training system as described in this specification distributes the training in such a way that the benefit of a greater data set size obtained by using multiple local workers outweighs the additional bias introduced by asynchronous training, as may occur with other distributed frameworks. The distributed training system as described in this specification effectively leverages the increased amount of data that can be generated to accelerate the training of a global policy neural network that implements a complex, nonlinear neural network policy. Thus, the distributed training system efficiently makes use of the computational resources allocated to the system to more quickly train the global policy neural network and therefore learn a control policy for a robotic agent.
+The details of one or more embodiments of the subject matter of this specification are set forth in the accompanying drawings and the description below. Other features, aspects, and advantages of the subject matter will become apparent from the description, the drawings, and the claims.
+Like reference numbers and designations in the various drawings indicate like elements.
+This specification generally describes a distributed training system that trains a global policy neural network for use in selecting actions to be performed by a robotic agent interacting with a real-world environment to perform a robotic task, such as opening a door, picking up an object and placing it down, and so on. In some examples, the robotic task can have discontinuous dynamics, i.e., the dynamics of the environment are discontinuous at certain states of the environment. In order to interact with the environment, the robotic agent receives or generates data characterizing the current state of the environment and performs an action in response to the data.
+The global policy neural network is configured to receive as input an observation, i.e., data characterizing a state of the environment, and to process the observation to generate a global policy output in accordance with current values of the parameters of the global neural policy neural network. The observation can include high-dimensional data characterizing the state of the environment, e.g., raw sensor data captured by one or more sensors of the robotic agent, such as visual data, inertial measurement unit (IMU) readings, and so on. The global policy output defines a distribution over possible actions to be performed by the agent in response to the observation. For example, the global policy output may include a mean action vector and covariances of the entries of the mean action vector. As an example, an action may include a respective torque to be applied to each of multiple joints of the robotic agent. In this example, the global policy output includes a mean action vector that includes a respective entry, i.e., a respective mean torque, for each joint and covariances of the entries of the mean action vector.
+The distributed training system 100 is a system for distributed training of a global policy neural network and includes multiple local workers 130 a-n, multiple global workers 140 a-n, and a parameter server 190. In particular, the distributed training system 100 trains the global policy neural network to allow the neural network to effectively be used to select actions performed by a robotic agent interacting with a real-world environment.
+Each local worker 130 a-n corresponds to one of multiple robotic agents 102 a-n that interacts with a respective instance of the real-world environment 104 a-n. During the training of the global policy neural network, each of the multiple local workers 130 a-n repeatedly performs a local step of an optimization algorithm asynchronously from each of the other local workers 130 a-n. Generally, each local worker operates asynchronously from each other worker because each local worker performs the local step of the optimization algorithm without waiting for other local workers, i.e., each local worker can move on to the next iteration of the local step without waiting for the other local workers to finish the current iteration.
+In some implementations, each of the local workers 130 a-n is implemented on a respective computer. In other implementations, two or more of the local workers 130 a-n are implemented on the same computer but each of these workers execute in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the worker.
+Instead of directly learning the parameters of the global policy neural network, in the first step of the training approach, each local worker 130 a-n uses a trajectory-centric algorithm to learn simple policy controllers, or local policy controllers 120 a-n, for trajectories with various initial conditions of the robotic task being performed by the robotic agent 102 a-n corresponding to the local worker.
+In particular, for each local step, each local worker 130 a-n initializes a particular instance of the robotic task and generates a trajectory of state-action pairs by selecting actions to be performed by the corresponding robotic agent 102 a-n while the robotic agent 102 a-n is performing the instance of the robotic task.
+Generally, different instances of a task are instances of the task that have different initial conditions. For example, the distributed training system 100 can initialize different instances of a particular robotic task by randomly selecting an initial state of the instance of the environment 104 a-n corresponding to the local worker 130 a-n. For example, the system 100 can randomly select an initial position of an object, such as an initial rotation of the handle of a door, an initial position of a bottle on a table, etc., in the environment instance 104 a-n. In some examples, the initial state of the task for a new instance is generated by an external system or by a user.
+Each local worker 130 a-n generates a trajectory of state-action pairs by selecting actions to be performed by the instance of the robotic agent corresponding to the local worker while performing the instance of the robotic task. The state-action pairs in the trajectory are data identifying states of the environment that occurred during the instance of the task, and, for each of the states, the action performed by the agent while the environment was in the state. Generating the trajectory is described in more detail below with reference to FIG. 3 .
+The local worker 130 a-n then optimizes a corresponding local policy controller 120 a-n. That is, for each instance, the corresponding local worker 130 a-n optimizes a controller that is specific to the instance on the trajectory of state-action pairs for the instance. Each local policy controller 120 a-n can generate a local policy output that defines a distribution over the possible actions based on low-dimensional data characterizing the state of the environment. For each instance, the local policy controller 120 a-n that is specific to the instance can be a time-varying linear-Gaussian controller. Optimizing a local policy controller is described in more detail below with reference to FIG. 3 .
+The local worker 130 a-n then generates an optimized trajectory using the optimized local policy controller 120 a-n and stores the optimized trajectory in a replay memory 150 a-n associated with the local worker 130 a-n. Generally, an optimized trajectory for a given trajectory includes observations characterizing the states encountered by the agent during the trajectory, and, for each observation, the output generated by the optimized local policy controller for a low-dimensional input characterizing the state. That is, for a given observation characterizing a given state, the optimized trajectory includes the observation and the output generated by the local policy controller based on low-dimensional data characterizing the given state after the controller has been optimized on the trajectory. The optimized trajectory can also include data tracking which local policies generated the optimized trajectory in order to reweight the data in the replay memory with importance sampling.
+Generally, each of the replay memories 150 a-n can be a buffer that contains previously collected experience data from which the global policy neural network is trained.
+Each of the multiple global workers 140 a-n maintains a respective replica 110 a-n of the global policy neural network. Each of the replicas 110 a-n is an instance of the global policy neural network, with possibly different parameter values at any given time during the training. That is, each replica has an identical architecture, but with possibly different parameter values.
+During the training of the global policy neural network, each global worker 140 a-n repeatedly performs a global step of the optimization algorithm to collectively train the network.
+That is, in the second step of the training approach, the distributed training system 100 uses the stored optimized trajectories generated by the local workers 130 a-n to train multiple replicas of the global policy neural network associated with multiple global workers 140 a-n for learning a complex high-dimensional global policy in a supervised manner. This framework maximizes utilization of each local worker 130 a-n by continually executing and optimizing local policies 120 a-n without having the local workers 130 a-n be directly involved in the updating of the parameters of the global policy neural network.
+In some examples, the system 100 includes the same number of global workers 140 a-n as local workers 130 a-n and each global worker 140 a-n corresponds to a different one of the robotic agents 102 a-n. In these examples, each global worker 140 a-n can be associated with the same replay memory 150 a-n as the corresponding local worker 130 a-n. In some other examples, the system 100 includes a different number of global workers 140 a-n from local workers 130 a-n, and each global worker 140 a-n corresponds to a possibly overlapping subset of the local workers 130 a-n and can access the replay memories of any of the local workers in the corresponding subset.
+Each of the multiple global workers 140 a-n trains the corresponding global policy neural network replica 110 a-n of the global policy neural network in a supervised manner.
+In particular, in the global step, each global worker 140 a-n samples a stored optimized trajectory from one of the one or more replay memories 150 a-n accessible to the global worker 140 a-n.
+Each global worker 140 a-n trains the replica of the global policy neural network 110 a-n maintained by the global worker on the sampled optimized trajectory to determine delta values for the parameters of the global policy neural network, e.g., using supervised learning. Determining delta values is described in more detail below with reference to FIG. 4 .
+After the delta values for the parameters have been determined, the global worker 140 a-n sends the delta values to the parameter server 190.
+The parameter server 190 receives delta values from the global workers 140 a-n, updates current values of the parameters of the global policy neural network using the delta values, and provides the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers. The operations performed by the parameter server 190 during the training of the global policy neural network are described in more detail below with reference to FIG. 5 .
+In some implementations, each global worker operates asynchronously from each other global worker. That is, each global worker performs the global step of the optimization algorithm without waiting for other global workers, i.e., each global worker can move on to the next iteration of the global step without waiting for the other global workers to finish the current iteration.
+In some other implementations, the global workers are synchronized. That is, after an iteration of the global step is completed, each global worker sends their delta values to the parameter server and waits to obtain updated parameter values before beginning the next iteration.
+Additionally, each global worker operates asynchronously from the local workers because the global worker reads asynchronously from the replay memory while the local worker writes to it. That is, a given global worker reads from the memory without waiting for a corresponding local worker to write to the memory and the local worker can write to the memory without waiting for the global worker to have read what the local worker has previously written to the memory.
+In some implementations, each of the global workers is implemented on a respective computer. In other implementations, two or more of the global workers are implemented on the same computer but each of these global workers execute in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the global worker. Additionally, in some implementations, some or all of the global workers are implemented on the same computer as one or more corresponding local workers, with each worker that is implemented on the computer executing in a separate thread, process or other hardware or software within the computer capable of independently performing the computation for the worker.
+Once the training procedure has been completed, the distributed training system 100 or another system can effectively use the trained global policy neural network to select actions to be performed by the robotic agent. In particular, when an observation is received, the distributed training system 100 or the other system can process the observation using the trained values of the parameters of the global policy neural network, i.e., values that are the same as the final values stored in the parameter server 190 at the completion of the training procedure, to generate a global policy output used to select a next action to be performed by a robotic agent in accordance with the trained values of the parameters of the global policy neural network.
+Although this specification describes the use of a parameter server to store parameter values during training, the techniques described in this specification can be implemented using any appropriate memory that is shared between and accessible by all of the global workers 140 a-n. That is, any appropriate mechanism that allows each of the global workers 140 a-n to update the stored values of the parameters and to access the currently stored values of the parameters independently of and asynchronously from the other workers 140 a-n can be implemented. In some implementations, rather than sending delta values to the parameter server 190 and receiving current values of the parameters from the parameter server 190, each worker 140 a-n can directly write updates to and read values from a shared memory.
+Each of multiple local workers of the system performs iterations of a local step of the distributed training procedure asynchronously from each other local worker (step 202). During an iteration of the local step, each local worker generates and stores an optimized trajectory in a replay memory associated with the local worker. Performing an iteration of the local step of the training procedure is described in more detail below with reference to FIG. 3 .
+Each of multiple global workers of the system performs iterations of a global step of the distributed training procedure (step 204). During an iteration of the global step, each global worker samples an optimized trajectory from a replay memory associated with the global worker and trains a replica of the global policy neural network on the optimized trajectory to determine delta values for the parameters of the global policy neural network. Performing an iteration of the global step is described in more detail below with reference to FIG. 4 .
+A parameter server receives delta values from the global workers and updates the maintained values of the parameters of the global policy neural network using the received delta values (step 206). Updating the maintained values is described in more detail below with reference to FIG. 5 .
+For example, each of multiple local workers in a distributed training system, e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 300 asynchronously from each other local worker during the training of the global policy neural network.
+The local worker initializes an instance of the particular task (step 302). As described above, the local worker can initialize an instance of the task with the initial state of the real-world environment corresponding to the local worker being randomly selected.
+The local worker generates a trajectory of state-action pairs (step 304). In particular, the local worker selects actions to be performed by the corresponding robotic agent while the robotic agent is performing the instance of the robotic task.
+In some implementations, the local worker selects actions using the local policy controller as previously optimized by the local worker, i.e., the local policy controller as optimized during a preceding iteration of the process 300.
+In some other implementations, the local worker also maintains or has access to a replica of the global policy neural network and selects actions to be performed by the corresponding robotic agent while performing the instance of the robotic task using the replica of the global policy neural network.
+The local worker optimizes a local policy controller on the trajectory (step 306). For example, as described above, the local policy controller can be a time-varying linear Gaussian controller. The local worker can optimize the local policy controller by performing one or more optimization steps of a local policy optimization algorithm on the trajectory of state-action pairs to optimize a local policy controller. The local policy optimization algorithm can be any appropriate trajectory optimization algorithm. For example, the trajectory optimization algorithm can be a policy improvement with path integrals (PI2) algorithm. Performing an optimization step using the PI2 is described in more detail in F. Stulp and O. Sigaud. Path integral policy improvement with covariance matrix adaptation. In ICML, 2012 As another example, the trajectory optimization algorithm can be a linear-quadratic regulators (LQR) algorithm. Performing an optimization step using an LQR algorithm is described in more detail in S. Levine, C. Finn, T. Darrell, and P. Abbeel. End-to-end training of deep visuomotor policies. JMLR, 17(1), 2016.
+The local worker generates an optimized trajectory using the optimized local policy controller (step 308). Generally, an optimized trajectory for a given trajectory includes observations characterizing the states encountered by the agent during the trajectory, and, for each observation, the output generated by the optimized local policy controller for the state. That is, for a given observation characterizing a given state, the optimized trajectory includes the observation and the output generated by the local policy controller based on low-dimensional data characterizing the given state after the controller has been optimized on the trajectory. The optimized trajectory can also include data tracking which local policies generated the optimized trajectory in order to reweight the data in the replay memory with importance sampling.
+The local worker stores the optimized trajectory in the replay memory associated with the local worker (step 310).
+For example, each of multiple global workers in a distributed training system, e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 400 during the training of the global policy neural network.
+The global worker obtains current values of the parameters of the global policy neural network from the parameter server (step 402). In some implementations, the global worker obtains new values of the parameters from the parameter server after each iteration of the process 400. In some other implementations, the global worker can re-use the values from the previous iteration of the process 400 until criteria for requesting new values from the parameter server have been satisfied.
+The global worker samples an optimized trajectory from a replay memory associated with the global worker (step 404). As described above, in some cases, the global worker is associated with a single replay memory while in other cases the global worker selects, e.g., randomly, a replay memory from multiple replay memories associated with the global worker and samples an optimized trajectory from the selected replay memory.
+The global worker trains the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory to determine delta values for the current values of the parameters (step 406). Generally, each delta value is an update to a respective current parameter value. In particular, the global worker trains the replica using a supervised learning technique on the observations and the outputs in the optimized trajectory to determine the delta values by optimizing an objective function. For example, the objective function can be a mirror descent guided policy search objective function, a Bregman alternating direction method of multipliers (BADMM)-based guided policy search objective function, and so on.
+The global worker provides the delta values to the parameter server (step 408). In some cases, the global worker provides the delta values after each iteration of the process 400. In some other cases, the global worker accumulates delta values locally until criteria for providing the delta values are satisfied and then provides the accumulated delta values to the parameter server.
+For example, a parameter server in a distributed training system, e.g., in the distributed training system 100 of FIG. 1 , appropriately programmed in accordance with this specification, can repeatedly perform the process 500 during the training of the global policy neural network.
+The parameter server receives delta values from the global workers (step 502). In implementations where the global workers operate asynchronously, the parameter server can receive the values asynchronously, i.e., can receive delta values from different global workers at different times, and can receive delta values computed as part of iteration k of the global step of the training procedure from one worker before receiving delta values computed as part of iteration k−1 of the global step from another worker.
+In implementations where the global workers are synchronized, the delta values being received from the global workers are computed as part of the same iteration of the global step.
+The parameter server updates the parameters maintained by the parameter server using the received delta values (step 504). Generally, the parameter server adds the delta values or values derived from received delta values to the current values of the parameters. In some cases, the parameter server multiplies the received delta values by a learning rate and then adds the resulting product to the values of the parameters. In implementations where the delta values are received asynchronously, the parameter server also updates the parameter values asynchronously. In some implementations where the global workers are synchronized, the parameter server waits until delta values from the current iteration have been received from all of the global workers before updating the parameters. In other implementations where the global workers are synchronized, the parameter server waits until delta values from the current iteration have been received from a threshold number of the global workers and then updates the parameters using the delta values received from the threshold number of workers. The parameter server then discards delta values that are received from the remaining global workers. Such an updating scheme is described in more detail in Jianmin Chen et al, REVISITING DISTRIBUTED SYNCHRONOUS SGD, available at https://arxiv.org/pdf/1604.00981.pdf.
+The parameter server provides the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers (step 506).
+This specification uses the term “configured” in connection with systems and computer program components. For a system of one or more computers to be configured to perform particular operations or actions means that the system has installed on it software, firmware, hardware, or a combination of them that in operation cause the system to perform the operations or actions. For one or more computer programs to be configured to perform particular operations or actions means that the one or more programs include instructions that, when executed by data processing apparatus, cause the apparatus to perform the operations or actions.
+Embodiments of the subject matter and the functional operations described in this specification can be implemented in digital electronic circuitry, in tangibly-embodied computer software or firmware, in computer hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them. Embodiments of the subject matter described in this specification can be implemented as one or more computer programs, i.e., one or more modules of computer program instructions encoded on a tangible non transitory storage medium for execution by, or to control the operation of, data processing apparatus. The computer storage medium can be a machine-readable storage device, a machine-readable storage substrate, a random or serial access memory device, or a combination of one or more of them. Alternatively or in addition, the program instructions can be encoded on an artificially generated propagated signal, e.g., a machine-generated electrical, optical, or electromagnetic signal, that is generated to encode information for transmission to suitable receiver apparatus for execution by a data processing apparatus.
+The term “data processing apparatus” refers to data processing hardware and encompasses all kinds of apparatus, devices, and machines for processing data, including by way of example a programmable processor, a computer, or multiple processors or computers. The apparatus can also be, or further include, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit). The apparatus can optionally include, in addition to hardware, code that creates an execution environment for computer programs, e.g., code that constitutes processor firmware, a protocol stack, a database management system, an operating system, or a combination of one or more of them.
+A computer program, which may also be referred to or described as a program, software, a software application, an app, a module, a software module, a script, or code, can be written in any form of programming language, including compiled or interpreted languages, or declarative or procedural languages; and it can be deployed in any form, including as a stand alone program or as a module, component, subroutine, or other unit suitable for use in a computing environment. A program may, but need not, correspond to a file in a file system. A program can be stored in a portion of a file that holds other programs or data, e.g., one or more scripts stored in a markup language document, in a single file dedicated to the program in question, or in multiple coordinated files, e.g., files that store one or more modules, sub programs, or portions of code. A computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a data communication network.
+In this specification, the term “database” is used broadly to refer to any collection of data: the data does not need to be structured in any particular way, or structured at all, and it can be stored on storage devices in one or more locations. Thus, for example, the index database can include multiple collections of data, each of which may be organized and accessed differently.
+Similarly, in this specification the term “engine” is used broadly to refer to a software-based system, subsystem, or process that is programmed to perform one or more specific functions. Generally, an engine will be implemented as one or more software modules or components, installed on one or more computers in one or more locations. In some cases, one or more computers will be dedicated to a particular engine; in other cases, multiple engines can be installed and running on the same computer or computers.
+The processes and logic flows described in this specification can be performed by one or more programmable computers executing one or more computer programs to perform functions by operating on input data and generating output. The processes and logic flows can also be performed by special purpose logic circuitry, e.g., an FPGA or an ASIC, or by a combination of special purpose logic circuitry and one or more programmed computers.
+Computers suitable for the execution of a computer program can be based on general or special purpose microprocessors or both, or any other kind of central processing unit. Generally, a central processing unit will receive instructions and data from a read only memory or a random access memory or both. The essential elements of a computer are a central processing unit for performing or executing instructions and one or more memory devices for storing instructions and data. The central processing unit and the memory can be supplemented by, or incorporated in, special purpose logic circuitry. Generally, a computer will also include, or be operatively coupled to receive data from or transfer data to, or both, one or more mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks. However, a computer need not have such devices. Moreover, a computer can be embedded in another device, e.g., a mobile telephone, a personal digital assistant (PDA), a mobile audio or video player, a game console, a Global Positioning System (GPS) receiver, or a portable storage device, e.g., a universal serial bus (USB) flash drive, to name just a few.
+Computer readable media suitable for storing computer program instructions and data include all forms of non volatile memory, media and memory devices, including by way of example semiconductor memory devices, e.g., EPROM, EEPROM, and flash memory devices; magnetic disks, e.g., internal hard disks or removable disks; magneto optical disks; and CD ROM and DVD-ROM disks.
+To provide for interaction with a user, embodiments of the subject matter described in this specification can be implemented on a computer having a display device, e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor, for displaying information to the user and a keyboard and a pointing device, e.g., a mouse or a trackball, by which the user can provide input to the computer. Other kinds of devices can be used to provide for interaction with a user as well; for example, feedback provided to the user can be any form of sensory feedback, e.g., visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, or tactile input. In addition, a computer can interact with a user by sending documents to and receiving documents from a device that is used by the user; for example, by sending web pages to a web browser on a user's device in response to requests received from the web browser. Also, a computer can interact with a user by sending text messages or other forms of message to a personal device, e.g., a smartphone that is running a messaging application, and receiving responsive messages from the user in return.
+Data processing apparatus for implementing machine learning models can also include, for example, special-purpose hardware accelerator units for processing common and compute-intensive parts of machine learning training or production, i.e., inference, workloads.
+Machine learning models can be implemented and deployed using a machine learning framework, .e.g., a TensorFlow framework, a Microsoft Cognitive Toolkit framework, an Apache Singa framework, or an Apache MXNet framework.
+Embodiments of the subject matter described in this specification can be implemented in a computing system that includes a back end component, e.g., as a data server, or that includes a middleware component, e.g., an application server, or that includes a front end component, e.g., a client computer having a graphical user interface, a web browser, or an app through which a user can interact with an implementation of the subject matter described in this specification, or any combination of one or more such back end, middleware, or front end components. The components of the system can be interconnected by any form or medium of digital data communication, e.g., a communication network. Examples of communication networks include a local area network (LAN) and a wide area network (WAN), e.g., the Internet.
+The computing system can include clients and servers. A client and server are generally remote from each other and typically interact through a communication network. The relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other. In some embodiments, a server transmits data, e.g., an HTML page, to a user device, e.g., for purposes of displaying data to and receiving user input from a user interacting with the device, which acts as a client. Data generated at the user device, e.g., a result of the user interaction, can be received at the server from the device.
+While this specification contains many specific implementation details, these should not be construed as limitations on the scope of any invention or on the scope of what may be claimed, but rather as descriptions of features that may be specific to particular embodiments of particular inventions. Certain features that are described in this specification in the context of separate embodiments can also be implemented in combination in a single embodiment. Conversely, various features that are described in the context of a single embodiment can also be implemented in multiple embodiments separately or in any suitable subcombination. Moreover, although features may be described above as acting in certain combinations and even initially be claimed as such, one or more features from a claimed combination can in some cases be excised from the combination, and the claimed combination may be directed to a subcombination or variation of a subcombination.
+Similarly, while operations are depicted in the drawings and recited in the claims in a particular order, this should not be understood as requiring that such operations be performed in the particular order shown or in sequential order, or that all illustrated operations be performed, to achieve desirable results. In certain circumstances, multitasking and parallel processing may be advantageous. Moreover, the separation of various system modules and components in the embodiments described above should not be understood as requiring such separation in all embodiments, and it should be understood that the described program components and systems can generally be integrated together in a single software product or packaged into multiple software products.
+Particular embodiments of the subject matter have been described. Other embodiments are within the scope of the following claims. For example, the actions recited in the claims can be performed in a different order and still achieve desirable results. As one example, the processes depicted in the accompanying figures do not necessarily require the particular order shown, or sequential order, to achieve desirable results. In some cases, multitasking and parallel processing may be advantageous.
+Claims (20)
+1. A system for training a global policy neural network used to select actions to be performed by a robotic agent interacting with a real-world environment to perform a robotic task,
+wherein the global policy neural network is configured to receive as input an observation characterizing a state of the environment and to generate a global policy output in accordance with current values of a plurality of parameters, and
+wherein the system comprises:
+a plurality of local workers, wherein each local worker selects actions to be performed by a different robotic agent interacting with a different instance of the real-world environment, wherein each local worker maintains a respective local policy controller having a different model architecture than the global policy neural network, and wherein each local worker is configured to repeatedly perform the following operations asynchronously from each other local worker:
+initializing an instance of the robotic task,
+generating a trajectory of state-action pairs by selecting actions to be performed by the robotic agent while performing the instance of the robotic task,
+optimizing a local policy controller of the local worker on the trajectory using a first machine learning training technique,
+generating an optimized trajectory using the optimized local policy controller of the local worker, and
+storing the optimized trajectory in a replay memory associated with the local worker; and
+a plurality of global workers that operate asynchronously from the plurality of local workers and in parallel with the plurality of local workers, wherein each global worker maintains a respective replica of the global policy neural network and trains the replica of the global policy neural network using optimized trajectories sampled from one or more replay memories of the local workers, and wherein each global worker is configured to repeatedly perform the following operations asynchronously from the operations performed by the plurality of local workers and in parallel with the plurality of operations performed by the local workers:
+sampling an optimized trajectory, from one of one or more replay memories associated with the global worker, that is generated by a local worker of the plurality of local workers using a local policy controller that is optimized using the first machine learning training technique and that has a different model architecture than the global policy neural network; and
+training the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory using a second machine learning training technique which is different than the first machine learning training technique used to train the local policy controllers of the local workers to determine delta values that define an update to the parameters of the global policy neural network.
+2. The system of claim 1 , further comprising:
+a parameter server, wherein the parameter server is configured to repeatedly perform operations comprising:
+receiving delta values from the plurality of global workers,
+updating current values of the parameters of the global policy neural network using the delta values, and
+providing the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers.
+3. The system of claim 1 , wherein initializing an instance of the robotic task comprises:
+randomly selecting an initial state of the environment instance corresponding to the local worker.
+4. The system of claim 1 , wherein generating the trajectory of state-action pairs comprises:
+generating the trajectory of state-action pairs by selecting actions to be performed by the instance of the robotic agent corresponding to the local worker while performing the instance of the robotic task using a replica of the global policy neural network.
+5. The system of claim 1 , wherein generating the trajectory of state-action pairs comprises:
+generating the trajectory of state-action pairs by selecting actions to be performed by the instance of the robotic agent corresponding to the local worker while performing the instance of the robotic task using the local policy controller as previously optimized by the local worker.
+6. The system of claim 1 , wherein optimizing the local policy controller of the local worker on the trajectory using the first machine learning training technique comprises:
+performing an optimization step with path integral stochastic optimal control on the trajectory of state-action pairs.
+7. The system of claim 1 , wherein optimizing the local policy controller of the local worker on the trajectory using the first machine learning training technique comprises:
+performing an optimization step using a linear quadratic regulator on the trajectory of state-action pairs.
+8. The system of claim 1 , wherein the model architecture of the local policy controller is a time-varying linear-Gaussian controller architecture.
+9. The system of claim 1 , wherein the local policy controller receives low-dimensional data characterizing a state of the environment and generates a local policy output.
+10. The system of claim 9 , wherein each observation is high-dimensional data characterizing the state of the environment.
+11. The system of claim 1 , wherein the global policy output defines a distribution over a plurality of possible actions to be performed by the robotic agent in response to the observation.
+12. The system of claim 1 , wherein the system includes the same number of global workers as local workers, wherein each global worker corresponds to a respective local worker, and wherein each global worker is associated with the same replay memory as the corresponding local worker.
+13. The system of claim 1 , wherein the system includes a different number of global workers than local workers, and wherein each global worker is associated with replay memories that are associated with a possibly overlapping subset of the local workers.
+14. The system of claim 1 , wherein training the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory using the second machine learning training technique which is different than the first machine learning training technique used to train the local policy controllers of the local workers to determine delta values for the parameters of the global policy neural network comprises:
+determining the delta values by performing one or more iterations of gradient descent to optimize an objective function.
+15. The system of claim 14 , wherein the objective function is a mirror descent guided policy search objective function.
+16. The system of claim 1 , wherein each of the plurality of global workers is associated with a respective thread or process that executes the operations of the global worker independently of the operations of the local workers.
+17. One or more non-transitory computer storage media storing instructions that when executed by one or more computers cause the one or more computers to implement a system for training a global policy neural network used to select actions to be performed by a robotic agent interacting with a real-world environment to perform a robotic task,
+wherein the global policy neural network is configured to receive as input an observation characterizing a state of the environment and to generate a global policy output in accordance with current values of a plurality of parameters, and
+wherein the system comprises:
+a plurality of local workers, wherein each local worker selects actions to be performed by a different robotic agent interacting with a different instance of the real-world environment, wherein each local worker maintains a respective local policy controller having a different model architecture than the global policy neural network, and wherein each local worker is configured to repeatedly perform the following operations asynchronously from each other local worker:
+initializing an instance of the robotic task,
+generating a trajectory of state-action pairs by selecting actions to be performed by the robotic agent while performing the instance of the robotic task,
+optimizing a local policy controller of the local worker on the trajectory using a first machine learning training technique,
+generating an optimized trajectory using the optimized local policy controller of the local worker, and
+storing the optimized trajectory in a replay memory associated with the local worker; and
+a plurality of global workers that operate asynchronously from the plurality of local workers and in parallel with the plurality of local workers, wherein each global worker maintains a respective replica of the global policy neural network and trains the replica of the global policy neural network using optimized trajectories sampled from one or more replay memories of the local workers, and wherein each global worker is configured to repeatedly perform the following operations asynchronously from the operations performed by the plurality of local workers and in parallel with the plurality of operations performed by the local workers:
+sampling an optimized trajectory, from one of one or more replay memories associated with the global worker, that is generated by a local worker of the plurality of local workers using a local policy controller that is optimized using the first machine learning training technique and that has a different model architecture than the global policy neural network; and
+training the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory using a second machine learning training technique which is different than the first machine learning training technique used to train the local policy controllers of the local workers to determine delta values that define an update to the parameters of the global policy neural network.
+18. A method for training a global policy neural network used to select actions to be performed by a robotic agent interacting with a real-world environment to perform a robotic task,
+wherein the global policy neural network is configured to receive as input an observation characterizing a state of the environment and to generate a global policy output in accordance with current values of a plurality of parameters, and
+wherein the method comprises:
+repeatedly performing first operations by each of a plurality of local workers asynchronously from each other worker, wherein each local worker selects actions to be performed by a different robotic agent interacting with a different instance of the real-world environment, wherein each local worker maintains a respective local policy controller having a different model architecture than the global policy neural network, and wherein the first operations comprise:
+initializing an instance of the robotic task,
+generating a trajectory of state-action pairs by selecting actions to be performed by the robotic agent while performing the instance of the robotic task,
+optimizing a local policy controller of the local worker on the trajectory using a first machine learning training technique,
+generating an optimized trajectory using the optimized local policy controller of the local worker, and
+storing the optimized trajectory in a replay memory associated with the local worker; and
+repeatedly performing second operations by each of a plurality of global workers that operate asynchronously from the plurality of local workers and in parallel with the plurality of local workers, wherein each global worker maintains a respective replica of the global policy neural network and trains the replica of the global policy neural network using optimized trajectories sampled from one or more replay memories of the local workers, and wherein the second operations comprise:
+sampling an optimized trajectory, from one of one or more replay memories associated with the global worker, that is generated by a local worker of the plurality of local workers using a local policy controller that is optimized using the first machine learning training technique and that has a different model architecture than the global policy neural network; and
+training the replica of the global policy neural network maintained by the global worker on the sampled optimized trajectory using a second machine learning training technique which is different than the first machine learning training technique used to train the local policy controllers of the local workers to determine delta values that define an update to the parameters of the global policy neural network.
+19. The method of claim 18 , further comprising:
+repeatedly performing third operations by a parameter server, wherein the third operations comprise:
+receiving delta values from the plurality of global workers,
+updating current values of the parameters of the global policy neural network using the delta values, and
+providing the updated values of the parameters to the global workers for use in training the replicas of the global policy neural network maintained by the global workers.
+20. The method of claim 18 , wherein the local policy controller receives low-dimensional data characterizing a state of the environment and generates a local policy output, and wherein each observation is high-dimensional data characterizing the state of the environment.
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US15/705,601 US11188821B1 (en) | 2016-09-15 | 2017-09-15 | Control policies for collective robot learning |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US201662395314P | 2016-09-15 | 2016-09-15 | |
+US15/705,601 US11188821B1 (en) | 2016-09-15 | 2017-09-15 | Control policies for collective robot learning |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US11188821B1 true US11188821B1 (en) | 2021-11-30 |
+Family
+ID=78767859
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/705,601 Active 2040-07-01 US11188821B1 (en) | 2016-09-15 | 2017-09-15 | Control policies for collective robot learning |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US11188821B1 (en) |
+Cited By (21)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20180357552A1 (en) * | 2016-01-27 | 2018-12-13 | Bonsai AI, Inc. | Artificial Intelligence Engine Having Various Algorithms to Build Different Concepts Contained Within a Same AI Model |
+US20200189099A1 (en) * | 2017-09-15 | 2020-06-18 | Google Llc | Improvements related to generating a robot control policy from demonstrations collected via kinesthetic teaching of a robot |
+US20200327399A1 (en) * | 2016-11-04 | 2020-10-15 | Deepmind Technologies Limited | Environment prediction using reinforcement learning |
+US20210012196A1 (en) * | 2019-07-11 | 2021-01-14 | The Regents Of The University Of California | Peer-to-peer training of a machine learning model |
+US20210107142A1 (en) * | 2018-02-27 | 2021-04-15 | Siemens Aktiengesellschaft | Reinforcement learning for contact-rich tasks in automation systems |
+US20210237266A1 (en) * | 2018-06-15 | 2021-08-05 | Google Llc | Deep reinforcement learning for robotic manipulation |
+US20210276187A1 (en) * | 2020-03-06 | 2021-09-09 | Embodied Intelligence Inc. | Trajectory optimization using neural networks |
+US20210276188A1 (en) * | 2020-03-06 | 2021-09-09 | Embodied Intelligence Inc. | Trajectory optimization using neural networks |
+US11328210B2 (en) | 2017-12-29 | 2022-05-10 | Micron Technology, Inc. | Self-learning in distributed architecture for enhancing artificial neural network |
+US20220143819A1 (en) * | 2020-11-10 | 2022-05-12 | Google Llc | System and methods for training robot policies in the real world |
+US11373466B2 (en) | 2019-01-31 | 2022-06-28 | Micron Technology, Inc. | Data recorders of autonomous vehicles |
+US11392796B2 (en) * | 2019-08-20 | 2022-07-19 | Micron Technology, Inc. | Feature dictionary for bandwidth enhancement |
+US11410475B2 (en) | 2019-01-31 | 2022-08-09 | Micron Technology, Inc. | Autonomous vehicle data recorders |
+CN115972216A (en) * | 2023-03-17 | 2023-04-18 | 中南大学 | Parallel robot positive motion solving method, control method, equipment and storage medium |
+US11636334B2 (en) | 2019-08-20 | 2023-04-25 | Micron Technology, Inc. | Machine learning with feature obfuscation |
+US11705004B2 (en) | 2018-04-19 | 2023-07-18 | Micron Technology, Inc. | Systems and methods for automatically warning nearby vehicles of potential hazards |
+US11755884B2 (en) | 2019-08-20 | 2023-09-12 | Micron Technology, Inc. | Distributed machine learning with privacy protection |
+US11762635B2 (en) | 2016-01-27 | 2023-09-19 | Microsoft Technology Licensing, Llc | Artificial intelligence engine with enhanced computing hardware throughput |
+US11836650B2 (en) | 2016-01-27 | 2023-12-05 | Microsoft Technology Licensing, Llc | Artificial intelligence engine for mixing and enhancing features from one or more trained pre-existing machine-learning models |
+US11841789B2 (en) | 2016-01-27 | 2023-12-12 | Microsoft Technology Licensing, Llc | Visual aids for debugging |
+US11868896B2 (en) | 2016-01-27 | 2024-01-09 | Microsoft Technology Licensing, Llc | Interface for working with simulations on premises |
+Citations (22)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7536277B2 (en) * | 2004-04-21 | 2009-05-19 | University Of Connecticut | Intelligent model-based diagnostics for system monitoring, diagnosis and maintenance |
+US20120254286A1 (en) * | 2002-06-28 | 2012-10-04 | Netfuel,Inc | Managing Computer Network Resources |
+US20140277718A1 (en) * | 2013-03-15 | 2014-09-18 | Eugene Izhikevich | Adaptive predictor apparatus and methods |
+US20150127155A1 (en) * | 2011-06-02 | 2015-05-07 | Brain Corporation | Apparatus and methods for operating robotic devices using selective state space training |
+US20150127150A1 (en) * | 2013-11-01 | 2015-05-07 | Brain Corporation | Apparatus and methods for haptic training of robots |
+US20160016311A1 (en) * | 2014-07-16 | 2016-01-21 | Google Inc. | Real-Time Determination of Object Metrics for Trajectory Planning |
+US20160096270A1 (en) * | 2014-10-02 | 2016-04-07 | Brain Corporation | Feature detection apparatus and methods for training of robotic navigation |
+US9311600B1 (en) * | 2012-06-03 | 2016-04-12 | Mark Bishop Ring | Method and system for mapping states and actions of an intelligent agent |
+US9393693B1 (en) * | 2014-07-10 | 2016-07-19 | Google Inc. | Methods and systems for determining and modeling admissible gripper forces for robotic devices |
+CN105911863A (en) * | 2016-05-19 | 2016-08-31 | 杭州新松机器人自动化有限公司 | Multi-robot cooperative clamping system neural network trajectory tracking control method |
+WO2017096079A1 (en) * | 2015-12-01 | 2017-06-08 | Google Inc. | Selecting action slates using reinforcement learning |
+US20170213151A1 (en) * | 2014-08-07 | 2017-07-27 | Okinawa Institute Of Science And Technology School Corporation | Inverse reinforcement learning by density ratio estimation |
+US9753441B2 (en) * | 2013-05-13 | 2017-09-05 | Massachusetts Institute Of Technology | Controlling dynamical systems with bounded probability of failure |
+US20180012137A1 (en) * | 2015-11-24 | 2018-01-11 | The Research Foundation for the State University New York | Approximate value iteration with complex returns by bounding |
+US20180032863A1 (en) * | 2016-07-27 | 2018-02-01 | Google Inc. | Training a policy neural network and a value neural network |
+US20180032864A1 (en) * | 2016-07-27 | 2018-02-01 | Google Inc. | Selecting actions to be performed by a reinforcement learning agent using tree search |
+US20190061147A1 (en) * | 2016-04-27 | 2019-02-28 | Neurala, Inc. | Methods and Apparatus for Pruning Experience Memories for Deep Neural Network-Based Q-Learning |
+US10346741B2 (en) * | 2015-11-12 | 2019-07-09 | Deepmind Technologies Limited | Asynchronous deep reinforcement learning |
+US10445641B2 (en) * | 2015-02-06 | 2019-10-15 | Deepmind Technologies Limited | Distributed training of reinforcement learning systems |
+US10776692B2 (en) * | 2015-07-24 | 2020-09-15 | Deepmind Technologies Limited | Continuous control with deep reinforcement learning |
+US10846606B2 (en) * | 2008-03-12 | 2020-11-24 | Aptima, Inc. | Probabilistic decision making system and methods of use |
+US10960539B1 (en) * | 2016-09-15 | 2021-03-30 | X Development Llc | Control policies for robotic agents |
+-
+2017
+- 2017-09-15 US US15/705,601 patent/US11188821B1/en active Active
+Patent Citations (22)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20120254286A1 (en) * | 2002-06-28 | 2012-10-04 | Netfuel,Inc | Managing Computer Network Resources |
+US7536277B2 (en) * | 2004-04-21 | 2009-05-19 | University Of Connecticut | Intelligent model-based diagnostics for system monitoring, diagnosis and maintenance |
+US10846606B2 (en) * | 2008-03-12 | 2020-11-24 | Aptima, Inc. | Probabilistic decision making system and methods of use |
+US20150127155A1 (en) * | 2011-06-02 | 2015-05-07 | Brain Corporation | Apparatus and methods for operating robotic devices using selective state space training |
+US9311600B1 (en) * | 2012-06-03 | 2016-04-12 | Mark Bishop Ring | Method and system for mapping states and actions of an intelligent agent |
+US20140277718A1 (en) * | 2013-03-15 | 2014-09-18 | Eugene Izhikevich | Adaptive predictor apparatus and methods |
+US9753441B2 (en) * | 2013-05-13 | 2017-09-05 | Massachusetts Institute Of Technology | Controlling dynamical systems with bounded probability of failure |
+US20150127150A1 (en) * | 2013-11-01 | 2015-05-07 | Brain Corporation | Apparatus and methods for haptic training of robots |
+US9393693B1 (en) * | 2014-07-10 | 2016-07-19 | Google Inc. | Methods and systems for determining and modeling admissible gripper forces for robotic devices |
+US20160016311A1 (en) * | 2014-07-16 | 2016-01-21 | Google Inc. | Real-Time Determination of Object Metrics for Trajectory Planning |
+US20170213151A1 (en) * | 2014-08-07 | 2017-07-27 | Okinawa Institute Of Science And Technology School Corporation | Inverse reinforcement learning by density ratio estimation |
+US20160096270A1 (en) * | 2014-10-02 | 2016-04-07 | Brain Corporation | Feature detection apparatus and methods for training of robotic navigation |
+US10445641B2 (en) * | 2015-02-06 | 2019-10-15 | Deepmind Technologies Limited | Distributed training of reinforcement learning systems |
+US10776692B2 (en) * | 2015-07-24 | 2020-09-15 | Deepmind Technologies Limited | Continuous control with deep reinforcement learning |
+US10346741B2 (en) * | 2015-11-12 | 2019-07-09 | Deepmind Technologies Limited | Asynchronous deep reinforcement learning |
+US20180012137A1 (en) * | 2015-11-24 | 2018-01-11 | The Research Foundation for the State University New York | Approximate value iteration with complex returns by bounding |
+WO2017096079A1 (en) * | 2015-12-01 | 2017-06-08 | Google Inc. | Selecting action slates using reinforcement learning |
+US20190061147A1 (en) * | 2016-04-27 | 2019-02-28 | Neurala, Inc. | Methods and Apparatus for Pruning Experience Memories for Deep Neural Network-Based Q-Learning |
+CN105911863A (en) * | 2016-05-19 | 2016-08-31 | 杭州新松机器人自动化有限公司 | Multi-robot cooperative clamping system neural network trajectory tracking control method |
+US20180032864A1 (en) * | 2016-07-27 | 2018-02-01 | Google Inc. | Selecting actions to be performed by a reinforcement learning agent using tree search |
+US20180032863A1 (en) * | 2016-07-27 | 2018-02-01 | Google Inc. | Training a policy neural network and a value neural network |
+US10960539B1 (en) * | 2016-09-15 | 2021-03-30 | X Development Llc | Control policies for robotic agents |
+Non-Patent Citations (60)
+Title |
+---|
+Abadi et al. "TensorFlow: Large-scale machine learning on heterogeneous distributed systems," arXiv 1603.04467v2, Mar. 16, 2016, 19 pages. |
+Ammar et al., "Autonomous Cross-Domain Knowledge Transfer in Lifelong Policy Gradient Reinforcement Learning" 2015, pp. 3345-3351. (Year: 2015). * |
+Chebotar et al. "Path integral guided policy search," IEEE International Conference on Robotics and Automation, (under review) May 2017, arXiv 1610.00529v1, Oct. 3, 2016, 8 pages. |
+Chen et al. "Revisiting distributed synchronous sgd" arXiv 1604.00981v3, Mar. 21, 2017, 10 pages. |
+Daniel et al. "Hierarchical relative entropy policy search," Artificial Intelligence and Statistics, Mar. 2012, 9 pages. |
+Daniel et al., "Hierarchical Relative Entropy Policy Search" Jun. 2016, Journal of Machine Learning Research, pp. 1-50. (Year: 2016). * |
+Dean et al. "Large scale distributed deep networks," Advances in neural information processing systems, Dec. 2012, 9 pages. |
+Deisenroth et al. "A survey on policy search for robotics," Foundations and Trends in Robotics, 2(1-2) Aug. 2013, 27 pages. |
+Depeweg et al., "Learning and Policy Search in Stochastic Dynamical Systems with Bayesian Neural Networks" May 23, 2016, pp. 1-10. (Year: 2016). * |
+Farahnakian et al., Multi-Agent based Architecture for Dynamic VM Consolidation in Cloud, 2014, 2014 40th EUROMICRO Conference on Software Engineering and Advanced Applications, Verona, pp. 111-118. (Year: 2014). * |
+Feyzmahdavian et al., "An Asynchronous Mini-Batch Algorithm for Regularized Stochastic Optimization" May 18, 2015, pp. 1-23. (Year: 2015). * |
+Foerster et al., "Learning to Communicate with Deep Multi-Agent Reinforcement Learning" May 24, 2016, pp. 1-13. (Year: 2016). * |
+Gholami et al., "Decentralized Approximate Bayesian Inference for Distributed Sensor Network" Feb. 21, 2016, pp. 1582-1588. (Year : 2016). * |
+Gomez et al., "Real-Time Stochastic Optimal Control for Multi-agent Quadrotor Systems" Mar. 10, 2016, Association for the Advancement of Artificial Intelligence, pp. 1-10. (Year: 2016). * |
+Hausknecht et al., "Deep Reinforcement Learning in Parameterized Action Space" Feb. 16, 2016, pp. 1-12. (Year: 2016). * |
+Hinterstoisser et al. "Going further with point pair features," European Conference on Computer Vision, Springer International Publishing, Oct. 8, 2016, 15 pages. |
+Ijspeert et al. "Movement imitation with nonlinear dynamical systems in humanoid robots," IEEE International Conference on Robotics and Automation, May 2002, 6 pages. |
+Isele et al., "Work in Progress: Lifelong Learning for Disturbance Rejection on Mobile Robots" May 9-13, 2016, pp. 1-5. (Year: 2016). * |
+Kehoe et al. "A survey of research on cloud robotics and automation," IEEE Transactions on Automation Science and Engineering, 12(2), Apr. 2015, 8 pages. |
+Kehoe et al. "Cloud-based robot grasping with the google object recognition engine," IEEE International Conference on Robotics and Automation, May 2013, 8 pages. |
+Kupcsik et al., "Data-Efficient Generalization of Robot Skills with Contextual Policy Search" 2013, AAAI, pp. 1401-1407. (Year: 2013). * |
+Lampe et al. "Acquiring visual servoing reaching and grasping skills using neural reinforcement learning," IEEE International Joint Conference on Neural Networks, Aug. 2013, 8 pages. |
+Leblond et al., "ASAGA: Asynchronous Parallel SAGA" Jun. 15, 2016, pp. 1-36. (Year: 2016). * |
+LeCun et al. "Deep learning," Nature, 521(7553) May 2015, 9 pages. |
+Levine et al. "End-to-end training of deep visuomotor policies," Journal of Machine Learning Research, 17(39), Jan. 1, 2016, 40 pages. |
+Levine et al. "Learning neural network policies with guided policy search under unknown dynamics," Advances in Neural Information Processing Systems, Dec. 2014, 9 pages. |
+Levine et al., "End-to-End Training of Deep Visuomotor Policies" Apr. 2, 2015. (Year: 2015). * |
+Li et al. "Iterative linear quadratic regulator design for non-linear biological movement systems," ICINCO(1) Aug. 2004, 8 pages. |
+Li et al., "Make Workers Work Harder: Decoupled Asynchronous Proximal Stochastic Gradient Descent" May 21, 2016, pp. 1-19. (Year: 2016). * |
+Li et al., "Parallel Lasso Screening for Big Data Optimization" Aug. 2016, pp. 1705-1714. (Year: 2016). * |
+Lillicrap et al. "Continuous control with deep reinforcement learning," arXiv 1509.02971v5, Feb. 29, 2016, 14 pages. |
+Lillicrap et al., "Continuous Control with Deep Reinforcement Learning" Feb. 29, 2016, pp. 1-14. (Year: 2016). * |
+Luo et al., "Asynchronous Distributed Information Leader Selection in Robotic Swarms" Aug. 2015, pp. 606-611. (Year: 2015). * |
+Luo et al., "Asynchronous Distributed Information Leader Selection in Robotic Swarms" Aug. 24-28, 2015, pp. 606-611. (Year: 2015). * |
+Mahadevan et Liu, "Sparse Q-learning with Mirror Descent" 2012, pp. 1-10. (Year: 2012). * |
+Mathy et al., "SPARTA: Fast global planning of collision-avoiding robot trajectories" 2015, pp. 1-11. (Year: 2015). * |
+Mnih et al., "Asynchronous Methods for Deep Reinforcement Learning" Jun. 11, 2016, International Conference on Machine Learning . (Year: 2016). * |
+Mnih et al., "Asynchronous Methods for Deep Reinforcement Learning" Jun. 16, 2016, pp. (Year: 2016). * |
+Montgomery et al. "Guided policy search as approximate mirror descent," arXiv 1607.04614, Jul. 15, 2016, 14 pages. |
+Mordatch et al., "Combining Model-Based Policy Search with Online Model Learning for Control of Physical Humanoids" May 16-21, 2016, pp. 242-248. (Year: 2016). * |
+Munos et al., "Safe and efficient off-policy reinforcement learning" Jun. 8, 2016. (Year: 2016). * |
+Nair et al., "Massively Parallel Methods for Deep Reinforcement Learning" Jul. 16, 2015. (Year: 2015). * |
+Omidshafiei et al., "Graph-based Cross Entropy Method for Solving Multi-Robot Decentralized POMDPs" May 16-21, 2016, pp. 5395-5402. (Year: 2016). * |
+Ong et al., "Distributed Q-learning" Oct. 15, 2015, pp. 1-8. (Year: 2015). * |
+Peng et al., "ARock: An Algorithmic Framework for Asynchronous Parallel Coordinate Updates" May 27, 2016, pp. 1-29. (Year: 2016). * |
+Peng et al., "Coordinate friendly structures, algorithms, and applications" Aug. 14, 2016, pp. 1-65. (Year: 2016). * |
+Peters et al. "Relative entropy policy search," AAAI, Jul. 11, 2010, 6 pages. |
+Schulman et al. "Trust region policy optimization," Proceedings of the 32nd International Conference on Machine Learning, Jul. 2015, 9 pages. |
+Stulp et al., "Path Integral Policy Improvement with Covariance Matrix Adaptation," Proceedings of the 29th International Conference on Machine Learning, 2012, 8 pages. |
+Sugimoto et al., "Trial and Error: Using Previous Experiences as Simulation Models in Humanoid Motor Learning" Feb. 23, 2016, pp. 96-105. (Year: 2016). * |
+Sukhbaatar et al., "Learning Multiagent Communication with Backpropagation" May 25, 2016, pp. 1-11. (Year: 2016). * |
+Tedrake et al. "Stochastic policy gradient reinforcement learning on a simple 3d biped," International Conference on Intelligent Robots and Systems, Oct. 2004, 6 pages. |
+Theodorou et al. "A generalized path integral control approach to reinforcement learning," Journal of Machine Learning Research, Nov. 11, 2010, 45 pages. |
+Tompson et al. "Joint training of a convolutional network and a graphical model for human pose estimation," Advances in Neural Information Processing Systems, Dec. 2014, 9 pages. |
+Vien et al., "Policy Search in Reproducing Kernel Hilbert Space" Jul. 9, 2016, pp. 2089-2096. (Year: 2016). * |
+Wahlstrom et al., "From Pixels to Torques: Policy Learning with Deep Dynamical Models" Jun. 18, 2015. (Year: 2015). * |
+Wang et al. "Bregman alternating direction method of multipliers," Advances in Neural Information Processing Systems, Dec. 2014, 9 pages. |
+Wang et al., "Multi-agent distributed coordination control: Developments and direction via graph viewpoint" Mar. 26, 2016, pp. 204-218. (Year: 2016). * |
+Yahya et al., "Collective Robot Reinforcement Learning with Distributed Asynchronous Guided Policy Search" Oct. 3, 2016, arXiv:1610.00673. (Year: 216). * |
+Zinkevich et al. "Parallelized stochastic gradient descent," Neural Information Processing Systems, Dec. 2010, 9 pages. |
+Cited By (26)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US11841789B2 (en) | 2016-01-27 | 2023-12-12 | Microsoft Technology Licensing, Llc | Visual aids for debugging |
+US11842172B2 (en) | 2016-01-27 | 2023-12-12 | Microsoft Technology Licensing, Llc | Graphical user interface to an artificial intelligence engine utilized to generate one or more trained artificial intelligence models |
+US11868896B2 (en) | 2016-01-27 | 2024-01-09 | Microsoft Technology Licensing, Llc | Interface for working with simulations on premises |
+US20180357552A1 (en) * | 2016-01-27 | 2018-12-13 | Bonsai AI, Inc. | Artificial Intelligence Engine Having Various Algorithms to Build Different Concepts Contained Within a Same AI Model |
+US11762635B2 (en) | 2016-01-27 | 2023-09-19 | Microsoft Technology Licensing, Llc | Artificial intelligence engine with enhanced computing hardware throughput |
+US11775850B2 (en) * | 2016-01-27 | 2023-10-03 | Microsoft Technology Licensing, Llc | Artificial intelligence engine having various algorithms to build different concepts contained within a same AI model |
+US11836650B2 (en) | 2016-01-27 | 2023-12-05 | Microsoft Technology Licensing, Llc | Artificial intelligence engine for mixing and enhancing features from one or more trained pre-existing machine-learning models |
+US20200327399A1 (en) * | 2016-11-04 | 2020-10-15 | Deepmind Technologies Limited | Environment prediction using reinforcement learning |
+US20200189099A1 (en) * | 2017-09-15 | 2020-06-18 | Google Llc | Improvements related to generating a robot control policy from demonstrations collected via kinesthetic teaching of a robot |
+US11565412B2 (en) * | 2017-09-15 | 2023-01-31 | Google Llc | Generating a robot control policy from demonstrations collected via kinesthetic teaching of a robot |
+US11328210B2 (en) | 2017-12-29 | 2022-05-10 | Micron Technology, Inc. | Self-learning in distributed architecture for enhancing artificial neural network |
+US20210107142A1 (en) * | 2018-02-27 | 2021-04-15 | Siemens Aktiengesellschaft | Reinforcement learning for contact-rich tasks in automation systems |
+US11705004B2 (en) | 2018-04-19 | 2023-07-18 | Micron Technology, Inc. | Systems and methods for automatically warning nearby vehicles of potential hazards |
+US20210237266A1 (en) * | 2018-06-15 | 2021-08-05 | Google Llc | Deep reinforcement learning for robotic manipulation |
+US11410475B2 (en) | 2019-01-31 | 2022-08-09 | Micron Technology, Inc. | Autonomous vehicle data recorders |
+US11670124B2 (en) | 2019-01-31 | 2023-06-06 | Micron Technology, Inc. | Data recorders of autonomous vehicles |
+US11373466B2 (en) | 2019-01-31 | 2022-06-28 | Micron Technology, Inc. | Data recorders of autonomous vehicles |
+US20210012196A1 (en) * | 2019-07-11 | 2021-01-14 | The Regents Of The University Of California | Peer-to-peer training of a machine learning model |
+US11636334B2 (en) | 2019-08-20 | 2023-04-25 | Micron Technology, Inc. | Machine learning with feature obfuscation |
+US20220309291A1 (en) * | 2019-08-20 | 2022-09-29 | Micron Technology, Inc. | Feature dictionary for bandwidth enhancement |
+US11755884B2 (en) | 2019-08-20 | 2023-09-12 | Micron Technology, Inc. | Distributed machine learning with privacy protection |
+US11392796B2 (en) * | 2019-08-20 | 2022-07-19 | Micron Technology, Inc. | Feature dictionary for bandwidth enhancement |
+US20210276188A1 (en) * | 2020-03-06 | 2021-09-09 | Embodied Intelligence Inc. | Trajectory optimization using neural networks |
+US20210276187A1 (en) * | 2020-03-06 | 2021-09-09 | Embodied Intelligence Inc. | Trajectory optimization using neural networks |
+US20220143819A1 (en) * | 2020-11-10 | 2022-05-12 | Google Llc | System and methods for training robot policies in the real world |
+CN115972216A (en) * | 2023-03-17 | 2023-04-18 | 中南大学 | Parallel robot positive motion solving method, control method, equipment and storage medium |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11188821B1 (en) | Control policies for collective robot learning | |
+US10346741B2 (en) | Asynchronous deep reinforcement learning | |
+US11886992B2 (en) | Training reinforcement learning neural networks | |
+JP6854921B2 (en) | Multitasking neural network system with task-specific and shared policies | |
+EP3696737B1 (en) | Training action selection neural networks | |
+US11741334B2 (en) | Data-efficient reinforcement learning for continuous control tasks | |
+JP6926203B2 (en) | Reinforcement learning with auxiliary tasks | |
+US11288568B2 (en) | Reinforcement learning using advantage estimates | |
+US20210110115A1 (en) | Selecting actions using multi-modal inputs | |
+US20210201156A1 (en) | Sample-efficient reinforcement learning | |
+US10960539B1 (en) | Control policies for robotic agents | |
+US10860927B2 (en) | Stacked convolutional long short-term memory for model-free reinforcement learning | |
+EP3384435B1 (en) | Selecting action slates using reinforcement learning | |
+JP2023093525A (en) | Action Selection for Reinforcement Learning Using Neural Networks | |
+US20200234117A1 (en) | Batched reinforcement learning | |
+WO2018083669A1 (en) | Recurrent neural networks | |
+EP3888014A1 (en) | Controlling robots using entropy constraints | |
+Mori et al. | Compensation of networked control systems with time-delay |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+FEPP | Fee payment procedure |
+Free format text: ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: BIG.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |

@@ -1,0 +1,552 @@
+US6668263B1 - Method and system for efficiently searching for free space in a table of a relational database having a clustering index - Google Patents
+Method and system for efficiently searching for free space in a table of a relational database having a clustering index Download PDFInfo
+- Publication number
+- US6668263B1 US6668263B1 US09/651,884 US65188400A US6668263B1 US 6668263 B1 US6668263 B1 US 6668263B1 US 65188400 A US65188400 A US 65188400A US 6668263 B1 US6668263 B1 US 6668263B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- page
+- free space
+- pages
+- target
+- new record
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/28—Databases characterised by their database models, e.g. relational or object models
+- G06F16/284—Relational databases
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99933—Query processing, i.e. searching
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99951—File or database maintenance
+- Y10S707/99956—File allocation
+Definitions
+- the present invention relates to database management systems and more particularly to a method and system for searching for free space in a table of a relational database management system, where the table has a clustering index defined on at least one or more of its columns.
+- a database management system includes the combination of an appropriate computer, direct access storage devices (DASD) or disk drives, and database management software.
+- a relational database management system is a DBMS that uses relational techniques for storing and retrieving information.
+- the relational database management system or RDBMS comprises computerized information storage and retrieval systems in which data is stored on disk drives or DASDs for semi-permanent storage. The data is stored in the form of tables which comprise rows and columns. Each row or tuple has one or more columns.
+- a typical database management system includes both database files and index files.
+- the database files store data in the rows and columns of tables stored on data pages.
+- the rows may correspond to individual records while the columns of the table represent attributes of the records.
+- each row might represent a different customer, while each column represents different attributes of the customers such as the name of each customer, the amount owed by each customer and the cash receipts received from each customer.
+- the database management system Instead of providing for direct sorting and searching of the records in the tables, the database management system relies on the index files, which contains information or pointers about the location of the records in the tables stored in the database files.
+- the index can be searched and sorted (scanned) much more rapidly than can the database files.
+- An index is scanned through transactions in which criteria are stipulated for selecting records from a table. These criteria include keys, which are the attributes by which the database finds the desired record or records using the index.
+- An index for a table is said to be “clustered” when the rows of the underlying table are physically stored so that each data page contains all rows, and only those rows, of a key interval of the index.
+- FIG. 22 there is illustrated an index on unclustered data.
+- FIG. 23 shows a B-Tree index for the same data; however, in FIG. 23 the data has been clustered. The differences between clustered and unclustered indexes can be seen by focusing on the key value “N”.
+- the leaf nodes of the B-Tree indexes point to four records in the underlying tables; these records are identified by the record identifiers of four keys.
+- the record identifiers are rid 1 , rid 2 , rid 3 and rid 4 .
+- the key interval ⁇ N,rid 1 > to ⁇ N,rid 2 > is stored on two different data pages—specifically data pages 1 and 2 .
+- the key interval ⁇ N,rid 3 > to ⁇ N,rid 4 > are stored on data pages 2 and 3 .
+- the B-Tree index and underlying data pages of FIG. 23 the same data is shown clustered.
+- the key interval ⁇ N,rid 1 > to ⁇ N,rid 2 > points to rows that are stored on data page 2
+- the key interval ⁇ N,rid 3 > to ⁇ N,rid 4 > points to data that is stored on data page 3 .
+- the records need not be adjacently located on the same data page. While the records underlying ⁇ N,rid 3 > and ⁇ N,rid 4 > both lie on data page 3 , they are separated by a record having an attribute value equal to “P”.
+- the index and table may become disordered as a result of rows being added or deleted from the table. Specifically, if a new data row is to be added to a table, then this data would preferably be added on the data page for the key interval of the index in which the data row falls. However, there may be no or insufficient free space on this data page to accommodate the new record, and the data row may, as a result, have to be stored on another data page on which sufficient free space is available, or appended to the end of the table. Accordingly, even if an index is clustered to begin with, it may become unclustered, at least to some extent, as additional information is added. The extent to which a clustered index has become unclustered is measured by the cluster factor; the cluster factor is measured on a scale of 0 to 1, where 1 means the index is fully clustered.
+- a clustering index is an index whose cluster factor is, as much as possible, maintained or improved dynamically as data is inserted into the associated table.
+- the cluster factor is maintained or improved by inserting new rows as physically close to the rows for which the key values of this index are in the same range, as is possible. Having a high cluster factor—a cluster factor close to 1—increases data retrieval efficiency when such retrieval involves accessing sequential ranges of that index's values.
+- RDBMS relational database management system
+- Free space maps are used in the art to keep track of the free space that is available in a table.
+- a free space map is a map or directory of the pages in a table, together with an approximation of the amount of the free space on each of these pages. This enables the pages that might have enough space for a record to be quickly looked for, without requiring the page to actually be fixed.
+- a free space map spans a plurality of free space map pages when it is too large to accommodate on a single page.
+- a free space map page is one of the plurality of free space map pages containing a portion of the map.
+- Each free space map page includes an array of free space entries for a series of pages that form part of the table.
+- the search usually starts at the beginning of the free space map, or from the position where space was last found in this free space map. In either case, the entire free space map is usually searched until a data page with sufficient free space is found or until the entire free space map has been searched. If a page with free space is found, the row is inserted on to the page. If no free space is found, the row is appended to the table.
+- a record, which is being inserted into a table having a clustering index defined on A one or more of its columns, should preferably be inserted on the target page in order to maintain or improve the cluster factor.
+- the target page is the ideal page on which to insert a new data record into a table that has a clustering index, as this page contains the same or next key value in the table as that being inserted. However, this may not always be possible as the target page may have insufficient free space to accommodate the record. If there is insufficient space for the record on the target page, then the record must be inserted on another page on the table.
+- An object of one aspect of the present invention is to provide an improved database management system.
+- Preferred embodiments provide an improved method, system, and program for determining a location in a database to insert a new record in a database table when the new record includes a key value.
+- a determination is made of a target page having a record in the table that includes a key value that equals the key value of the new record.
+- the pages in storage are capable of storing records from the table.
+- the new record is stored in the target page if the target page has sufficient free space to store the new record.
+- a determination is made of a page closest to the target page that has sufficient free space to store the new record if the target page does not have sufficient space.
+- the new record is stored in the determined closest page if the target page does not have sufficient free space.
+- a method for searching a table for free space for inserting a new record into the table in a database management system resides in a storage medium, and comprises a series of table pages capable of storing a plurality of records.
+- the table has a clustering index defined in a column of the table.
+- the new record has a new attribute for storing in the column when the new record is stored in the table.
+- the method includes the step of searching for a target page in a series of target pages.
+- the target page is selected to include a target record having a target attribute stored in the column of the table.
+- the target attribute is selected to be equal to the new attribute if the column contains a record equal to the new record, otherwise, the target attribute is selected to be either a next higher attribute above the new attribute and stored in the column, or a next lower attribute below the new attribute and stored in the column.
+- the method also comprises the step of searching the target page for sufficient free space to accommodate the new record. If sufficient free space is found on the target page, then the method inserts the new record on the target page. If sufficient free page is not found on the target page, then the method searches the target neighborhood of pages in a series of table pages. The target neighborhood of pages surround the target page. If sufficient free space is found on a page in the target neighborhood of pages, then the new record is inserted on to the page in the target neighborhood of pages.
+- the method searches for sufficient free space to accommodate the new record in the series of table pages outside the target neighborhood of pages. If sufficient free space is found outside the target neighborhood of pages, then the new record is inserted on a non-neighboring page outside the target neighborhood of pages. If sufficient free space is not found outside the target neighborhood of pages, then a new page having a new record is appended to the end of the table.
+- a method for searching a table for free space for inserting a new record into the table in a database management system resides in a storage medium, and includes a series of table pages capable of storing a plurality of records.
+- the table also has a clustering index defined in a column of the table.
+- the method includes a step of searching a set of table pages in the series of table pages. If sufficient free space is found in the set of table pages, then the record is inserted in the set of table pages. If the set of table pages includes a single page having sufficient free space to accommodate the new record, then the new record is inserted on to the single page.
+- the set of table pages includes at least two pages having sufficient free space to accommodate the new record, then the new record is inserted on an emptiest page in the at least two pages. If sufficient free space is not found on the set of table pages, then the new page having the new record is appended to the end of the table.
+- a computer program product for use on a computer system wherein transactions are executed for inserting data into a table in a database system.
+- the table resides in a storage medium, and comprises a series of table pages capable of storing a plurality of records.
+- the table also has a clustering index defined on a column of the table.
+- the new record has a new attribute for storing in the column of the table when the new record is stored in the table.
+- the computer program product includes a recording means and means recorded on the medium for instructing the computer system to perform the following steps.
+- the computer system searches for a target page in a series of target pages.
+- the target page is selected to include a target record having a target attribute stored in the column of the table.
+- the target attribute is selected to be equal to the new attribute if the column contains a record equal to the new record, otherwise, the target attribute is selected to be either a next higher attribute above the new attribute and stored in the column, or a next lower attribute below the new attribute and stored in the column.
+- the computer system searches the target page for sufficient free space to accommodate the new record. If sufficient free space is found on the target page, then the computer system inserts the new record on the target page. If sufficient free page is not found on the target page, then the computer system searches the target neighborhood of pages in a series of table pages. The target neighborhood of pages surround the target page. If sufficient free space is found on a page in the target neighborhood of pages, then the new record is inserted on to the page in the target neighborhood of pages.
+- the computer system searches for sufficient free space to accommodate the new record in the series of table pages outside the target neighborhood of pages. If sufficient free space is found outside the target neighborhood of pages, then the new record is inserted on a non-neighboring page outside the target neighborhood of pages. If sufficient free space is not found outside the target neighborhood of pages, then a new page having a new record is appended to the end of the table.
+- a computer program product for use on a computer system, wherein transactions are executed for inserting data into a table in a database.
+- the table resides in a storage medium and comprises a series of table pages capable of storing a plurality of records.
+- the table has a clustering index defined on a column of the table.
+- the computer table product comprises a recording medium, and means recorded on the medium for instructing the computer system to perform a number of steps.
+- the computer system searches a set of table pages in the series of table pages. If sufficient free space is found in the set of table pages, then the record is inserted in the set of table pages.
+- the new record is inserted on to the single page. If the set of table pages includes at least two pages having sufficient free space to accommodate the new record, then the new record is inserted on an emptiest page in the at least two pages. If sufficient free space is not found on the set of table pages, then the new page having the new record is appended to the end of the table.
+- a data processing system for inserting data into a table in a database system.
+- the table resides in a storage medium, and comprises a series of table pages capable of storing a plurality of records.
+- the table also has a clustering index defined on a column of the table.
+- the new record has a new attribute for storing in the column of the table when the new record is stored in the table.
+- the computer system searches for a target page in a series of target pages.
+- the target page is selected to include a target record having a target attribute stored in the column of the table.
+- the target attribute is selected to be equal to the new attribute if the column contains a record equal to the new record, otherwise, the target attribute is selected to be either a next higher attribute above the new attribute and stored in the column, or a next lower attribute below the new attribute and stored in the column.
+- the computer system searches the target page for sufficient free space to accommodate the new record. If sufficient free space is found on the target page, then the computer system inserts the new record on the target page. If sufficient free page is not found on the target page, then the computer system searches the target neighborhood of pages in a series of table pages. The target neighborhood of pages surround the target page. If sufficient free space is found on a page in the target neighborhood of pages, then the new record is inserted on to the page in the target neighborhood of pages.
+- the computer system searches for sufficient free space to accommodate the new record in the series of table pages outside the target neighborhood of pages. If sufficient free space is found outside the target neighborhood of pages, then the new record is inserted on a non-neighboring page outside the target neighborhood of pages. If sufficient free space is not found outside the target neighborhood of pages, then a new page having a new record is appended to the end of the table.
+- a data processing system for inserting data into a table in a database system.
+- the table resides in a storage medium, and comprises a series of table pages capable of storing a plurality of records.
+- the table also has a clustering index defined on a column of the table.
+- the computer system searches a set of table pages in the series of table pages. If sufficient free space is found in the set of table pages, then the record is inserted in the set of table pages. If the set of table pages includes a single page having sufficient free space to accommodate the new record, then the new record is inserted on to the single page.
+- the set of table pages includes at least two pages having sufficient free space to accommodate the new record, then the new record is inserted on an emptiest page in the at least two pages. If sufficient free space is not found on the set of table pages, then the new page having the new record is appended to the end of the table.
+- FIG. 1 in a block diagram, illustrates a computer system that may be configured to implement an embodiment of the invention
+- FIG. 2 is an initializing flow chart in which the root page of a clustering index is fixed in accordance with a target page finding procedure of an aspect of the invention
+- FIG. 3 is a flow chart showing steps in the target page finding procedure of FIG. 2 after the root page of a clustering index has been fixed;
+- FIGS. 4 to 8 are flow charts showing steps in a method of searching a target free space map page in accordance with an aspect of the invention
+- FIGS. 9 ( i ) to 9 ( v ) show flowcharts illustrating a method for efficiently searching free space in a relational database management system in accordance with an aspect of the invention
+- FIG. 10 shows a flowchart illustrating a method utilized by the method of FIG. 9 to account for data updates and deletions to the table;
+- FIGS. 11 to 14 show flow charts illustrating a sequence of steps of a worst fit selection method in accordance with an aspect of the invention
+- FIGS. 15 and 16 show free space map pages suitable for being searched by the record insertion method of the present invention
+- FIG. 17 is a pseudo code listing for finding the target page for a key value in a clustering index according to the method of FIGS. 2 and 3;
+- FIG. 18 is a pseudo code listing for searching the target free space map according to the method of FIGS. 4 to 7 ;
+- FIG. 19 is a pseudo code listing for determining the next page and offset in a spiral search of the target free space map pages according to the method of FIG. 8;
+- FIG. 20 is a pseudo code listing for a worst fit process for searching a non-target free space map page according to the method of FIGS. 11 to 14 ;
+- FIG. 21 shows a clustering B-tree index according to the prior art
+- FIG. 22 shows a unclustered B-tree index according to the prior art.
+- FIG. 23 shows a clustered B-tree index according to the prior art.
+- the computer system 20 includes a communication means 22 for communicating information and a processor 24 that is connected to the communication means 22 .
+- the computer system 20 further comprises a memory 26 for storing data records and instructions regarding the manipulation of such data records, and a secondary storage means 27 such as a disk drive or hard drive.
+- the memory 26 is connected to the processor 24 via the communication means 22 as are the user input means 28 , such as a keyboard or mouse, and a monitor 29 .
+- the present invention relates to the use of the computer system 20 implements database management system in which free space searching for a new record in searching is executed in a way that enhances clustering.
+- FIGS. 2 to 14 there are illustrated different stages of a method of inserting a record into a table having a clustered index defined on one of its columns.
+- a target page is selected in the index based on the key value of the record to be inserted; an example of this stage of the record-insertion method is illustrated by the flow charts of FIGS. 2 and 3.
+- the free space map page (FSMP) for the target page is determined.
+- This target FSMP represents the target page as well as a set of neighboring pages.
+- the target FSMP is then searched for pages having sufficient space to accommodate the new record.
+- FIGS. 9 to 10 illustrate a method of searching non-target FSMPs in accordance with an aspect of a third stage of the invention.
+- the flow charts of FIGS. 11 to 14 illustrate the fourth stage of the record insertion method according to a preferred aspect of the invention, in which a worst fit selection is made from among the pages having enough space to accommodate the new record being inserted
+- the page on which the record is inserted should be as close to the target page as possible, so that during range scans of the index there is an increased likelihood of sequential pages in the range being pre-fetched together.
+- the record on a page in the general neighborhood of the target page then other considerations become important.
+- the table be searched as efficiently as possible for pages having sufficient free space to accommodate the record.
+- FIGS. 9 and 10 illustrate a method for efficiently searching for free space to accommodate the record.
+- the record should be inserted in such a way that its likelihood of disrupting future attempts to maintain or improve the cluster factor when new records are inserted is minimized.
+- FIGS. 11 to 14 illustrate a free space selection method according to one aspect of the present invention in which a worst fit selection is made from among the pages having enough free space to accommodate the new record being inserted.
+- FIG. 21 there is illustrated a clustering B-tree index according to the prior art.
+- the flowcharts of FIGS. 2 to 7 are described with reference to an example in which the index of FIG. 21 is searched for free space in which to insert a new record.
+- FIG. 2 there is illustrated a start or initialization flow chart in which the root page of a clustering index is fixed in step 40 .
+- the target page finding procedure then proceeds to point A 0 at the top of the flow chart of FIG. 3 .
+- step 40 of the flow chart of FIG. 2 the record insertion method begins with the root page, page 10 , of the clustering B-tree index at FIG. 21 being fixed. After page 10 is fixed, the record insertion method proceeds to point A 0 at the top of the flow chart of FIG. 3 .
+- Query 42 returns the answer “No”, as page 10 is not a leaf page or node, and the record insertion method proceeds to step 44 .
+- step 44 an attempt is made to find the key value “J” on page 10 , resulting in the key ⁇ J, 8 > being located.
+- Query 48 returns the answer “Yes” as the key ⁇ J, 8 > has been found, and the record insertion method proceeds to step 50 in which the child page, to which pointer ⁇ J, 8 > points, is fixed—this child page is page 7 . If page 7 is valid, then query 54 returns the answer “Yes”. If page 7 is not valid, then query 54 will return the answer “No” and the index will be latched again in step 52 . Similarly, if a key is not found in step 44 , then query 48 will return the answer “No”, and the index will be latched again in step 46 . When query 44 returns the answer “Yes”, the record insertion method proceeds back to point A 0 at the top of FIG. 3 .
+- step 44 the key ⁇ J, 8 > is located, and child page 2 is fixed in step 50 .
+- Query 54 then returns the answer “Yes” and the record insertion method proceeds back to point A 0 at the top of the flow chart of FIG. 3 .
+- step 56 page 2 is unsuccessfully searched for the key value “J”.
+- step 60 page 2 is searched for the next higher key on the page after key value “J”; however, page 2 does not include such a key, and query 62 accordingly returns the answer “No”.
+- the record insertion method then proceeds to query 64 , which returns the answer “Yes” as there is a next page, page 3 .
+- step 68 the next page, page 3 , is fixed, and the first key on this next page is located. This key is key ⁇ K, 9 >. As “J” is not in the index and “K” is the next higher value, page 3 is selected as the target page for the insert.
+- step 70 the page associated with the RID of key ⁇ K, 9 > is determined.
+- the RID of key ⁇ K, 9 > is “ 9 ”; accordingly, data page 9 is determined to be the target page or the ideal page on which to insert the new record. If a key having key value “J” had been found, then the flow chart of FIG. 3 would have proceeded directly to step 70 from query 58 , and data page associated with such key's RID would have been determined to be the target page.
+- step 70 is executed, the flow chart of FIG. 3 ends, as does the first stage of the record insertion method in which the target page is determined.
+- step 66 the record insertion method would have returned the result “RECORD NOT FOUND” before the method of the flow chart of FIG. 3 ended.
+- FIGS. 4 to 7 illustrate a second stage in the record insertion method according to a preferred aspect of the present invention.
+- the target page has been determined, and the target page as well as pages surrounding the target page are searched for sufficient free space to accommodate the record being inserted. If the target page 9 can accommodate the new record being inserted, then the record is inserted on page 9 , and the record insertion method ends in that case at this second stage If, however, there is insufficient space for the record on the target page, then the record must be inserted on another page in the table.
+- the pages immediately surrounding the target page are searched in an order corresponding to their proximity to the target page—pages that are closer to the target page being searched before pages that are further away from the target page.
+- the new record should be inserted on a page that is as close to the target page as possible, so that during range scans of the index there is a greater likelihood of sequential pages in the range being pre-fetched together.
+- a free space map is used to get an idea of which pages are likely to have enough space for the record. Accordingly, the FSMP that contains information for target page 9 is determined close to the beginning of this stage of the record insertion method.
+- step 80 of the flow chart of FIG. 4 The process by which the target FSMP is searched is illustrated beginning in the flow chart of FIG. 4 .
+- the flowcharts of FIGS. 2 and 3 are subsumed in step 80 of the flow chart of FIG. 4, in which the clustering index is searched for a target page, and is determined to be target page 9 , as this is the page designated by key ⁇ K, 9 >.
+- Query 82 then returns the answer “Yes” as the target page has been found and the FSMP containing information target page 9 is located in step 86 .
+- target FSMP stores information regarding each page.
+- target page 9 is found at offset 3 in the target FSMP. Accordingly, as shown in the diagram, there are 10 free space bytes available on target page 9 .
+- step 88 of the flow chart of FIG. 4 the location of the page offset representing the target page in the FSMP is used to initialize certain variables. These variables are Page, Offset, Counter, Sign, lastPage, and firstPage. Specifically, Page is set equal to target plus 1; as target page 9 is represented by page offset 3 , Page is set equal to 4. Offset is then set equal to the offset of the target plus 1; in this example, the offset of the target is 3, so Offset is set equal to 3 plus 1 or 4. Counter is set equal to 1 and Sign is set equal to 1. LastPage is set equal to 9 or the highest page offset in the FSMP represented by the diagram of FIG. 15, and firstPage is set equal to 0, which is the lowest page offset of the target FSMP as represented by the diagram of FIG. 15 . The record insertion method then proceeds to point A, at the top of the flow chart of FIG. 5 .
+- query 90 the current page is checked to make sure that it is still on the target FSMP.
+- the Page is set equal to 4, and the lastPage is set equal to 9, while firstPage is set equal to 0. Accordingly, query 90 returns the answer “Yes”, as 4 is greater than 0 and less than 9.
+- query 92 the free space value for offset 4 is determined; as shown in FIG. 15, the free space value for offset 4 is two bytes. Say that the record being inserted requires 11 bytes, then query 92 will return the answer “No” and the record insertion method will move to the next page in a spiral fashion in step 100 . This movement to the next page in spiral fashion is illustrated in the flow chart of FIG. 8 . In step 140 of the flowchart of FIG.
+- step 142 Page is set equal to the former value of Page plus the Counter multiplied by the Sign. In this case, as the former value of Page was 4, Counter is set equal to 2, and Sign is set equal to ⁇ 1, the new value of Page is 2.
+- step 144 Offset is set equal to the former value of Offset plus Counter multiplied by Sign; as the former value of Offset was 4, Counter is set equal to 2 , and Sign is set equal to ⁇ 1, the new value of Offset is 2. Step 100 of the flow chart of FIG. 5 having being completed, the record insertion method proceeds to point Al at the top of FIG. 5 once again.
+- query 90 again returns the answer “Yes”, as 2, the current value of Page, is greater than 0 (firstPg) and less than 9 lastPg).
+- Query 92 returns the answer “No”, as according to FIG. 15, the free space available for page offset 2 is only 5 bytes, and 11 bytes are required.
+- the record insertion A method then proceeds to step 100 , and to the flow chart of FIG. 8 —in which Sign is set equal to 1, Counter equal to 3, Page equal to 5, and Offset equal to 5 —for the next run through the flow chart of FIG. 5 .
+- the offsets are checked in the following spiral manner or order: 3 , 4 , 2 , 5 , 1 , 6 , 0 , 7 .
+- query 90 will return the answer “No” as the Page value of ⁇ 1 fails the test that Page be greater than or equal to firstPg, as firstPg equals 0. Accordingly, query 90 returns the answer “No”, and the record insertion method proceeds to point B 1 at the top of the flow chart of FIG. 6 .
+- step 102 of the flow chart of FIG. 6 the record insertion method moves to the next page in a spiral manner, by resetting the variables according to the method shown in the flow chart of FIG. 8 .
+- Sign is set equal to 1
+- Counter is set equal to 9
+- Page is set equal to 8
+- Offset is set equal to 8.
+- Query 104 then returns the answer “Yes” as Sign is greater than 0 and the record insertion method proceeds to step 106 .
+- step 106 the variable numPages is set equal to lastPg minus Page plus 1. As the number of pages is 10, and lastPg equals 9, numPage is set equal to 2 (9 ⁇ 8+1). This indicates that two pages are left, and the method knows that it is moving to the right boundary.
+- step 108 numPages would have been set equal to Page plus 1, which would have indicated the number of pages to go to the left boundary.
+- step 110 Counter is set equal to 0, and the record insertion method proceeds to C′ at the top of FIG. 7 .
+- Query 120 of the flow chart of FIG. 7 returns the answer “Yes” as the counter is equal to 0 and numPages is equal to 2. The method then proceeds to query 124 , which returns the answer “No”, as, from the diagram of FIG. 15, it can be seen that the target free space map indicates that there are no free space bytes available at Page offset 8 .
+- step 132 Counter is incremented to 1 and query 134 returns the answer “Yes” as Sign equals 1 and is thus greater than 0.
+- Page and Offset are incremented to 9, and the method then proceeds back to point C 1 at the top of the flow chart of FIG. 7 .
+- query 120 returns the answer “Yes”, as Counter is now equal to 1, which is still less than 2.
+- page offset 9 has 12 free space bytes available. This is enough to accommodate the new record to be inserted.
+- query 124 returns the answer “Yes”.
+- step 126 the last page fixed is unfixed, and the page corresponding to page offset 9 is fixed. If the page corresponding to page offset 9 actually has sufficient space to accommodate the new record to be inserted, then query 128 returns the answer “Yes” and the new record is inserted on page 9 in step 130 before the record insertion method ends.
+- step 132 the counter will be increased from 1 to 2, and after query 134 returns the answer “Yes”, Page and Offset will be incremented to 10.
+- the record insertion method will then proceed to point C 1 at the top of the flow chart of FIG. 7 .
+- query 120 returns the answer “No” as the counter 2 is no longer less than the numPages variables, which was also 2.
+- the method then proceeds to step 122 , which returns the answer “No Space Found”, before this stage of the record insertion method ends.
+- the first stage of the record insertion method will have ended unsuccessfully.
+- an effort is made to insert the record on a page which is reasonably close to the target page.
+- the effort to insert the record on a page close to the target page is abandoned, and instead, a more efficient free space searching method is used to search through the rest of the FSMPs for space in which to insert the record.
+- the number of pages surrounding the target page that are searched before the effort to insert the new record on a page close to the target page is abandoned is simply the number of pages on the same FSMP as the target page. This, however, is not essential; a different number of pages surrounding the target page can be searched if desired.
+- the record insertion method searches a certain number of pages, but then gives up after that number and merely appends the new record to the end of the table. Further, each time the method starts searching beyond the target FSMP, it starts to search where it left off the last time, so that over time, the entire table is searched. Accordingly, the last page checked is cached before the record is appended to the end of the table, in order to enable the search to be carried on from where it left off.
+- the method according to the present invention allows the user to limit the number of FSMPs that are searched for each row inserted and to define some amount of space (e.g. a predefined number of pages) for appending data before a search is done again. If the configured number of space map pages have been searched without finding a page for the row, the row will be appended to the table. The predefined number of new pages will be filled before another search is done. Subsequent searches start from where the previous search ended whether or not a page with free space was found. The search continues in a circular fashion; that is, once the end of the free space map is reached, the search resumes at the beginning of the free space map. If consecutive searches fail, for each failed search, the predefined number of pages to fill before searching again is increased. The user can configure the maximum value for the predefined number of pages for appending data before searching will resume.
+- some amount of space e.g. a predefined number of pages
+- FIGS. 9 and 10 illustrate a third stage of the record insertion method according to a preferred aspect of the present invention.
+- a target page has been determined, and it has also been determined that none of the pages on the FSMP for the target page have enough space to store the new record to be inserted.
+- the search for sufficient free space to accommodate the new record moves beyond the FSMP for the target page.
+- the submethod 200 is executed by a process or thread for inserting data into a page in a table in the database.
+- the submethod 200 searches the free space map for the table to find a page on which there is sufficient free space to insert the data, i.e. a row or tuple.
+- the first step of the third stage comprises a query 202 which checks two flags, SEARCH and FREE_SPACE.
+- the flags SEARCH and FREE_SPACE, and other flags and variables, described below comprise global cached variables with initial values which are updated by the process or thread that inserts the data while the variables FSMPS_SEARCHED, FIRST_PAGE_SEARCHED and SEARCH_ENTIRE_TABLE are local variables which are maintained by the process/thread that inserts the data.
+- the SEARCH flag indicates whether the free space map is to be searched, and the FREE_SPACE flag indicates whether there is free space available in the table.
+- the SEARCH flag is FALSE, indicating that a search of the free space map is not to be made, or if the FREE_SPACE flag is FALSE, indicating that there is no free space available in the table, then processing moves to query 203 in FIG. 9 ( iv ).
+- the FREE_SPACE flag and the SEARCH flag will be FALSE if the table is put into a “Table Full State”.
+- the SEARCH flag is also set to FALSE when a search for free space fails to find space as will also be described in further detail below.
+- a variable FSMPS_SEARCHED is reset in step 204 .
+- a variable FIRST_PAGE_SEARCHED is set to the CURRENT_PAGE indexed in the table.
+- the FSMPS_SEARCHED variable indicates the number of space map pages (FSMP's) which have been searched in the free space map, and the variable FIRST_PAGE_SEARCHED indicates the first page in the table which will be checked for free space to insert this row of data.
+- a variable CURRENT_FSMP is set to the space map page containing the entry for the page indicated by the variable CURRENT_PAGE.
+- a flag SEARCH_ENTIRE_TABLE is set to FALSE. The SEARCH_ENTIRE_TABLE flag indicates whether the entire table is to be searched.
+- the space map page indicated by the variable CURRENT_FSMP is checked to determine if the current space map page indicates that the current page in the table (i.e. CURRENT_PAGE) has sufficient free space for the row to be inserted. If the space map page indicates sufficient free space, then an actual check of the current page is made in query 208 to determine if the free space indicated in the space map page is useable. If sufficient useable free space is found in the current page of the table, then the flag SEARCH is set to TRUE in step 210 , and another flag SPACE_FOUND is also set to TRUE. The SPACE_FOUND flag indicates that sufficient free space was found to insert the data, while the SEARCH flag is set to indicate that a successful search was conducted.
+- a variable SEARCH_START_PAGE is set to the current page (i.e. CURRENT_PAGE), and variables TIMES_TABLE_SEARCHED, AMOUNT_TO_APPEND and AMOUNT_APPENDED are also set to ZERO.
+- the variable SEARCH_START_PAGE is set to the current page so that subsequent insert operations know on which page space was last found. It will be understood the SEARCH_START_PAGE variable is a global variable which indicates the page number of the first page searched since space was last found by any insert operation, and the FIRST_PAGE_SEARCHED variable is a local variable which indicates the page number of the first page searched for the current insert.
+- the TIMES_TABLE_SEARCHED variable indicates the number of times the entire free space map for the table has been searched without finding free space. As will be described in further detail below, preferably no more than two searches of the entire free space map are allowed before the table is put into a Table Full State. For a table with fixed length columns only, the table is placed in the Table Full State after the entire free space map has been searched once without finding free space. In this case, free space was found so the TIMES_TABLE_SEARCHED variable is set to ZERO.
+- the AMOUNT_TO_APPEND variable provides a running total of the amount of space to append before the free space map is to be searched again.
+- the amount of space is increased by some increment to a maximum value as described in further detail below in FIG. 9 ( v ).
+- the maximum amount of space to be appended before searching is resumed can be configured by the user.
+- the AMOUNT_APPENDED variable indicates the amount of space which has been appended since the start of the appending operation.
+- the data is inserted into the page in step 212 .
+- the searching and row insertion procedure is done and processing then returns to the calling thread or process in step 214 .
+- the CURRENT_PAGE variable is incremented in step 216 in order to search for free space on the next page in the table.
+- a check is made to determine if the new current page is past the last page in the table, by comparing the CURRENT_PAGE variable to a variable LAST_PAGE.
+- the LAST_PAGE variable holds the page number of the last page in the table. If the page number in CURRENT_PAGE does not exceed the LAST_PAGE number, then a check is made to determine if the current page is on the next space map page (query 220 ).
+- the CURRENT_FSMP variable is advanced to the next space map page in step 222 .
+- the search is set to commence back at the beginning of the free space map and the start of the table.
+- the CURRENT_FSMP variable is set to ZERO and the CURRENT_PAGE variable is also set to ZERO (step 224 ).
+- a check is made to determine if more than 50% of the entries in the previous space map page have been searched. If more than 50% of the entries have been searched, then the space map page is included in the number of space map pages searched and the FSMPS_SEARCHED variable is incremented (step 228 ). Once the value for the FSMPS_SEARCHED variable reaches the maximum value defined by the SEARCH_LIMIT variable, further searching of the space map pages stops and the row is appended to the end of the table. If less than 50% of the entries in the space map page have been searched, then the FSMPS_SEARCHED variable is not incremented.
+- the SEARCH_ENTIRE_TABLE flag indicates whether the entire table is to be searched for the current insert. If the SEARCH_ENTIRE_TABLE flag is FALSE, then the entire table is not to be searched and a variable TIMES_TABLE_SEARCHED is incremented in step 233 (FIG.
+- the TIMES_TABLE_SEARCHED variable indicates the number of the times the table has been searched without finding free space to insert one or more rows of data.
+- the SEARCH_ENTIRE_TABLE flag is set to TRUE, then the entire table has to be searched for the current insert, and a check is made at query 234 to determine if the FIRST_PAGE_SEARCHED is the same as the CURRENT_PAGE. If TRUE, then the entire table has been searched for the current insert and a further check is made at query 235 in FIG. 9 ( v ) as will be described in more detail below.
+- a check of the SEARCH_ENTIRE_TABLE flag is made in query 236 . If TRUE, then the entire table is to be searched, and a check is made in query 206 (FIG. 9 ( i )) to determine if the current space map page indicates free space on the current page. If the SEARCH_ENTIRE_TABLE flag is FALSE, i.e. the entire table is not to be searched, then a check is made in query 238 to determine if the number of space map pages searched is equal to the maximum number of space map pages specified in the variable SEARCH_LIMIT.
+- the submethod 200 appends the row to the table by first attempting to insert the row of new data on the last page in the table or adding a new page to the table if there is no space available on the last page. As shown in FIG. 9 ( iv ), a check is made in query 203 to determine if there is space available on the last page. If yes, then the data is inserted on the last page in the table (step 240 ) and processing returns to the calling process/thread (step 242 ).
+- the FREE_SPACE flag indicates whether there is free space available in the table. If there is no free space available, i.e. the FREE_SPACE flag is FALSE, then a check is made in query 246 to determine if the storage media (e.g. DASD or hard disk) is full. If the storage media is full, then an error has occurred (step 248 ) and processing returns to the calling process/thread (step 250 ).
+- the storage media e.g. DASD or hard disk
+- a new page for the table is created (step 252 ) and this becomes the new last page in the table and the LAST_PAGE variable is incremented by one (step 252 ).
+- the row of data is inserted on the new page (step 254 ) and processing returns to the calling process/thread (step 256 ).
+- variable AMOUNT_APPENDED indicates the amount of space appended since the start of appending data to the table.
+- the AMOUNT_TO_APPEND variable provides the total amount of space to append before another search is made for space in the table.
+- the AMOUNT_TO_APPEND variable is incremented by a value m each time consecutive searches fail to find space, subject to a maximum amount specified by max_amount, where max_amount is either specified by the user or a default value from the system.
+- step 260 a check is made to determine if the storage media is full. If the storage media is not FULL, then there is space to create a new page which is appended to the end of the table. In step 262 , a new page is created and the LAST_PAGE variable is incremented by ONE. The AMOUNT_APPENDED variable is also increased by the size of the page appended (PAGE SIZE). After the new page is created, the row of data is inserted on the new page (step 264 ) and processing returns to the calling process/thread (step 266 ).
+- any free space must be found by searching the free space map.
+- a search of the space map pages in the free space map is commenced starting at the current page in the table.
+- the SEARCH_ENTIRE_TABLE flag is set TRUE
+- the variable FSMPS_SEARCHED is set to ZERO
+- the variable FIRST_PAGE_SEARCHED is set to the current page in the table (i.e.
+- variable CURRENT_PAGE and the variable CURRENT_FSMP is set to the space map page with an entry for the current page in the table. Searching resumes with a check in query 206 (FIG. 9 ( i )) to determine if the current space map page indicates free space on the current page.
+- step 270 setting the SEARCH flag to TRUE, clearing the TIMES_TABLE_SEARCHED variable and the AMOUNT_APPENDED variable, setting the SEARCH_ENTIRE_TABLE flag to FALSE, setting the FIRST_PAGE_SEARCHED variable to the current page in the table (i.e. variable CURRENT_PAGE), and setting the variable CURRENT_FSMP to the space map page with an entry for the current page in the table. Searching then resumes with a check in query 206 (FIG. 9 ( i )) to determine if the current space map page indicates free space on the current page.
+- the first page in a search that did not find space is cached if the previous search found space.
+- the cached page is initialized to the first page in the table before any search is performed. This cached page is used to determine when the entire free space map has been searched. While the table is in a Table Full State, a search is not done. Instead, all rows will be appended to the table (blocks 252 - 254 in FIG. 9 ( iv )).
+- the table full state is reset when some amount of space is freed from the table by, deletion of rows or by updates to rows which cause the rows to shrink in size as will be described below with reference to FIG. 10 .
+- TIMES_TABLE_SEARCHED is incremented in step 233 (FIG. 9 ( iii )).
+- a check is made in query 272 to determine if the data for the table comprises fixed length columns only. If the data is not fixed length, a check is made in query 274 to determine if the table (i.e. the free space map) has been searched two times.
+- the entire map will be searched twice for an exhaustive search. If no free space is found after an exhaustive search of the space map pages in the free space map, the table is put in a “Table Full State”. If the table has only been searched once, then the search resumes by first checking query 206 as described above with reference to FIG. 9 ( i ). If the table has been searched twice without finding space, then the table is placed in the “Table Full State” as indicated in step 276 .
+- the FREE_SPACE flag is set to FALSE
+- the SPACE_FREED variable is set to ZERO (i.e. amount of space freed since the FREE_SPACE flag was set to FALSE)
+- the variable FIRST_PAGE_WITH_SPACE is set to NEGATIVE ONE.
+- the variable FIRST_PAGE_WITH_SPACE indicates the page closest to the start of the table with free space, and is set to the smallest page number (i.e. closest to the beginning) in the table from which space was freed after the flag FREE_SPACE is set to FALSE.
+- the table is placed in the Table Full State in step 276 after the entire free space map has been searched once for an exhaustive search.
+- a check is made to determine if the storage media for the table (e.g. disk drive memory or DASD) is full.
+- step 280 If the media is full, an error is registered (step 280 ) and further searching is terminated and control returns to the calling process/thread (step 282 ).
+- query 278 is FALSE
+- step 284 a new page is created and appended to the table
+- step 286 the last page number in the table
+- step 286 the row of data is inserted on this new page appended to the table
+- step 294 a new page is appended to the table, the LAST_PAGE variable is incremented by ONE to indicate the new last page in the table, and the AMOUNT_APPENDED variable is increased by the page size of the new page.
+- step 296 the row of data is inserted on the new page (step 296 ) and the searching procedure is completed and control returns to the calling process/thread (step 298 ).
+- FSMPS_SEARCHED equals SEARCH_LIMIT (query 238 in FIG. 9 ( ii ))
+- the SPACE_FOUND flag is checked in query 239 in FIG. 9 ( v ).
+- the SPACE_FOUND flag indicates whether any free space was found during the previous search of the space map pages in the free space map. If no free space was found, i.e. SPACE_FOUND flag is FALSE, then a check is made in query 300 to determine if the running total of the amount of space appended (i.e. AMOUNT_TO_APPEND) exceeds the maximum amount of space which can be appended.
+- variable AMOUNT_TO_APPEND is incremented by a value m in step 302 .
+- the variable AMOUNT_TO_APPEND is incremented by m subject to the maximum MAX_AMOUNT each time consecutive searches fail to find space.
+- the variable MAX_AMOUNT contains a value x which is a multiple of m and is either set by the user or takes a default value from the DBMS or RDBMS. If the maximum amount of space is already to be appended, then step 302 is bypassed. On the other hand, if space was found for the previous search (i.e.
+- SPACE_FOUND is TRUE
+- the SPACE_FOUND flag is set to FALSE
+- the SEARCH flag is set to FALSE because space was not found and the rows will be appended to the table
+- the variable AMOUNT_TO_APPEND is set to the value m in step 303 .
+- step 312 the flag SEARCH_ENTIRE_TABLE is set to TRUE to indicate that the entire table (i.e. free space map for the table) is to be searched, and searching resumes on the current FSMP (query 206 in FIG. 9 ( i )). If there is still space in the storage media (query 310 ), then the following operations are performed in step 314 : a new page is appended to the table, the LAST_PAGE variable is incremented by ONE to indicate the new last page in the table, and the AMOUNT_APPENDED variable is increased by the page size of the new page. Next the row of data is inserted on the new page (step 316 ) and the free space searching and row insertion procedure is completed and control returns to the calling process/thread (step 318 ).
+- the table is put into a Table Full State if no free space is found after an exhaustive search of the free space map. While in the Table Full State no searching is done and all new rows of data are appended to the table.
+- the Table Full State is reset when some amount of space is freed as a result of rows being deleted from the table or updates being made to rows which cause the rows to shrink in size as will now be described with reference to FIG. 10 .
+- FIG. 10 shows a method, indicated generally by reference 322 , for accounting for space freed in the table.
+- the method 322 is invoked in response to a command to delete a row of data or a command to update a row of data which results in the freeing of some space in the table (step 324 ).
+- the FREE_SPACE flag is checked in query 328 to determine if there is any available free space in the table. If there is still available free space, independent of the deletion or update, control is returned to the calling process/thread (step 329 ).
+- the FREE_SPACE flag was set to FALSE, i.e. indicating that there is no available free space in the table, then the amount of space freed through the previous delete or update operation is added to the variable SPACE_FREED (step 330 ).
+- the SPACE_FREED value represents the amount of space freed since the FREE_SPACE flag was set to FALSE.
+- a check is made to determine if the variable FIRST_PAGE_WITH_SPACE is set to NEGATIVE ONE. As described above, the FIRST_PAGE_WITH_SPACE variable is set to negative one when a Table Full State is reached (step 276 in FIG. 9 ( iii )) and indicates that there are no pages in the table with free space.
+- the SPACE_TO_FREE variable specifies the amount of space y that needs to be freed before the FREE_SPACE flag can be reset and searching of the free space map resumed.
+- the value y is either set by the user or as a default value by the DBMS or RDBMS.
+- the Table Full State is reset and searching is enabled in step 340 as follows: the FREE_SPACE flag is set to TRUE indicating that free space is available in the object, the SEARCH flag is set to TRUE indicating that a search for free space can be made, the SPACE_FOUND flag is set to TRUE, the CURRENT_PAGE variable is set to the FIRST_PAGE_WITH_SPACE, the SEARCH_START_PAGE is set to the CURRENT_PAGE, and the variable TIMES_TABLE_SEARCHED is set to ZERO, and control returns (step 329 ).
+- the method according to the present invention limits the number of FSMPs which are searched in response to a request to insert a row of data.
+- the insertion of a new row does not incur the cost of searching the entire free space map. Since rows are appended until the predefined number of pages are filled, there will be some delay before the next search is performed.
+- the predefined number of pages to append before a search is done again is incremented for each failed search until the maximum configured amount is reached. This allows more activity on the table that could potentially free up space, thereby increasing the probability that a future search will find space.
+- the record insertion method searches a specified number of FSMPs starting from the FSMP that contains the cached page in its third stage.
+- the cached page is updated when a search is ended either by finding a page to contain the record, or after searching the specified number of SFMPs.
+- the free space map is searched linearly from the cached page to the end of the free space map; however, the target FSMP is omitted from this search as this FSMP was previously searched.
+- the first page found that contains enough space for the record can be used.
+- the page in the FSMP that contains the most space is selected, so that the record being inserted is less likely to fill up all of the space on this page—this is called worst fit selection. If the record being inserted fills up all of the spaces on a page, then the record is much more likely to impede further clustering on that page, particularly when that page is the target page for a subsequent insert.
+- FIGS. 11 to 14 flow charts illustrate the fourth stage of the record insertion method according to a preferred aspect of the invention in which a worst fit selection is made from among the pages having enough space to accommodate the new record being inserted.
+- FIG. 16 there is illustrated a diagram representing a FSMP that is not the target FSMP.
+- the worst fit selection in the below example is made from among pages represented by this FSMP.
+- the flowcharts of FIGS. 11 to 14 are described below with reference to an example based on the FSMP of FIG. 16 .
+- step 400 of the flow chart of the FIG. 11 the free space map page of FIG. 16 is fixed.
+- step 402 the following variables are set as follows: Counter is set equal to 0; numEntries is set equal to 0; Page is set equal to 10, which is the first page offset in the FSMP; and Offset is set equal to the first offset, which is 0.
+- query 404 returns the answer “No” as the method is not yet at the end of the next FSMP. Then query 406 returns the answer “No”, as Page offset 10 has no free space according to the FSMP diagram of FIG. 16 .
+- step 408 Page and Offset are incremented to 11 and 5 respectively, and the method then returns to point A 3 at the top of the flow chart of FIG. 12 .
+- step 410 in which the FSMP offset and the amount of free space are copied to a temporary array.
+- step 408 in which Page and Offset are incremented to 12 and 2 respectively before the method returns to point A 3 at the top of the flow chart of FIG. 12 .
+- query 406 returns the answer “Yes” in the case of pages 14 and 17 , and the FSMP Offsets and amount of free space for both of these pages are then recorded to the temporary array in step 410 .
+- query 404 returns the answer “Yes” as the method is now at the end of the FSMP, and the method proceeds to point B 3 at the top of the flow chart of FIG. 13 .
+- step 412 of the flow chart of FIG. 13 query 412 returns the answer “Yes” as numEntries is greater than 0. NumEntries is equal to 3, as this is the number of entries that have been saved in the temporary array. After query 412 returns the answer “Yes”, query 416 returns the answer “Yes”, as the number of entries exceeds 1, and method proceeds to step 418 in which the temporary array is sorted in descending order in terms of free space. Accordingly, the offset and free space pairs are ordered ⁇ 4 , 7 > ⁇ 7 , 6 > ⁇ 1 , 5 >, corresponding to pages 14 , 17 , and 11 respectively. Then, in step 420 the offset is set equal to the first offset in the sorted array, this offset is offset 4 which corresponds to page 14 . The method then proceeds to point C 3 at the top of the flow chart of FIG. 14 .
+- step 426 Page is set equal to the page associated with the offset—the page associated with offset 4 is page 14 . The last page is unfixed, and page 14 is fixed.
+- Query 428 checks if there is actually enough space on this page.
+- query 428 returns the answer “Yes” and the record is inserted on page 14 on step 430 , after which the method ends as the record has been inserted. If query 428 returns the answer “NO”, then the offset is incremented in 432 to go to the next ⁇ offset, free space> pair in the temporary array.
+- the method will then run through the flow chart of FIG. 14 once or twice more. If, neither page 17 nor page 11 actually has enough space to accommodate the new record, then the method will proceed to point C 3 at the top of the flow chart of FIG. 14 for a fourth time. On this run through the flow chart, however, query 422 will return the answer “Yes” as the method will be at the end of the temporary array, and then step 424 will return the message NO_SPACE_FOUND before the method ends. If none of these pages has enough space, then the method moves to the next FSMP and repeats the process until at least one page is found having sufficient space to accommodate the new record, or the specified number of FSMPs has been checked.
+- the invention does not require that an FSMP be used.
+- the invention requires a particular search algorithm to be used for regular inserts.
+- the invention may be implemented using any method that initially conducts a search for a certain number of pages around the target page in a spiral fashion in the hope of inserting the record relatively close to the target page. If free space for inserting the record is not found in this initial stage of the search, then the rest of the table should be searched as efficiently as possible using a worst fit algorithm of the sort described above in order to prevent negatively impacting on other subsequent clustering possibilities.
+Abstract
+Description
+Claims (63)
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+CA2281287 | 1999-09-01 | ||
+CA002281287A CA2281287C (en) | 1999-09-01 | 1999-09-01 | Method and system for efficiently searching for free space in a table of a relational database having a clustering index |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US6668263B1 true US6668263B1 (en) | 2003-12-23 |
+Family
+ID=4164063
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/651,884 Expired - Lifetime US6668263B1 (en) | 1999-09-01 | 2000-08-30 | Method and system for efficiently searching for free space in a table of a relational database having a clustering index |
+Country Status (2)
+Country | Link |
+---|---|
+US (1) | US6668263B1 (en) |
+CA (1) | CA2281287C (en) |
+Cited By (34)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020138466A1 (en) * | 2001-01-13 | 2002-09-26 | International Business Machines Corporation | Method, computer program and data processing system for data clustering |
+US20030056082A1 (en) * | 2001-09-19 | 2003-03-20 | Maxfield John D. | System and method for controlling free space distribution by key range within a database |
+US20030120689A1 (en) * | 2001-12-21 | 2003-06-26 | Fujitsu Limited | Database management program and recording medium |
+US20030217075A1 (en) * | 2002-05-16 | 2003-11-20 | Hitachi, Ltd. | Method for reserving pages of database |
+US20040267828A1 (en) * | 2003-06-30 | 2004-12-30 | Zwilling Michael J | Transaction consistent copy-on-write database |
+US20060224579A1 (en) * | 2005-03-31 | 2006-10-05 | Microsoft Corporation | Data mining techniques for improving search engine relevance |
+US20070067664A1 (en) * | 2005-09-20 | 2007-03-22 | International Business Machines Corporation | Failure transparency for update applications under single-master configuration |
+US20070280263A1 (en) * | 2006-06-01 | 2007-12-06 | Via Technologies, Inc. | Mac address management method |
+US7363284B1 (en) | 2004-04-30 | 2008-04-22 | Unisys Corporation | System and method for building a balanced B-tree |
+US20080162457A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | Software and method for utilizing a generic database query |
+US20080162492A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | System and method utilizing a generic update module with recursive calls |
+US20080162415A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | Software and method for utilizing a common database layout |
+US20080183748A1 (en) * | 2007-01-31 | 2008-07-31 | Maruti Haridas Kamat | Data Processing System And Method |
+US20080243761A1 (en) * | 2007-03-26 | 2008-10-02 | Shuanglin Guo | Method and system for quantifying a data page repetition pattern for a database index in a database management system |
+US7599949B1 (en) | 2004-04-30 | 2009-10-06 | Unisys Corporation | Database management system and method for maintaining a database in a range sensitive manner |
+US20100223243A1 (en) * | 2009-02-27 | 2010-09-02 | International Business Machines Corporation | Automatic detection and correction of hot pages in a database system |
+US20110145255A1 (en) * | 2009-12-11 | 2011-06-16 | Sap Ag. | Systems and methods for distribution of data in a database index |
+US20110153580A1 (en) * | 2009-12-17 | 2011-06-23 | Bmc Software, Inc. | Index Page Split Avoidance With Mass Insert Processing |
+US20120246132A1 (en) * | 2011-03-21 | 2012-09-27 | International Business Machines Corporation | Managing overflow access records in a database |
+US20140201132A1 (en) * | 2013-01-14 | 2014-07-17 | International Business Machines Corporation | Storing a key value to a deleted row based on key range density |
+US20160147904A1 (en) * | 2014-11-25 | 2016-05-26 | David Wein | Fast row to page lookup of data table using capacity index |
+US9372880B2 (en) | 2013-04-29 | 2016-06-21 | International Business Machines Corporation | Reclamation of empty pages in database tables |
+US9875024B2 (en) | 2014-11-25 | 2018-01-23 | Sap Se | Efficient block-level space allocation for multi-version concurrency control data |
+US9886466B2 (en) | 2015-03-24 | 2018-02-06 | International Business Machines Corporation | Optimizing space management of tablespaces in database systems |
+US9891831B2 (en) | 2014-11-25 | 2018-02-13 | Sap Se | Dual data storage using an in-memory array and an on-disk page structure |
+US9965504B2 (en) | 2014-11-25 | 2018-05-08 | Sap Se | Transient and persistent representation of a unified table metadata graph |
+US9996463B2 (en) * | 2015-11-10 | 2018-06-12 | International Business Machines Corporation | Selection and placement of volumes in a storage system using stripes |
+US10042552B2 (en) | 2014-11-25 | 2018-08-07 | Sap Se | N-bit compressed versioned column data array for in-memory columnar stores |
+US10255309B2 (en) | 2014-11-25 | 2019-04-09 | Sap Se | Versioned insert only hash table for in-memory columnar stores |
+US10296611B2 (en) | 2014-11-25 | 2019-05-21 | David Wein | Optimized rollover processes to accommodate a change in value identifier bit size and related system reload processes |
+US10474648B2 (en) | 2014-11-25 | 2019-11-12 | Sap Se | Migration of unified table metadata graph nodes |
+US10552402B2 (en) | 2014-11-25 | 2020-02-04 | Amarnadh Sai Eluri | Database lockless index for accessing multi-version concurrency control data |
+US10558495B2 (en) | 2014-11-25 | 2020-02-11 | Sap Se | Variable sized database dictionary block encoding |
+US10725987B2 (en) | 2014-11-25 | 2020-07-28 | Sap Se | Forced ordering of a dictionary storing row identifier values |
+Families Citing this family (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7185029B1 (en) * | 2003-06-27 | 2007-02-27 | Unisys Corporation | Method and apparatus for maintaining, and updating in-memory copies of the first and second pointers to reference the new versions of the first and second control structures that indicate available and allocated portions of usable space in the data file |
+US8122219B2 (en) | 2009-07-22 | 2012-02-21 | International Business Machines Corporation | Storage allocation |
+Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5555405A (en) * | 1993-07-06 | 1996-09-10 | Digital Equipment Corporation | Method and apparatus for free space management in a forwarding database having forwarding entry sets and multiple free space segment queues |
+US5561793A (en) * | 1992-08-20 | 1996-10-01 | Borland International, Inc. | System and methods for data field management in a computer database system |
+US5659743A (en) * | 1994-12-05 | 1997-08-19 | Legent Corporation | Method and apparatus for a pattern based spaced management system |
+-
+1999
+- 1999-09-01 CA CA002281287A patent/CA2281287C/en not_active Expired - Fee Related
+-
+2000
+- 2000-08-30 US US09/651,884 patent/US6668263B1/en not_active Expired - Lifetime
+Patent Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5561793A (en) * | 1992-08-20 | 1996-10-01 | Borland International, Inc. | System and methods for data field management in a computer database system |
+US5555405A (en) * | 1993-07-06 | 1996-09-10 | Digital Equipment Corporation | Method and apparatus for free space management in a forwarding database having forwarding entry sets and multiple free space segment queues |
+US5659743A (en) * | 1994-12-05 | 1997-08-19 | Legent Corporation | Method and apparatus for a pattern based spaced management system |
+Cited By (57)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020138466A1 (en) * | 2001-01-13 | 2002-09-26 | International Business Machines Corporation | Method, computer program and data processing system for data clustering |
+US7299243B2 (en) * | 2001-09-19 | 2007-11-20 | Bmc Software, Inc. | System and method for controlling free space distribution by key range within a database |
+US20030056082A1 (en) * | 2001-09-19 | 2003-03-20 | Maxfield John D. | System and method for controlling free space distribution by key range within a database |
+US7720876B2 (en) | 2001-09-19 | 2010-05-18 | Bmc Software, Inc. | System and method for controlling free space distribution by key range within a database |
+US20080040406A1 (en) * | 2001-09-19 | 2008-02-14 | Bmc Software, Inc. | System and method for controlling free space distribution by key range within a database |
+US20030120689A1 (en) * | 2001-12-21 | 2003-06-26 | Fujitsu Limited | Database management program and recording medium |
+US7376678B2 (en) * | 2001-12-21 | 2008-05-20 | Fujitsu Limited | Database management program and recording medium |
+US7200628B2 (en) * | 2002-05-16 | 2007-04-03 | Hitachi, Ltd. | Method for reserving pages of database |
+US20030217075A1 (en) * | 2002-05-16 | 2003-11-20 | Hitachi, Ltd. | Method for reserving pages of database |
+US7395278B2 (en) * | 2003-06-30 | 2008-07-01 | Microsoft Corporation | Transaction consistent copy-on-write database |
+US20040267828A1 (en) * | 2003-06-30 | 2004-12-30 | Zwilling Michael J | Transaction consistent copy-on-write database |
+US7363284B1 (en) | 2004-04-30 | 2008-04-22 | Unisys Corporation | System and method for building a balanced B-tree |
+US7599949B1 (en) | 2004-04-30 | 2009-10-06 | Unisys Corporation | Database management system and method for maintaining a database in a range sensitive manner |
+US20060224579A1 (en) * | 2005-03-31 | 2006-10-05 | Microsoft Corporation | Data mining techniques for improving search engine relevance |
+US7600149B2 (en) | 2005-09-20 | 2009-10-06 | International Business Machines Corporation | Failure transparency for update applications under single-master configuration |
+US20070067664A1 (en) * | 2005-09-20 | 2007-03-22 | International Business Machines Corporation | Failure transparency for update applications under single-master configuration |
+US9246745B2 (en) * | 2006-06-01 | 2016-01-26 | Via Technologies, Inc. | MAC address management method |
+US20070280263A1 (en) * | 2006-06-01 | 2007-12-06 | Via Technologies, Inc. | Mac address management method |
+US20080162415A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | Software and method for utilizing a common database layout |
+US20080162492A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | System and method utilizing a generic update module with recursive calls |
+US20080162457A1 (en) * | 2006-12-28 | 2008-07-03 | Sap Ag | Software and method for utilizing a generic database query |
+US7730056B2 (en) | 2006-12-28 | 2010-06-01 | Sap Ag | Software and method for utilizing a common database layout |
+US8417731B2 (en) * | 2006-12-28 | 2013-04-09 | Sap Ag | Article utilizing a generic update module with recursive calls identify, reformat the update parameters into the identified database table structure |
+US8959117B2 (en) | 2006-12-28 | 2015-02-17 | Sap Se | System and method utilizing a generic update module with recursive calls |
+US8606799B2 (en) | 2006-12-28 | 2013-12-10 | Sap Ag | Software and method for utilizing a generic database query |
+US20080183748A1 (en) * | 2007-01-31 | 2008-07-31 | Maruti Haridas Kamat | Data Processing System And Method |
+US20080243761A1 (en) * | 2007-03-26 | 2008-10-02 | Shuanglin Guo | Method and system for quantifying a data page repetition pattern for a database index in a database management system |
+US7921085B2 (en) | 2007-03-26 | 2011-04-05 | International Business Machines Corporation | Method and system for quantifying a data page repetition pattern for a database index in a database management system |
+US8250111B2 (en) * | 2009-02-27 | 2012-08-21 | International Business Machines Corporation | Automatic detection and correction of hot pages in a database system |
+US20100223243A1 (en) * | 2009-02-27 | 2010-09-02 | International Business Machines Corporation | Automatic detection and correction of hot pages in a database system |
+US20110145255A1 (en) * | 2009-12-11 | 2011-06-16 | Sap Ag. | Systems and methods for distribution of data in a database index |
+US20110153580A1 (en) * | 2009-12-17 | 2011-06-23 | Bmc Software, Inc. | Index Page Split Avoidance With Mass Insert Processing |
+US8682872B2 (en) * | 2009-12-17 | 2014-03-25 | Bmc Software, Inc. | Index page split avoidance with mass insert processing |
+US20120246132A1 (en) * | 2011-03-21 | 2012-09-27 | International Business Machines Corporation | Managing overflow access records in a database |
+US9043294B2 (en) * | 2011-03-21 | 2015-05-26 | International Business Machines Corporation | Managing overflow access records in a database |
+US20140201132A1 (en) * | 2013-01-14 | 2014-07-17 | International Business Machines Corporation | Storing a key value to a deleted row based on key range density |
+US9323798B2 (en) * | 2013-01-14 | 2016-04-26 | International Business Machines Corporation | Storing a key value to a deleted row based on key range density |
+US10296497B2 (en) | 2013-01-14 | 2019-05-21 | International Business Machines Corporation | Storing a key value to a deleted row based on key range density |
+US9372880B2 (en) | 2013-04-29 | 2016-06-21 | International Business Machines Corporation | Reclamation of empty pages in database tables |
+US9965504B2 (en) | 2014-11-25 | 2018-05-08 | Sap Se | Transient and persistent representation of a unified table metadata graph |
+US10552402B2 (en) | 2014-11-25 | 2020-02-04 | Amarnadh Sai Eluri | Database lockless index for accessing multi-version concurrency control data |
+US9891831B2 (en) | 2014-11-25 | 2018-02-13 | Sap Se | Dual data storage using an in-memory array and an on-disk page structure |
+US9898551B2 (en) * | 2014-11-25 | 2018-02-20 | Sap Se | Fast row to page lookup of data table using capacity index |
+US9875024B2 (en) | 2014-11-25 | 2018-01-23 | Sap Se | Efficient block-level space allocation for multi-version concurrency control data |
+US10725987B2 (en) | 2014-11-25 | 2020-07-28 | Sap Se | Forced ordering of a dictionary storing row identifier values |
+US10042552B2 (en) | 2014-11-25 | 2018-08-07 | Sap Se | N-bit compressed versioned column data array for in-memory columnar stores |
+US10558495B2 (en) | 2014-11-25 | 2020-02-11 | Sap Se | Variable sized database dictionary block encoding |
+US10255309B2 (en) | 2014-11-25 | 2019-04-09 | Sap Se | Versioned insert only hash table for in-memory columnar stores |
+US10296611B2 (en) | 2014-11-25 | 2019-05-21 | David Wein | Optimized rollover processes to accommodate a change in value identifier bit size and related system reload processes |
+US20160147904A1 (en) * | 2014-11-25 | 2016-05-26 | David Wein | Fast row to page lookup of data table using capacity index |
+US10474648B2 (en) | 2014-11-25 | 2019-11-12 | Sap Se | Migration of unified table metadata graph nodes |
+US9886466B2 (en) | 2015-03-24 | 2018-02-06 | International Business Machines Corporation | Optimizing space management of tablespaces in database systems |
+US11372834B2 (en) | 2015-03-24 | 2022-06-28 | Kyndryl, Inc. | Optimizing space management of tablespaces in database systems |
+US10402321B2 (en) * | 2015-11-10 | 2019-09-03 | International Business Machines Corporation | Selection and placement of volumes in a storage system using stripes |
+US20180239700A1 (en) * | 2015-11-10 | 2018-08-23 | International Business Machines Corporation | Selection and placement of volumes in a storage system using stripes |
+US9996463B2 (en) * | 2015-11-10 | 2018-06-12 | International Business Machines Corporation | Selection and placement of volumes in a storage system using stripes |
+US11048627B2 (en) * | 2015-11-10 | 2021-06-29 | International Business Machines Corporation | Selection and placement of volumes in a storage system using stripes |
+Also Published As
+Publication number | Publication date |
+---|---|
+CA2281287A1 (en) | 2001-03-01 |
+CA2281287C (en) | 2003-03-11 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6668263B1 (en) | Method and system for efficiently searching for free space in a table of a relational database having a clustering index | |
+US4677550A (en) | Method of compacting and searching a data index | |
+US5664179A (en) | Modified skip list database structure and method for access | |
+US7783855B2 (en) | Keymap order compression | |
+US5265244A (en) | Method and system for facilitating processing of statistical inquires on stored data accessible through a data access structure | |
+US8255398B2 (en) | Compression of sorted value indexes using common prefixes | |
+US6516320B1 (en) | Tiered hashing for data access | |
+US6546394B1 (en) | Database system having logical row identifiers | |
+CN1026631C (en) | Method of concurrency access for useing indexed tree to data base record | |
+US6421662B1 (en) | Generating and implementing indexes based on criteria set forth in queries | |
+US5742817A (en) | Method and apparatus for file server addressing | |
+US20040205044A1 (en) | Method for storing inverted index, method for on-line updating the same and inverted index mechanism | |
+US6697797B1 (en) | Method and apparatus for tracking data in a database, employing last-known location registers | |
+US6654868B2 (en) | Information storage and retrieval system | |
+US7003532B2 (en) | System and method for scaleable multiplexed transactional log recovery | |
+JP2001142752A (en) | Database managing method | |
+US6466942B1 (en) | Using indexes to retrieve stored information | |
+CN113392089B (en) | Database index optimization method and readable storage medium | |
+US7440936B2 (en) | Method for determining an access mode to a dataset | |
+US6640225B1 (en) | Search method using an index file and an apparatus therefor | |
+US6760713B2 (en) | Method, computer program product, and system for file and record selection utilizing a fuzzy data record pointer | |
+US6076089A (en) | Computer system for retrieval of information | |
+RU2621628C1 (en) | Way of the linked data storage arrangement | |
+KR20030030514A (en) | A method for optimizing the post-processing of sub-sequence matching in time-series databases | |
+US20110029570A1 (en) | Systems and methods for contextualized caching strategies |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:CRANSTON, LESLIE A.;HING, NELSON HOP;HURAS, MATTHEW A.;AND OTHERS;REEL/FRAME:011081/0625;SIGNING DATES FROM 20000828 TO 20000829 |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+CC | Certificate of correction | ||
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026894/0001Effective date: 20110817 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

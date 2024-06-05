@@ -1,0 +1,489 @@
+US5495600A - Conversion of queries to monotonically increasing incremental form to continuously query a append only database - Google Patents
+Conversion of queries to monotonically increasing incremental form to continuously query a append only database Download PDFInfo
+- Publication number
+- US5495600A US5495600A US07/892,869 US89286992A US5495600A US 5495600 A US5495600 A US 5495600A US 89286992 A US89286992 A US 89286992A US 5495600 A US5495600 A US 5495600A
+- Authority
+- US
+- United States
+- Prior art keywords
+- query
+- database
+- time
+- queries
+- monotonic
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+- 238000006243 chemical reaction Methods 0.000 title 1
+- 238000000034 method Methods 0.000 claims abstract description 16
+- 238000001914 filtration Methods 0.000 claims description 5
+- 230000014509 gene expression Effects 0.000 claims 1
+- 230000036962 time dependent Effects 0.000 claims 1
+- 230000003247 decreasing effect Effects 0.000 abstract description 2
+- 238000010561 standard procedure Methods 0.000 abstract description 2
+- 230000007246 mechanism Effects 0.000 description 6
+- 230000006870 function Effects 0.000 description 3
+- 230000008901 benefit Effects 0.000 description 2
+- 230000003993 interaction Effects 0.000 description 2
+- 230000008569 process Effects 0.000 description 2
+- 230000004044 response Effects 0.000 description 2
+- 238000013459 approach Methods 0.000 description 1
+- 230000006399 behavior Effects 0.000 description 1
+- 230000008859 change Effects 0.000 description 1
+- 238000004891 communication Methods 0.000 description 1
+- 238000010586 diagram Methods 0.000 description 1
+- 238000005065 mining Methods 0.000 description 1
+- 238000012986 modification Methods 0.000 description 1
+- 230000004048 modification Effects 0.000 description 1
+- 238000012544 monitoring process Methods 0.000 description 1
+- 230000002085 persistent effect Effects 0.000 description 1
+- 238000004064 recycling Methods 0.000 description 1
+- 238000000638 solvent extraction Methods 0.000 description 1
+- 238000012360 testing method Methods 0.000 description 1
+- 230000001131 transforming effect Effects 0.000 description 1
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2458—Special types of queries, e.g. statistical queries, fuzzy queries or distributed queries
+- G06F16/2477—Temporal data queries
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2453—Query optimisation
+- G06F16/24534—Query rewriting; Transformation
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99933—Query processing, i.e. searching
+Definitions
+- This invention relates to append-only databases and, more particularly,to an efficient query mechanism for extracting selected information from such a database more or less continuously.
+- records are added to "append-only" databases as they arrive, and those records thereafter are neither deleted nor modified.
+- the records are assembled into tables within such a database for indexing the underlying source documents by various values, such as by author, date, keywords, and title for a database of news messages, or by sender, recipient, subject, copy distribution, date, and "in reply to" for a database of mail messages.
+- Continuous queries are issued once to henceforth run “continually” over the database until they are modified or deleted.
+- this is a useful class of queries for filtering streams of electronic documents, such as mail messages or news articles, in situations where there is a need or desire to identify documents that are of special interest to particular clients (i.e., particular users and/or particular application programs).
+- clients i.e., particular users and/or particular application programs.
+- challenges that are involved in implementing continuous queries are: avoiding nondeterministic results (i.e., the results returned to the user should be independent of the time and frequency at which the query is executed), minimizing the return of duplicate results, and avoiding inefficiencies in the execution of the query.
+- Some active databases such as the Alert system that is described in V. Schreier et al., "Alert: An Architecture for Transforming a Passive DBMS into an Active DBMS," Proceedings 17th International Conference on Very Large Databases (VLDB), Barcelona, Spain, 1991, pp. 469-478, address the efficiency issue by using triggers to execute queries over new data as it arrives.
+- VLDB Very Large Databases
+- a need for an efficient and reliable technique for implementing more or less arbitrary continuous queries in standard SQL (Standard Query Language) because that is the query language of choice for many existing relational databases. Flexibility in formulating these continuous queries is important because it often is desirable to be able to filter a database based on the relationship of documents to each other, or based on the age of the records, or based on annotations that users may have attached to messages, etc.
+- a client defined query first is converted into its minimal bounding non-decreasing monotone (hereinafter referred to as "monotonic increasing" query.
+- This monotonic query is converted into an incremental query.
+- the resulting monotonically increasing incremental query then is installed on the database as a stored procedure that takes two date/time parameters (hereinafter referred to as "time" parameters), one of which ( ⁇ ) identifies the last time the procedure was executed, and the other of which (t) identifies the current time. All database records are timestamped as of the time that they are entered into the database.
+- time date/time parameters
+- FIG. 1 is a simplified schematic diagram of a distributed computing environment having an append-only database that is suitable for filtering by the continuous query mechanism of this invention
+- FIG. 2 is a simplified flow chart illustrating the execution of a continuous query
+- FIG. 3 is a simplified server/client model for a representative implementation of this invention.
+- the present invention suitably is implemented in a generally standard distributed computing environment 19 having a dedicated or non-dedicated database server 21 that is linked to one or more nearby computers 22a-22n and to a gateway 23 by a local area network (LAN) 24.
+- the computers 22a-22n (or their users) are "clients" for the database services that are offered by the server 21.
+- they also may be data sources if, for example, the server 21 constructs a database from the electronic mail messages that are carried by the LAN 24.
+- the server 21 might construct a database from a stream of news messages supplied by a remote source (not shown) that is coupled to the gateway 23 or to the server 21 by a dedicated communication channel.
+- the server 21 typically runs a generally conventional relational database manager 31 on an appropriate digital computer 32 that is equipped with a conventional mass memory 33.
+- Queries issued by the local clients 22a-22n and/or by the remote clients (not shown) are registered with the database manager 31, and the results of the searches that are performed in response to those queries are returned to the appropriate clients under the control of the database manager 31.
+- One-time, ad hoc queries i.e., those that are executed only once
+- continuous queries are stored by the database manager 31 as callable processes that can be periodically invoked.
+- Q(t) is the set of records (i.e., the result) returned by the execution of a query Q over a database as it exists at every instant in time t, up until time t a fully equivalent result Q M (t) is obtained by executing the query Q as a "continuous" query and accumulating the results up until time t, such that ##EQU1##
+- Equation (1) is valid for all monotone increasing queries (i.e., queries that are never matched or, if once matched by a database record, are then matched by that record in perpetuity).
+- some interesting queries are not inherently monotone, so they are converted into a "minimum bounding" monotone query Q M , which is the smallest monotone query that returns all of the results of the query Q.
+- a query Q M is monotone only if Q M (t 1 ) .OR right.Q M (t 2 ) whenever t 1 ⁇ t 2 .
+- the key to executing the query efficiently is to convert the query into an incremental query Q I that is parametrized by two times; the time ⁇ that the query was last executed, and the current time t.
+- Q I is only an approximation of Q M (t)Q M ( ⁇ ) but the loss of precision is outweighed by the increased computing efficiency.
+- the incremental query Q I always returns all new results and only occasionally returns prior results.
+- a continuous query is executed by initializing the ⁇ start time parameter ⁇ for the incremental monotone query Q I to a value of - ⁇ as at 51 and by then periodically looping through a routine 52.
+- the end time parameter t is set to the current time as at 54 and the incremental query Q I ( ⁇ , t) then is executed as at 55.
+- the query results are queued for return to the client that owns the query as at 56, and the time parameter ⁇ is incremented to the current time t as at 57.
+- the routine 52 pauses for some predetermined period of time as at 58, prior to recycling through that same loop.
+- R involves calls to GetDate(). Since calling GetDate() returns the current value of time t, R is written as R(t) to indicate that it depends on the current time.
+- R(t) is already monotone (this includes the case when R does not involve t -that is, does not contain- any GetDate() calls).
+- each disjunct can be handled separately, and each disjunct containing a NOT EXISTS subexpression will be in the form:
+- tlz query "select messages more than 2 weeks old that no one has replied to" might be written in SQL as:
+- R(t) is not necessarily monotone
+- R(t) cannot simply be converted to the minimal bounding monotone query and use the rules from above, as this would change the meaning of the query, For example, consider the query "select messages that have not received a reply for the last two weeks.” This is:
+- FIG. 3 illustrates the flow of documents through the major components of a clienterver model that is suitable for implementing this invention.
+- documents, annotations and continuous "filter” queries are stored in a relational database system that is offered commercially by Sybase, Inc. under the name "Transact-SQL". It is to be understood, however, that the functional partitioning of the client/server model can be modified.
+- documents from local or remote external sources are loaded into an append-only document store 71 at the server by an indexer 72.
+- the indexer 72 reads the incoming documents to parse them into a set of indexed fields that can be referenced in queries.
+- a filterer 73 runs a batch of continuous queries over the documents that are stored in the document store 71 and/or the documents that are stored in an annotation store 74. These queries are substantively defined by, and are run on behalf of, the local and/or remote client or clients.
+- the results of the query or queries that are executed on behalf of any one client are loaded into an output store 76 that in dedicated to that particular client.
+- the client may browse the results that are accumulated in this output store 76 through the use of a browser 77.
+- an appraiser 78 may be included for facilitating the browsing of the results by applying client specified classifications to them, such as to prioritize and/or categorize them.
+- the client may retrieve the results of its queries by electronic mail through the use of remailer daemon 81 and a conventional mail reader 82.
+- an appraiser 83 may be employed to prioritize and categorize the results that are returned to the client by electronic mail.
+- the reader/browser 84 is the client interface to the database, so it is to be understood that it includes facilities for adding/deleting/editing continuous filter queries under the control of the client, retrieving and displaying query results (including documents that match the client defined queries), organizing the query matching documents into folders, returning client annotated documents to the annotation store 74, causing the database system to run ad hoc queries, and performing other client initiated interactions with the database.
+- these interactions are invoked by the client 22a by sending by mail documents to the server 21.
+- the continuous query mechanism that is provided by this invention permits persistent filters to be implemented on append-only databases for extracting information that is of particular interest to any given client or set of clients from a more or less continuous stream of incoming data.
+- the query mechanism that has been provided supports arbitrarily complex queries, including joins of multiple database tables, calls to read the current time, and existential subqueries.
+- the continuous semantics of these queries causes the results to be well-specified and time-independent.
+- queries may be used for many different purposes, including information filtering, data monitoring, and supplying active reminders.
+- many existing databases such as those that store payroll data, billing information, stock market reports, reservations or reminder, are append-only and, therefore, are potential hosts for continuous queries.
+Abstract
+Description
+Claims (5)
+Priority Applications (4)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US07/892,869 US5495600A (en) | 1992-06-03 | 1992-06-03 | Conversion of queries to monotonically increasing incremental form to continuously query a append only database |
+EP93304051A EP0573200B1 (en) | 1992-06-03 | 1993-05-25 | System and method for querying an append-only database-system |
+DE69326856T DE69326856T2 (en) | 1992-06-03 | 1993-05-25 | System and method for searching an add database system |
+JP12632693A JP3240212B2 (en) | 1992-06-03 | 1993-05-27 | How to filter add-only databases |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US07/892,869 US5495600A (en) | 1992-06-03 | 1992-06-03 | Conversion of queries to monotonically increasing incremental form to continuously query a append only database |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US5495600A true US5495600A (en) | 1996-02-27 |
+Family
+ID=25400642
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US07/892,869 Expired - Lifetime US5495600A (en) | 1992-06-03 | 1992-06-03 | Conversion of queries to monotonically increasing incremental form to continuously query a append only database |
+Country Status (4)
+Country | Link |
+---|---|
+US (1) | US5495600A (en) |
+EP (1) | EP0573200B1 (en) |
+JP (1) | JP3240212B2 (en) |
+DE (1) | DE69326856T2 (en) |
+Cited By (67)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5826269A (en) * | 1995-06-21 | 1998-10-20 | Microsoft Corporation | Electronic mail interface for a network server |
+US5966704A (en) * | 1995-11-02 | 1999-10-12 | International Business Machines Corporation | Storage plane organization and storage systems based thereon using queries and subqueries for data searching |
+US6292796B1 (en) * | 1999-02-23 | 2001-09-18 | Clinical Focus, Inc. | Method and apparatus for improving access to literature |
+US20020174109A1 (en) * | 2001-05-16 | 2002-11-21 | Chandy Kanianthra Mani | Event detection with concurrent data updates |
+US20030195881A1 (en) * | 2002-04-16 | 2003-10-16 | International Business Machines Corporation | Optimizing database query performance by deriving query predicates |
+US20040002961A1 (en) * | 2002-06-27 | 2004-01-01 | International Business Machines Corporation | Intelligent query re-execution |
+US20040205487A1 (en) * | 1997-12-31 | 2004-10-14 | Qwest Communications International, Inc. | Internet-based database report writer and customer data management system |
+US20040230566A1 (en) * | 1999-08-20 | 2004-11-18 | Srinivas Balijepalli | Web-based customized information retrieval and delivery method and system |
+US20060010373A1 (en) * | 1996-02-27 | 2006-01-12 | Datamize Llc | Portal information delivery system for personal computers and SOHO computer systems |
+US20060143164A1 (en) * | 2004-12-24 | 2006-06-29 | International Business Machines Corporation | Database system, method, program for the database system, and a method for updating an indexing tables in a database system |
+US20060277230A1 (en) * | 2005-06-03 | 2006-12-07 | Itaru Nishizawa | Query processing method for stream data processing systems |
+US20070094233A1 (en) * | 2005-10-24 | 2007-04-26 | Wolfgang Otter | Translating time-independent data using database operations |
+US20070136244A1 (en) * | 2005-12-13 | 2007-06-14 | Microsoft Corporation | Query-driven sharing and syndication |
+US20070271280A1 (en) * | 2006-05-19 | 2007-11-22 | Oracle International Corporation | Sequence event processing using append-only tables |
+US20080046401A1 (en) * | 2006-08-21 | 2008-02-21 | Myung-Cheol Lee | System and method for processing continuous integrated queries on both data stream and stored data using user-defined share trigger |
+KR100810257B1 (en) | 2006-02-07 | 2008-03-11 | 연세대학교 산학협력단 | Efficient Processing of Selection Predicates in Multiple Continuous Queries for Data Stream Management SystemsDSMS |
+US20080114787A1 (en) * | 2006-11-15 | 2008-05-15 | Hitachi, Ltd. | Index processing method and computer systems |
+US20080120283A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Processing XML data stream(s) using continuous queries in a data stream management system |
+US20090100029A1 (en) * | 2007-10-16 | 2009-04-16 | Oracle International Corporation | Handling Silent Relations In A Data Stream Management System |
+US20090106189A1 (en) * | 2007-10-17 | 2009-04-23 | Oracle International Corporation | Dynamically Sharing A Subtree Of Operators In A Data Stream Management System Operating On Existing Queries |
+US20090106440A1 (en) * | 2007-10-20 | 2009-04-23 | Oracle International Corporation | Support for incrementally processing user defined aggregations in a data stream management system |
+US20090106218A1 (en) * | 2007-10-20 | 2009-04-23 | Oracle International Corporation | Support for user defined aggregations in a data stream management system |
+US20090106214A1 (en) * | 2007-10-17 | 2009-04-23 | Oracle International Corporation | Adding new continuous queries to a data stream management system operating on existing queries |
+US20090106190A1 (en) * | 2007-10-18 | 2009-04-23 | Oracle International Corporation | Support For User Defined Functions In A Data Stream Management System |
+US20090112853A1 (en) * | 2007-10-29 | 2009-04-30 | Hitachi, Ltd. | Ranking query processing method for stream data and stream data processing system having ranking query processing mechanism |
+US20090271529A1 (en) * | 2008-04-25 | 2009-10-29 | Hitachi, Ltd. | Stream data processing method and computer systems |
+US20090327257A1 (en) * | 2008-06-27 | 2009-12-31 | Business Objects, S.A. | Apparatus and method for facilitating continuous querying of multi-dimensional data streams |
+US20100057735A1 (en) * | 2008-08-29 | 2010-03-04 | Oracle International Corporation | Framework for supporting regular expression-based pattern matching in data streams |
+US20100106853A1 (en) * | 2008-10-28 | 2010-04-29 | Hitachi, Ltd. | Machine-readable medium for storing a stream data processing program and computer system |
+US20100138405A1 (en) * | 2008-12-03 | 2010-06-03 | International Business Machines Corporation | Hybrid Push/Pull Execution of Continuous SQL Queries |
+US20100153363A1 (en) * | 2008-12-12 | 2010-06-17 | Hitachi, Ltd. | Stream data processing method and system |
+US20100223606A1 (en) * | 2009-03-02 | 2010-09-02 | Oracle International Corporation | Framework for dynamically generating tuple and page classes |
+US20100223305A1 (en) * | 2009-03-02 | 2010-09-02 | Oracle International Corporation | Infrastructure for spilling pages to a persistent store |
+US20110022618A1 (en) * | 2009-07-21 | 2011-01-27 | Oracle International Corporation | Standardized database connectivity support for an event processing server in an embedded context |
+US20110023055A1 (en) * | 2009-07-21 | 2011-01-27 | Oracle International Corporation | Standardized database connectivity support for an event processing server |
+US20110029485A1 (en) * | 2009-08-03 | 2011-02-03 | Oracle International Corporation | Log visualization tool for a data stream processing server |
+US20110029484A1 (en) * | 2009-08-03 | 2011-02-03 | Oracle International Corporation | Logging framework for a data stream processing server |
+US20110161356A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Extensible language framework using data cartridges |
+US20110161328A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Spatial data cartridge for event processing systems |
+US8145859B2 (en) | 2009-03-02 | 2012-03-27 | Oracle International Corporation | Method and system for spilling from a queue to a persistent store |
+JP2012099133A (en) * | 2011-12-27 | 2012-05-24 | Hitachi Ltd | Index processing method and computer system |
+US8495082B2 (en) | 2006-06-09 | 2013-07-23 | Hitachi, Ltd. | Stream data processing method cooperable with reference external data |
+US8713049B2 (en) | 2010-09-17 | 2014-04-29 | Oracle International Corporation | Support for a parameterized query/view in complex event processing |
+US8762395B2 (en) | 2006-05-19 | 2014-06-24 | Oracle International Corporation | Evaluating event-generated data using append-only tables |
+US8768956B2 (en) | 2012-04-25 | 2014-07-01 | Hitachi, Ltd. | Stream data processing method with multiple windows on single stream |
+US8959106B2 (en) | 2009-12-28 | 2015-02-17 | Oracle International Corporation | Class loading using java data cartridges |
+US8990416B2 (en) | 2011-05-06 | 2015-03-24 | Oracle International Corporation | Support for a new insert stream (ISTREAM) operation in complex event processing (CEP) |
+US9047249B2 (en) | 2013-02-19 | 2015-06-02 | Oracle International Corporation | Handling faults in a continuous event processing (CEP) system |
+US9075898B1 (en) * | 2012-08-10 | 2015-07-07 | Evernote Corporation | Generating and ranking incremental search suggestions for personal content |
+US9098587B2 (en) | 2013-01-15 | 2015-08-04 | Oracle International Corporation | Variable duration non-event pattern matching |
+US9189280B2 (en) | 2010-11-18 | 2015-11-17 | Oracle International Corporation | Tracking large numbers of moving objects in an event processing system |
+US9244978B2 (en) | 2014-06-11 | 2016-01-26 | Oracle International Corporation | Custom partitioning of a data stream |
+US9256646B2 (en) | 2012-09-28 | 2016-02-09 | Oracle International Corporation | Configurable data windows for archived relations |
+US9262479B2 (en) | 2012-09-28 | 2016-02-16 | Oracle International Corporation | Join operations for continuous queries over archived views |
+US9329975B2 (en) | 2011-07-07 | 2016-05-03 | Oracle International Corporation | Continuous query language (CQL) debugger in complex event processing (CEP) |
+US9390135B2 (en) | 2013-02-19 | 2016-07-12 | Oracle International Corporation | Executing continuous event processing (CEP) queries in parallel |
+US9400823B2 (en) | 2012-12-20 | 2016-07-26 | Hitachi, Ltd. | Stream data processing method on recursive query of graph data |
+US9418113B2 (en) | 2013-05-30 | 2016-08-16 | Oracle International Corporation | Value based windows on relations in continuous data streams |
+US9712645B2 (en) | 2014-06-26 | 2017-07-18 | Oracle International Corporation | Embedded event processing |
+US9886486B2 (en) | 2014-09-24 | 2018-02-06 | Oracle International Corporation | Enriching events with dynamically typed big data for event processing |
+US9934279B2 (en) | 2013-12-05 | 2018-04-03 | Oracle International Corporation | Pattern matching across multiple input data streams |
+US9972103B2 (en) | 2015-07-24 | 2018-05-15 | Oracle International Corporation | Visually exploring and analyzing event streams |
+US10120907B2 (en) | 2014-09-24 | 2018-11-06 | Oracle International Corporation | Scaling event processing using distributed flows and map-reduce operations |
+US10282066B2 (en) | 2016-07-08 | 2019-05-07 | International Business Machines Corporation | Dynamic threshold filtering for watched questions |
+US10298444B2 (en) | 2013-01-15 | 2019-05-21 | Oracle International Corporation | Variable duration windows on continuous data streams |
+US10565503B2 (en) * | 2016-07-08 | 2020-02-18 | International Business Machines Corporation | Dynamic threshold filtering for watched questions |
+US10956422B2 (en) | 2012-12-05 | 2021-03-23 | Oracle International Corporation | Integrating event processing with map-reduce |
+Families Citing this family (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8793241B2 (en) | 2009-06-25 | 2014-07-29 | Cornell University | Incremental query evaluation |
+JP5589167B2 (en) | 2010-11-19 | 2014-09-17 | セイコーエプソン株式会社 | Piezoelectric vibrating piece and piezoelectric vibrator |
+CN105045883B (en) * | 2015-07-21 | 2020-12-25 | 惠州Tcl移动通信有限公司 | Mobile terminal and searching method thereof |
+CN112672338B (en) * | 2020-12-28 | 2023-09-19 | 超讯通信股份有限公司 | Method and device for preventing terminal from being separated from small base station for adsorption |
+Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4646229A (en) * | 1982-11-15 | 1987-02-24 | At&T Bell Laboratories | Time-ordered data base |
+US5093794A (en) * | 1989-08-22 | 1992-03-03 | United Technologies Corporation | Job scheduling system |
+US5347653A (en) * | 1991-06-28 | 1994-09-13 | Digital Equipment Corporation | System for reconstructing prior versions of indexes using records indicating changes between successive versions of the indexes |
+-
+1992
+- 1992-06-03 US US07/892,869 patent/US5495600A/en not_active Expired - Lifetime
+-
+1993
+- 1993-05-25 EP EP93304051A patent/EP0573200B1/en not_active Expired - Lifetime
+- 1993-05-25 DE DE69326856T patent/DE69326856T2/en not_active Expired - Fee Related
+- 1993-05-27 JP JP12632693A patent/JP3240212B2/en not_active Expired - Lifetime
+Patent Citations (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4646229A (en) * | 1982-11-15 | 1987-02-24 | At&T Bell Laboratories | Time-ordered data base |
+US5093794A (en) * | 1989-08-22 | 1992-03-03 | United Technologies Corporation | Job scheduling system |
+US5347653A (en) * | 1991-06-28 | 1994-09-13 | Digital Equipment Corporation | System for reconstructing prior versions of indexes using records indicating changes between successive versions of the indexes |
+Non-Patent Citations (12)
+Title |
+---|
+Bassiouni, M. A.; Llewellyn, M. "Generalized Logical Operators for Temporal Languages." IEEE. Oct. 9, 1988. Miami, FL, U.S.A. pp. 128-134. |
+Bassiouni, M. A.; Llewellyn, M. Generalized Logical Operators for Temporal Languages. IEEE. Oct. 9, 1988. Miami, FL, U.S.A. pp. 128 134. * |
+Bassiouni, M.; Llewellyn, M. "On the Definition and Maintenance of Database Views with Time-Varying Domains." Sep. 20, 1989. Orlando, FL, U.S.A. pp. 201-208. |
+Bassiouni, M.; Llewellyn, M. On the Definition and Maintenance of Database Views with Time Varying Domains. Sep. 20, 1989. Orlando, FL, U.S.A. pp. 201 208. * |
+Classified Search And Image Retrieval Student Manual For The Automated Patent System (APS), May 7, 1991 U.S. Department of Commerce, pp. 2 15 thru 2 22 8 4, 8 5 A 15 16 USPTO. * |
+Classified Search And Image Retrieval Student Manual For The Automated Patent System (APS), May 7, 1991 U.S. Department of Commerce, pp. 2-15 thru 2-22 8-4, 8-5 A-15-16 USPTO. |
+Elmasri et al., "Partitioning Of True Index For Optical Disks", Eighth International Conference On Data Engineering, pp. 574-583 IEEE Comput. Soc. Press, 2-3 Feb. 1992. |
+Elmasri et al., Partitioning Of True Index For Optical Disks , Eighth International Conference On Data Engineering, pp. 574 583 IEEE Comput. Soc. Press, 2 3 Feb. 1992. * |
+Ozsoyoglu, G.; Du, K.; swamy, S. G.; Hou, W. "Processing Real-Time, Non-Aggregate Queries with Tme-Constraints in CASE-DB." IEEE. Feb. 2, 1992. Tempe, AZ, U.S.A. pp. 410-417. |
+Ozsoyoglu, G.; Du, K.; swamy, S. G.; Hou, W. Processing Real Time, Non Aggregate Queries with Tme Constraints in CASE DB. IEEE. Feb. 2, 1992. Tempe, AZ, U.S.A. pp. 410 417. * |
+Qian et al., "Incremental Recomputation Of Active Relational Expressions", IEEE Transactions On Knowledge And Data-Engineering vol. 3 Iss: 3 pp. 337-341, Sep. 1991. |
+Qian et al., Incremental Recomputation Of Active Relational Expressions , IEEE Transactions On Knowledge And Data Engineering vol. 3 Iss: 3 pp. 337 341, Sep. 1991. * |
+Cited By (137)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5826269A (en) * | 1995-06-21 | 1998-10-20 | Microsoft Corporation | Electronic mail interface for a network server |
+US5966704A (en) * | 1995-11-02 | 1999-10-12 | International Business Machines Corporation | Storage plane organization and storage systems based thereon using queries and subqueries for data searching |
+US20060010373A1 (en) * | 1996-02-27 | 2006-01-12 | Datamize Llc | Portal information delivery system for personal computers and SOHO computer systems |
+US20040205487A1 (en) * | 1997-12-31 | 2004-10-14 | Qwest Communications International, Inc. | Internet-based database report writer and customer data management system |
+US7152200B2 (en) * | 1997-12-31 | 2006-12-19 | Qwest Communications International Inc. | Internet-based database report writer and customer data management system |
+US6292796B1 (en) * | 1999-02-23 | 2001-09-18 | Clinical Focus, Inc. | Method and apparatus for improving access to literature |
+US6505196B2 (en) * | 1999-02-23 | 2003-01-07 | Clinical Focus, Inc. | Method and apparatus for improving access to literature |
+US20040230566A1 (en) * | 1999-08-20 | 2004-11-18 | Srinivas Balijepalli | Web-based customized information retrieval and delivery method and system |
+WO2002093313A3 (en) * | 2001-05-16 | 2003-05-01 | Ispheres Corp | Event detection with concurrent data updates |
+WO2002093313A2 (en) * | 2001-05-16 | 2002-11-21 | Ispheres Corporation | Event detection with concurrent data updates |
+US20020174109A1 (en) * | 2001-05-16 | 2002-11-21 | Chandy Kanianthra Mani | Event detection with concurrent data updates |
+US20030195881A1 (en) * | 2002-04-16 | 2003-10-16 | International Business Machines Corporation | Optimizing database query performance by deriving query predicates |
+US6983275B2 (en) | 2002-04-16 | 2006-01-03 | International Business Machines Corporation | Optimizing database query by generating, determining the type of derived predicate based on monotonicity of the column generating expression for each remaining inequality predicate in the list of unexamined predicates |
+US7051020B2 (en) * | 2002-06-27 | 2006-05-23 | International Business Machines Corporation | Intelligent query re-execution |
+US20040002961A1 (en) * | 2002-06-27 | 2004-01-01 | International Business Machines Corporation | Intelligent query re-execution |
+US7558786B2 (en) * | 2004-12-24 | 2009-07-07 | International Business Machines Corporation | Method for storing text annotations with associated type information in a structured data store |
+US20060143164A1 (en) * | 2004-12-24 | 2006-06-29 | International Business Machines Corporation | Database system, method, program for the database system, and a method for updating an indexing tables in a database system |
+US20090287662A1 (en) * | 2004-12-24 | 2009-11-19 | International Business Machines Corporation | Database system, method, program for the database system, and a method for updating indexing tables in a database system |
+US8095535B2 (en) * | 2004-12-24 | 2012-01-10 | International Business Machines Corporation | Updating indexing tables in a database system |
+US20060277230A1 (en) * | 2005-06-03 | 2006-12-07 | Itaru Nishizawa | Query processing method for stream data processing systems |
+US7403959B2 (en) | 2005-06-03 | 2008-07-22 | Hitachi, Ltd. | Query processing method for stream data processing systems |
+US7958108B2 (en) | 2005-06-03 | 2011-06-07 | Hitachi, Ltd. | Query processing method for stream data processing systems |
+US20080256146A1 (en) * | 2005-06-03 | 2008-10-16 | Itaru Nishizawa | Query processing method for stream data processing systems |
+US20070094233A1 (en) * | 2005-10-24 | 2007-04-26 | Wolfgang Otter | Translating time-independent data using database operations |
+US7822759B2 (en) * | 2005-12-13 | 2010-10-26 | Microsoft Corporation | Query-driven sharing and syndication |
+US20070136244A1 (en) * | 2005-12-13 | 2007-06-14 | Microsoft Corporation | Query-driven sharing and syndication |
+KR100810257B1 (en) | 2006-02-07 | 2008-03-11 | 연세대학교 산학협력단 | Efficient Processing of Selection Predicates in Multiple Continuous Queries for Data Stream Management SystemsDSMS |
+US8762395B2 (en) | 2006-05-19 | 2014-06-24 | Oracle International Corporation | Evaluating event-generated data using append-only tables |
+US20070271280A1 (en) * | 2006-05-19 | 2007-11-22 | Oracle International Corporation | Sequence event processing using append-only tables |
+US8131696B2 (en) * | 2006-05-19 | 2012-03-06 | Oracle International Corporation | Sequence event processing using append-only tables |
+US8495082B2 (en) | 2006-06-09 | 2013-07-23 | Hitachi, Ltd. | Stream data processing method cooperable with reference external data |
+US7860884B2 (en) * | 2006-08-21 | 2010-12-28 | Electronics And Telecommunications Research Institute | System and method for processing continuous integrated queries on both data stream and stored data using user-defined shared trigger |
+US20080046401A1 (en) * | 2006-08-21 | 2008-02-21 | Myung-Cheol Lee | System and method for processing continuous integrated queries on both data stream and stored data using user-defined share trigger |
+US20080114787A1 (en) * | 2006-11-15 | 2008-05-15 | Hitachi, Ltd. | Index processing method and computer systems |
+JP2008123426A (en) * | 2006-11-15 | 2008-05-29 | Hitachi Ltd | Index processing method and computer system |
+US7941413B2 (en) | 2006-11-15 | 2011-05-10 | Hitachi, Ltd. | Index processing method and computer systems |
+US20080120283A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Processing XML data stream(s) using continuous queries in a data stream management system |
+US20090100029A1 (en) * | 2007-10-16 | 2009-04-16 | Oracle International Corporation | Handling Silent Relations In A Data Stream Management System |
+US7979420B2 (en) | 2007-10-16 | 2011-07-12 | Oracle International Corporation | Handling silent relations in a data stream management system |
+US7996388B2 (en) | 2007-10-17 | 2011-08-09 | Oracle International Corporation | Adding new continuous queries to a data stream management system operating on existing queries |
+US8296316B2 (en) | 2007-10-17 | 2012-10-23 | Oracle International Corporation | Dynamically sharing a subtree of operators in a data stream management system operating on existing queries |
+US20090106189A1 (en) * | 2007-10-17 | 2009-04-23 | Oracle International Corporation | Dynamically Sharing A Subtree Of Operators In A Data Stream Management System Operating On Existing Queries |
+US20090106214A1 (en) * | 2007-10-17 | 2009-04-23 | Oracle International Corporation | Adding new continuous queries to a data stream management system operating on existing queries |
+US8543558B2 (en) | 2007-10-18 | 2013-09-24 | Oracle International Corporation | Support for user defined functions in a data stream management system |
+US20090106190A1 (en) * | 2007-10-18 | 2009-04-23 | Oracle International Corporation | Support For User Defined Functions In A Data Stream Management System |
+US8073826B2 (en) | 2007-10-18 | 2011-12-06 | Oracle International Corporation | Support for user defined functions in a data stream management system |
+US8204875B2 (en) | 2007-10-20 | 2012-06-19 | Oracle International Corporation | Support for user defined aggregations in a data stream management system |
+US20090106218A1 (en) * | 2007-10-20 | 2009-04-23 | Oracle International Corporation | Support for user defined aggregations in a data stream management system |
+US7991766B2 (en) | 2007-10-20 | 2011-08-02 | Oracle International Corporation | Support for user defined aggregations in a data stream management system |
+US8521867B2 (en) | 2007-10-20 | 2013-08-27 | Oracle International Corporation | Support for incrementally processing user defined aggregations in a data stream management system |
+US20090106440A1 (en) * | 2007-10-20 | 2009-04-23 | Oracle International Corporation | Support for incrementally processing user defined aggregations in a data stream management system |
+US20090112853A1 (en) * | 2007-10-29 | 2009-04-30 | Hitachi, Ltd. | Ranking query processing method for stream data and stream data processing system having ranking query processing mechanism |
+US8335782B2 (en) | 2007-10-29 | 2012-12-18 | Hitachi, Ltd. | Ranking query processing method for stream data and stream data processing system having ranking query processing mechanism |
+US7849227B2 (en) | 2008-04-25 | 2010-12-07 | Hitachi, Ltd. | Stream data processing method and computer systems |
+US20090271529A1 (en) * | 2008-04-25 | 2009-10-29 | Hitachi, Ltd. | Stream data processing method and computer systems |
+US20090327257A1 (en) * | 2008-06-27 | 2009-12-31 | Business Objects, S.A. | Apparatus and method for facilitating continuous querying of multi-dimensional data streams |
+US8316012B2 (en) * | 2008-06-27 | 2012-11-20 | SAP France S.A. | Apparatus and method for facilitating continuous querying of multi-dimensional data streams |
+US20100057663A1 (en) * | 2008-08-29 | 2010-03-04 | Oracle International Corporation | Techniques for matching a certain class of regular expression-based patterns in data streams |
+US9305238B2 (en) | 2008-08-29 | 2016-04-05 | Oracle International Corporation | Framework for supporting regular expression-based pattern matching in data streams |
+US8676841B2 (en) | 2008-08-29 | 2014-03-18 | Oracle International Corporation | Detection of recurring non-occurrences of events using pattern matching |
+US8589436B2 (en) | 2008-08-29 | 2013-11-19 | Oracle International Corporation | Techniques for performing regular expression-based pattern matching in data streams |
+US20100057735A1 (en) * | 2008-08-29 | 2010-03-04 | Oracle International Corporation | Framework for supporting regular expression-based pattern matching in data streams |
+US8498956B2 (en) | 2008-08-29 | 2013-07-30 | Oracle International Corporation | Techniques for matching a certain class of regular expression-based patterns in data streams |
+US8095690B2 (en) | 2008-10-28 | 2012-01-10 | Hitachi, Ltd. | Machine-readable medium for storing a stream data processing program and computer system |
+US20100106853A1 (en) * | 2008-10-28 | 2010-04-29 | Hitachi, Ltd. | Machine-readable medium for storing a stream data processing program and computer system |
+US8392402B2 (en) | 2008-12-03 | 2013-03-05 | International Business Machines Corporation | Hybrid push/pull execution of continuous SQL queries |
+US20100138405A1 (en) * | 2008-12-03 | 2010-06-03 | International Business Machines Corporation | Hybrid Push/Pull Execution of Continuous SQL Queries |
+US20100153363A1 (en) * | 2008-12-12 | 2010-06-17 | Hitachi, Ltd. | Stream data processing method and system |
+US8190599B2 (en) | 2008-12-12 | 2012-05-29 | Hitachi, Ltd. | Stream data processing method and system |
+US8145859B2 (en) | 2009-03-02 | 2012-03-27 | Oracle International Corporation | Method and system for spilling from a queue to a persistent store |
+US8352517B2 (en) | 2009-03-02 | 2013-01-08 | Oracle International Corporation | Infrastructure for spilling pages to a persistent store |
+US20100223606A1 (en) * | 2009-03-02 | 2010-09-02 | Oracle International Corporation | Framework for dynamically generating tuple and page classes |
+US20100223305A1 (en) * | 2009-03-02 | 2010-09-02 | Oracle International Corporation | Infrastructure for spilling pages to a persistent store |
+US8321450B2 (en) | 2009-07-21 | 2012-11-27 | Oracle International Corporation | Standardized database connectivity support for an event processing server in an embedded context |
+US8387076B2 (en) | 2009-07-21 | 2013-02-26 | Oracle International Corporation | Standardized database connectivity support for an event processing server |
+US20110023055A1 (en) * | 2009-07-21 | 2011-01-27 | Oracle International Corporation | Standardized database connectivity support for an event processing server |
+US20110022618A1 (en) * | 2009-07-21 | 2011-01-27 | Oracle International Corporation | Standardized database connectivity support for an event processing server in an embedded context |
+US8527458B2 (en) | 2009-08-03 | 2013-09-03 | Oracle International Corporation | Logging framework for a data stream processing server |
+US20110029484A1 (en) * | 2009-08-03 | 2011-02-03 | Oracle International Corporation | Logging framework for a data stream processing server |
+US20110029485A1 (en) * | 2009-08-03 | 2011-02-03 | Oracle International Corporation | Log visualization tool for a data stream processing server |
+US8386466B2 (en) | 2009-08-03 | 2013-02-26 | Oracle International Corporation | Log visualization tool for a data stream processing server |
+US20110161352A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Extensible indexing framework using data cartridges |
+US9430494B2 (en) | 2009-12-28 | 2016-08-30 | Oracle International Corporation | Spatial data cartridge for event processing systems |
+US8447744B2 (en) | 2009-12-28 | 2013-05-21 | Oracle International Corporation | Extensibility platform using data cartridges |
+US20110161328A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Spatial data cartridge for event processing systems |
+US20110161321A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Extensibility platform using data cartridges |
+US8959106B2 (en) | 2009-12-28 | 2015-02-17 | Oracle International Corporation | Class loading using java data cartridges |
+US9305057B2 (en) | 2009-12-28 | 2016-04-05 | Oracle International Corporation | Extensible indexing framework using data cartridges |
+US20110161356A1 (en) * | 2009-12-28 | 2011-06-30 | Oracle International Corporation | Extensible language framework using data cartridges |
+US9058360B2 (en) | 2009-12-28 | 2015-06-16 | Oracle International Corporation | Extensible language framework using data cartridges |
+US9110945B2 (en) | 2010-09-17 | 2015-08-18 | Oracle International Corporation | Support for a parameterized query/view in complex event processing |
+US8713049B2 (en) | 2010-09-17 | 2014-04-29 | Oracle International Corporation | Support for a parameterized query/view in complex event processing |
+US9189280B2 (en) | 2010-11-18 | 2015-11-17 | Oracle International Corporation | Tracking large numbers of moving objects in an event processing system |
+US8990416B2 (en) | 2011-05-06 | 2015-03-24 | Oracle International Corporation | Support for a new insert stream (ISTREAM) operation in complex event processing (CEP) |
+US9756104B2 (en) | 2011-05-06 | 2017-09-05 | Oracle International Corporation | Support for a new insert stream (ISTREAM) operation in complex event processing (CEP) |
+US9804892B2 (en) | 2011-05-13 | 2017-10-31 | Oracle International Corporation | Tracking large numbers of moving objects in an event processing system |
+US9535761B2 (en) | 2011-05-13 | 2017-01-03 | Oracle International Corporation | Tracking large numbers of moving objects in an event processing system |
+US9329975B2 (en) | 2011-07-07 | 2016-05-03 | Oracle International Corporation | Continuous query language (CQL) debugger in complex event processing (CEP) |
+JP2012099133A (en) * | 2011-12-27 | 2012-05-24 | Hitachi Ltd | Index processing method and computer system |
+US8768956B2 (en) | 2012-04-25 | 2014-07-01 | Hitachi, Ltd. | Stream data processing method with multiple windows on single stream |
+US9075898B1 (en) * | 2012-08-10 | 2015-07-07 | Evernote Corporation | Generating and ranking incremental search suggestions for personal content |
+US10102250B2 (en) | 2012-09-28 | 2018-10-16 | Oracle International Corporation | Managing continuous queries with archived relations |
+US9286352B2 (en) | 2012-09-28 | 2016-03-15 | Oracle International Corporation | Hybrid execution of continuous and scheduled queries |
+US11288277B2 (en) | 2012-09-28 | 2022-03-29 | Oracle International Corporation | Operator sharing for continuous queries over archived relations |
+US11093505B2 (en) | 2012-09-28 | 2021-08-17 | Oracle International Corporation | Real-time business event analysis and monitoring |
+US9361308B2 (en) | 2012-09-28 | 2016-06-07 | Oracle International Corporation | State initialization algorithm for continuous queries over archived relations |
+US9953059B2 (en) | 2012-09-28 | 2018-04-24 | Oracle International Corporation | Generation of archiver queries for continuous queries over archived relations |
+US9805095B2 (en) | 2012-09-28 | 2017-10-31 | Oracle International Corporation | State initialization for continuous queries over archived views |
+US9946756B2 (en) | 2012-09-28 | 2018-04-17 | Oracle International Corporation | Mechanism to chain continuous queries |
+US9292574B2 (en) | 2012-09-28 | 2016-03-22 | Oracle International Corporation | Tactical query to continuous query conversion |
+US10042890B2 (en) | 2012-09-28 | 2018-08-07 | Oracle International Corporation | Parameterized continuous query templates |
+US9563663B2 (en) | 2012-09-28 | 2017-02-07 | Oracle International Corporation | Fast path evaluation of Boolean predicates |
+US9703836B2 (en) | 2012-09-28 | 2017-07-11 | Oracle International Corporation | Tactical query to continuous query conversion |
+US10025825B2 (en) | 2012-09-28 | 2018-07-17 | Oracle International Corporation | Configurable data windows for archived relations |
+US9256646B2 (en) | 2012-09-28 | 2016-02-09 | Oracle International Corporation | Configurable data windows for archived relations |
+US9262479B2 (en) | 2012-09-28 | 2016-02-16 | Oracle International Corporation | Join operations for continuous queries over archived views |
+US9990401B2 (en) | 2012-09-28 | 2018-06-05 | Oracle International Corporation | Processing events for continuous queries on archived relations |
+US9715529B2 (en) | 2012-09-28 | 2017-07-25 | Oracle International Corporation | Hybrid execution of continuous and scheduled queries |
+US9852186B2 (en) | 2012-09-28 | 2017-12-26 | Oracle International Corporation | Managing risk with continuous queries |
+US9990402B2 (en) | 2012-09-28 | 2018-06-05 | Oracle International Corporation | Managing continuous queries in the presence of subqueries |
+US10956422B2 (en) | 2012-12-05 | 2021-03-23 | Oracle International Corporation | Integrating event processing with map-reduce |
+US9400823B2 (en) | 2012-12-20 | 2016-07-26 | Hitachi, Ltd. | Stream data processing method on recursive query of graph data |
+US10298444B2 (en) | 2013-01-15 | 2019-05-21 | Oracle International Corporation | Variable duration windows on continuous data streams |
+US9098587B2 (en) | 2013-01-15 | 2015-08-04 | Oracle International Corporation | Variable duration non-event pattern matching |
+US9262258B2 (en) | 2013-02-19 | 2016-02-16 | Oracle International Corporation | Handling faults in a continuous event processing (CEP) system |
+US10083210B2 (en) | 2013-02-19 | 2018-09-25 | Oracle International Corporation | Executing continuous event processing (CEP) queries in parallel |
+US9390135B2 (en) | 2013-02-19 | 2016-07-12 | Oracle International Corporation | Executing continuous event processing (CEP) queries in parallel |
+US9047249B2 (en) | 2013-02-19 | 2015-06-02 | Oracle International Corporation | Handling faults in a continuous event processing (CEP) system |
+US9418113B2 (en) | 2013-05-30 | 2016-08-16 | Oracle International Corporation | Value based windows on relations in continuous data streams |
+US9934279B2 (en) | 2013-12-05 | 2018-04-03 | Oracle International Corporation | Pattern matching across multiple input data streams |
+US9244978B2 (en) | 2014-06-11 | 2016-01-26 | Oracle International Corporation | Custom partitioning of a data stream |
+US9712645B2 (en) | 2014-06-26 | 2017-07-18 | Oracle International Corporation | Embedded event processing |
+US10120907B2 (en) | 2014-09-24 | 2018-11-06 | Oracle International Corporation | Scaling event processing using distributed flows and map-reduce operations |
+US9886486B2 (en) | 2014-09-24 | 2018-02-06 | Oracle International Corporation | Enriching events with dynamically typed big data for event processing |
+US9972103B2 (en) | 2015-07-24 | 2018-05-15 | Oracle International Corporation | Visually exploring and analyzing event streams |
+US10282066B2 (en) | 2016-07-08 | 2019-05-07 | International Business Machines Corporation | Dynamic threshold filtering for watched questions |
+US10565503B2 (en) * | 2016-07-08 | 2020-02-18 | International Business Machines Corporation | Dynamic threshold filtering for watched questions |
+Also Published As
+Publication number | Publication date |
+---|---|
+EP0573200A3 (en) | 1994-01-19 |
+EP0573200B1 (en) | 1999-10-27 |
+JPH0652230A (en) | 1994-02-25 |
+JP3240212B2 (en) | 2001-12-17 |
+EP0573200A2 (en) | 1993-12-08 |
+DE69326856D1 (en) | 1999-12-02 |
+DE69326856T2 (en) | 2000-04-20 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US5495600A (en) | Conversion of queries to monotonically increasing incremental form to continuously query a append only database | |
+CA2603901C (en) | System and methods for facilitating a linear grid database with data organization by dimension | |
+Goldberg et al. | Using collaborative filtering to weave an information tapestry | |
+US7133867B2 (en) | Text and attribute searches of data stores that include business objects | |
+Haas et al. | Optimizing queries across diverse data sources | |
+Gardarin et al. | Calibrating the Query Optimizer Cost Model of IRO-DB, an Object-Oriented Federated Database System. | |
+US8086592B2 (en) | Apparatus and method for associating unstructured text with structured data | |
+US5797137A (en) | Method for converting a database schema in relational form to a schema in object-oriented form | |
+US6470333B1 (en) | Knowledge extraction system and method | |
+US7756857B2 (en) | Indexing and querying of structured documents | |
+CA2484009C (en) | Managing expressions in a database system | |
+US7523462B1 (en) | Method for providing a real time view of heterogeneous enterprise data | |
+US20040148278A1 (en) | System and method for providing content warehouse | |
+US20050033741A1 (en) | Efficient processing of relational joins of multidimensional data | |
+US20050203940A1 (en) | Database System with Methodology for Automated Determination and Selection of Optimal Indexes | |
+US20050256896A1 (en) | Local data repository generation | |
+Kacprzyk et al. | Fuzzy querying for microsoft access | |
+US7003523B1 (en) | Configurable software system for automatically storing computer files | |
+US7213011B1 (en) | Efficient processing of multi-column and function-based in-list predicates | |
+KR20030031283A (en) | Object-relational database management system and method for deleting class instance for the same | |
+TW530224B (en) | Relation establishment system and method for key words in search engine | |
+CA2746724A1 (en) | Automatic data store architecture detection | |
+Blakeley et al. | Distributed/heterogeneous query processing in Microsoft SQL server | |
+Bettini et al. | An architecture for supporting interoperability among temporal databases | |
+Buza | Extension of CQL over Dynamic Databases. |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: XEROX CORPORATION, CONNECTICUTFree format text: ASSIGNMENT OF ASSIGNORS INTEREST.;ASSIGNORS:TERRY, DOUGLAS B.;GOLDBERG, DAVID;NICHOLS, DAVID A.;AND OTHERS;REEL/FRAME:006337/0227Effective date: 19921201 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: BANK ONE, NA, AS ADMINISTRATIVE AGENT, ILLINOISFree format text: SECURITY INTEREST;ASSIGNOR:XEROX CORPORATION;REEL/FRAME:013153/0001Effective date: 20020621 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: JPMORGAN CHASE BANK, AS COLLATERAL AGENT, TEXASFree format text: SECURITY AGREEMENT;ASSIGNOR:XEROX CORPORATION;REEL/FRAME:015134/0476Effective date: 20030625Owner name: JPMORGAN CHASE BANK, AS COLLATERAL AGENT,TEXASFree format text: SECURITY AGREEMENT;ASSIGNOR:XEROX CORPORATION;REEL/FRAME:015134/0476Effective date: 20030625 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: XEROX CORPORATION, NEW YORKFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:JPMORGAN CHASE BANK, N.A.;REEL/FRAME:026954/0817Effective date: 20061204Owner name: XEROX CORPORATION, NEW YORKFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:BANK ONE, NA;REEL/FRAME:026954/0290Effective date: 20030625 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:XEROX CORPORATION;REEL/FRAME:027728/0811Effective date: 20111110 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044144/0001Effective date: 20170929 |
+|
+AS | Assignment |
+Owner name: XEROX CORPORATION, CONNECTICUTFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:JPMORGAN CHASE BANK, N.A. AS SUCCESSOR-IN-INTEREST ADMINISTRATIVE AGENT AND COLLATERAL AGENT TO JPMORGAN CHASE BANK;REEL/FRAME:066728/0193Effective date: 20220822 |

@@ -1,0 +1,442 @@
+WO2013123106A1 - A system and method for a map flow worker - Google Patents
+A system and method for a map flow worker Download PDFInfo
+- Publication number
+- WO2013123106A1 WO2013123106A1 PCT/US2013/026017 US2013026017W WO2013123106A1 WO 2013123106 A1 WO2013123106 A1 WO 2013123106A1 US 2013026017 W US2013026017 W US 2013026017W WO 2013123106 A1 WO2013123106 A1 WO 2013123106A1
+- Authority
+- WO
+- WIPO (PCT)
+- Prior art keywords
+- key
+- output
+- map
+- value pairs
+- thread
+- Prior art date
+Links
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/50—Allocation of resources, e.g. of the central processing unit [CPU]
+- G06F9/5061—Partitioning or combining of resources
+- G06F9/5066—Algorithms for mapping a plurality of inter-dependent sub-tasks onto a plurality of physical CPUs
+Definitions
+- Large-scale data processing may include extracting records from data blocks within data sets and processing them into key/value pairs.
+- the implementation of large-scale data processing may include the distribution of data and computations among multiple disks and processors to make use of aggregate storage space and computing power.
+- a parallel processing system may include one or more processing devices and one or more storage devices. Storage devices may store instructions that, when executed by the one or more processing devices, implement a set of map processes and a set of reduce processes.
+- This specification describes technologies relating to parallel processing of data, and specifically a system and a computer-implemented method for parallel processing of data that improves control over multithreading, consolidates map output, thereby improving data locality and reducing disk seeks, and decreases the aggregate amount of data that needs to be sent over a network and/or read from disk and processed by later stages in comparison to a conventional parallel processing system.
+- one aspect of the subject matter described in this specification can be embodied in a method and system that includes one or more processing devices and one or more storage devices.
+- the storage devices store instructions that, when executed by the one or more processing devices, implement a set of map processes.
+- Each map process includes: at least one map input thread, which accesses and reads an input data block assigned to the map process, parses key/value pairs from the input data block, and applies a map operation to the key/value pairs from the input data block to produce intermediate key/value pairs; an internal shuffle unit that distributes the key /value pairs and directs individual key/value pairs to at least one specific output thread; and a plurality of map output threads to receive key /value pairs from the internal shuffle unit and write the key/value pairs as map output.
+- the number of input threads and output threads may be configurable.
+- the number of input threads and output threads may be configurable, but specified independently of one another.
+- the internal shuffle unit may send a key/value pair to a specific output thread based on the key.
+- At least one output thread may accumulate key /value pairs using a multiblock accumulator before writing map output.
+- Output threads may optionally use multiblock combiners to combine key/value pairs before writing map output.
+- the output threads may also use both a multiblock accumulator and a multiblock combiner before writing map output.
+- the system may further include a set of reduce processes where each reduce process accesses at least a subset of the intermediate key/value pairs output by the map processes and apply a reduce operation to the values associated with a specific key to produce reducer output.
+- the internal shuffle unit may send a key/value pair to a specific output thread based on an association of a specific key to an output thread which is defined based on a particular subset of the reduce processes.
+- FIG. 1 is a block diagram illustrating an exemplary parallel data processing system.
+- FIG. 2 is a block diagram illustrating an exemplary embodiment of the invention
+- FIG. 3 is a block diagram illustrating an exemplary map worker
+- FIG. 4 is a flow diagram illustrating an exemplary method for parallel processing of data using input threads, an internal shuffle unit, and multiple output threads.
+- FIG. 5 is a block diagram illustrating an example of a datacenter.
+- FIG. 6 is a block diagram illustrating an exemplary computing device.
+- MapReduce A conventional system for parallel data processing, commonly called the MapReduce model, is described in detail in MapReduce: Simplified Data Processing on Large Clusters, OSDI'04: Sixth Symposium on Operating System Design and
+- FIG. 1 illustrates an exemplary parallel data processing system.
+- the system receives a data set as input (102), divides the data set into data blocks (101), parses the data blocks into key/value pairs, sends key/value pairs through a user-defined map function to create a set of intermediate key/value pairs (106a....106m), and reduces the key/value pairs by combining values associated with the same key to produce a final value for each key.
+- the conventional system performs several steps.
+- the system splits the data sets into input data blocks (101).
+- the division of an input data set (102) into data blocks (101) can be handled automatically by application independent code.
+- the system user may specify the size of the shards into which the data sets are divided.
+- the system includes a master (120) that may assign workers (104, 108) specific tasks. Workers can be assigned map tasks, for parsing and mapping key/value pairs (104a... 104m), and/or reduce tasks, for combining key/value pairs (108a... 108m). Although FIG. 1 shows certain map workers (104a.... 104m) and certain reduce workers (108a... 108m), any worker can be assigned both map tasks and reduce tasks.
+- Workers may have one or more map threads (112aa... 112nm) to perform their assigned tasks. For example, a worker may be assigned multiple map tasks in parallel. A worker can assign a distinct thread to execute each map task. This map worker (104) can invoke a map thread (112aa...112an) to read, parse, and apply a user-defined, application- specific map operation to a data block (101). In FIG. 1, each map worker can handle n map tasks in parallel (112an, 112bn, 112mn).
+- Map threads (112aa... 112nm) parse key/value pairs out of input data blocks (101) and pass each key/value pair to a user-defined, application- specific map operation.
+- the map worker (104) then applies the user-defined map operation to produce zero or more intermediate key/value pairs, which are written to intermediate data blocks (106a....106m)
+- values associated with a given key can be accumulated and/or combined across the input data blocks processed by the input threads (112aa... l l2mn) of a specific map worker (104) before the map worker outputs key/value pairs.
+- the intermediate data blocks produced by the map workers (104) are buffered in memory within the multiblock combiner and periodically written to intermediate data blocks on disk (106a...106m).
+- the master is passed the locations of metadata, which in turn contains the locations of the intermediate data blocks.
+- the metadata is also directly forwarded from the map workers to the reduce workers (108). If a map worker fails to send the location metadata, the master tasks a different map worker with sending the metadata and provides that map worker with the information on how to find the metadata.
+- the reduce worker (108) When a reduce worker (108) is notified about the locations of the intermediate data blocks, the reduce worker (108) shuffles the data blocks (106a... 106m) from the local disks of the map workers. Shuffling is the act of reading the intermediate key/value pairs from the data blocks into a large buffer, sorting the buffer by key, and writing the buffer to a file. The reduce worker (108) then does a merge sort of all the sorted files at once to present the key/value pairs ordered by key to the user-defined, application-specific reduce function.
+- the reduce worker (108) After sorting, the reduce worker (108) iterates over the sorted intermediate key/value pairs. For each unique intermediate key encountered, the reduce worker (108) passes the key and an iterator, which provides access to the sequence of all values associated with the given key, to the user-defined reduce function. The output of the reduce function is written to a final output file. After successful completion, the output of the parallel processing of data system is available in the output data files (110), with one file per reduce task.
+- a conventional system may be used to count the number of occurrences of each word in a large collection of documents.
+- the system may take the collection of documents as the input data set.
+- the system may divide the collection of documents into data blocks.
+- a user could write a map function that can be applied to each of the records within a particular data block in order for a set of intermediate key/value pairs to be computed from the data block.
+- the map function could be represented as:
+- the function may take in a document name as a key and the document' s contents as the value.
+- This function can recognize a specific word in the document's contents. For each word, w, in the document's contents, the function could produce the word count, 1, and output the key/value pair (w, 1). [0025]
+- the map function may be defined as follows:
+- a map worker can process several input data blocks at the same time using multiple input threads. Once the map worker's input threads parse key/value pairs from the input data blocks, the map worker can accumulate and/or combine values associated with a given key across the input data blocks processed by the map worker's input threads.
+- a user could write a combine function that combines some of the word counts produced by the map function into larger values to reduce the amount of data that needs to be transferred during shuffling and the number of values that need to be processed by the reduce process.
+- a multiblock combiner may be used to combine map output streams from multiple map threads within a map process.
+- the output from one input thread (112a) could be ("you, 1"), ("know, 1"), and ("you, 1").
+- a second input thread (112b) could have the output, ("could, 1"), and a third input thread (112c) could produce ("know, 1") as output.
+- the multiblock combiner can combine the outputs from these three threads to produce the output: (“could, 1"), ("you, 2"), and ("know, 2").
+- the combine function may be defined as follows:
+- the key/value pairs produced by the map workers are called intermediate key/value pairs because the key/value pairs are not yet reduced. These key/value pairs are grouped together according to distinct key by a reduce worker's (108) shuffle process. This shuffle process takes the key/value pairs produced by the map workers and groups together all the key/value pairs with the same key. The shuffle process then produces a distinct key and a stream of all the values associated with that key for the reduce function to use.
+- the reduce function could sum together all word counts emitted from map workers for a particular word and output the total word count per word for the entire collection of documents.
+- the reduce function may be defined as follows:
+- a noticeable problem with the conventional system is that the accumulation, combination, and production of output for an entire collection of data blocks processed by a map worker is normally accomplished with a single output thread (122a). Having only one output thread is a bottleneck for applications with large amounts of map worker output because it limits parallelism in the combining step as well as the output bandwidth.
+- a map worker (204) can be constructed to include multiple output threads, which allow for accumulating and combining across multiple input data blocks.
+- the map worker (204) should also include an internal shuffle unit (214), which is described below.
+- the map worker (204) may access one or more input data blocks (201) partitioned from the input data set (202) and may perform map tasks for each of the input data blocks.
+- FIG. 2 illustrates that, in an exemplary embodiment, data blocks can either be processed by a single input thread one data block at a time, or some or all of the data blocks can be processed by different input threads in parallel.
+- the map worker (204) can have multiple input threads (212) with each map input thread (212) performing map tasks for one or more input data blocks (201).
+- the number of map input and output threads can be specified independently. For example, an application (290) that does not support concurrent mapping in a single worker can set the number of input threads to 1 , but still take advantage of multiple output threads. Similarly, an application (290) that does not support concurrent combining can set the number of output threads to 1, but still take advantage of multiple input threads.
+- a map worker input thread can parse key/value pairs from input data blocks and pass each key/value pair to a user-defined, application- specific map operation.
+- the user-defined map operation can produce zero or more key/value pairs from the records in the input data blocks.
+- the key/value pairs produced by the user-defined map operation can be sent to an internal shuffle unit (214).
+- the internal shuffle unit (214) can distribute the key/value pairs across multiple output threads (230), sending each key/value pair to a particular output thread destination based on its key.
+- each map worker should have more than one output thread to provide for parallel computing and prevent bottlenecks in applications with large amounts of map output.
+- the map worker can produce output in parallel which improves performance for Input/Output bound jobs, particularly when a large amount of data must be flushed at the end of a collection of data blocks processed as a larger unit.
+- the output threads (230aa 230mn) will output the intermediate key/value pairs to intermediate data blocks (206a...206m).
+- Each output thread typically writes to a subset of the intermediate data blocks, so shuffler processes consume larger reads from fewer map output sources.
+- FIG. 3 shows that, in some instances, each input thread (312) can execute an input flow (302) that consumes input and produces output.
+- An input flow (302) can have multiple flow processes to input (read) (304) and map (306) input data blocks into key/value pairs using a user-defined, application-specific map operation.
+- the input flow (302) then passes the key/value pairs through an internal shuffle unit (320) to output threads (330).
+- the map worker's internal shuffle unit should have a set of input ports (350), one per input thread, and a set of output ports (360), one per output thread.
+- the input ports (350) contain buffers to which only the input threads write.
+- the output ports contain buffers that are only read by the output threads.
+- the job of the internal shuffle unit (320) is to move the key/value pairs from the input ports (350) to the appropriate output ports (360).
+- the internal shuffle unit (320) could send each incoming key/value pair to the appropriate output port immediately.
+- this implementation may result in lock contention.
+- each input port to the internal shuffle unit (320) has a buffer and only moves key/value pairs to an output port when a large number of key/value pairs have been buffered. This move is done in such a way as to avoid, if possible, the input buffer from filling completely and to avoid, if possible, the output buffer from emptying completely, since either condition would block the corresponding input or output thread.
+- the buffer/move process happens repeatedly for each input port and output port until all input data has been consumed by the input thread, at which point all buffered data is flushed to the output threads.
+- Each unique key is shuffled to exactly one reduce task, which is responsible for taking all of the values for that key from different map output blocks from all map workers and producing a final value.
+- the internal shuffle unit consistently routes each key /value pair produced by an input thread to one particular output thread based on its key. This routing ensures that each output thread produces key/value pairs for a particular, non- overlapping, subset of the reduce processes.
+- the internal shuffle unit (320) uses modulus-based indexing to choose the appropriate output port in which to send key /value pairs.
+- the internal shuffle unit might send all key/value pairs corresponding to even-numbered reduce tasks to thread 1 and all key/value pairs corresponding to odd-numbered reduce tasks to thread 2.
+- This modulus- based indexing ensures that all values for a given key are put in the same output thread for maximum combining.
+- Each output thread (330) is responsible for an output flow (340), which can optionally accumulate (308) and/or combine (310) the intermediate key/value pairs before buffering the key/value pairs in the output unit (312) and writing data blocks containing these pairs to disk.
+- a multiblock accumulator may be associated with each output thread (330).
+- the multiblock accumulator can accumulate key/value pairs. It can also update the values associated with any key and even create new keys.
+- the multiblock accumulator maintains a running tally of key/value pairs, updating the appropriate state as each key/value pair arrives. For example, in the word count application discussed above, the multiblock accumulator can increase a count value associated with a key as it receives new key/value pairs for that key.
+- the multiblock accumulator could keep the count of word occurrences and also keep a list of the ten (10) longest words seen.
+- the multiblock accumulator may hold all of the keys and accumulated values in memory until all of the input data blocks have been processed, at which time the multiblock accumulator may output the key/value pairs to be shuffled and sent to reducers, or optionally to a multiblock combiner for further combining before being shuffled and reduced. If all key/value pairs do not fit in the memory of the multiblock accumulator, the multiblock accumulator may periodically flush its key/value pairs as map output, to a multiblock combiner or directly to be shuffled.
+- each output thread may contain a multiblock combiner (310).
+- a multiblock combiner in the conventional system could accumulate and combine, the multiblock combiner in the exemplary system only combines values associated with a given key across the input data blocks processed by the input threads (312) of a specific map worker.
+- a map worker can decrease the amount of data that has to be shuffled and reduced by a reduce worker.
+- the multiblock combiner (310) buffers intermediate key/value pairs, which are then grouped by key and partially combined by a combine function.
+- the partial combining performed by the multiblock combiner may speed up certain classes of parallel data processing operations, in part by significantly reducing the amount of information to be conveyed from the map workers to the reduce workers, and in part by reducing the complexity and computation time required by the data sorting and reduce functions performed by the reduce tasks.
+- the multiblock combiner (310) may produce output on the fly as it receives input from the internal shuffle unit.
+- the multiblock combiner can include memory management functionality for generating output as memory is consumed.
+- the multiblock combiner may produce output after processing one or more of the key /value pairs from the internal shuffle unit or upon receiving a Flush() command for committing data in memory to storage.
+- the multiblock combiner can generate intermediate data blocks, which may be more compact than blocks generated by a combiner that only combines values for a single output block.
+- the intermediate data block includes key/value pairs produced by the multiblock combiner after processing multiple input data blocks together.
+- the intermediate key/value pairs produced by a map worker's map threads (312) can be grouped together by keys using the map worker's multiblock combiner (310). Therefore, the intermediate key/value pairs do not have to be sent to the reduce workers separately.
+- the multiblock combiner may generate pairs of keys and combined values after all blocks in the set of input data blocks are processed. For example, upon receiving key/value pairs from a map thread for one of the input data blocks, the multiblock combiner may maintain the pairs in memory or storage until receiving key/value pairs for the remaining input data blocks. In some implementations, the keys and combined values can be maintained in a hash table or vector. After receiving key/value pairs for all of the input data blocks, the multiblock combiner may apply combining operations on the key/value pairs to produce a set of keys, each with associated combined values.
+- the multiblock combiner produce a combined count associated with each key.
+- maximum combining may be achieved if the multiblock combiner can hold all keys and combined values in memory until all input data blocks are processed.
+- the multiblock combiner may produce output at other times by flushing periodically due to memory limitations.
+- the multiblock combiner may iterate over the keys in a memory data structure, and may produce a combined key/value pair for each key.
+- the multiblock combiner may choose to flush different keys at different times, based on key properties such as size or frequency. For example, only rare keys may be flushed when the memory data structure becomes large, while more common keys may be kept in memory until a final Flush() command.
+- Map workers, accumulators, and combiners do not need to be prepared to accept concurrent calls from multiple threads.
+- Each input thread (312) has its own map unit (306) and each output thread (330) may have its own multiblock accumulator (308) and/or multiblock combiner (310).
+- FIG. 4 illustrates an exemplary method for parallel processing of data according to aspects of the inventive concepts.
+- the method begins with executing a set of map processes (402).
+- Data input blocks are assigned to each map process (404).
+- a data block is read by at least one input thread of the map process (406).
+- Key/value pairs are parsed from the records within a data block (408).
+- a user-defined, application-specific map operation is then applied to key/value pairs to produce intermediate key/value pairs from the input thread (410).
+- the intermediate key/value pairs produced by the input thread are sent to an internal shuffle unit (412). Using the internal shuffle unit, the key/value pairs are distributed across multiple output threads with individual key/value pairs being sent to specific output threads (414).
+- the key/value pairs can be optionally accumulated and/or combined (416).
+- Multiblock accumulators can be used to perform the accumulating.
+- Multiblock combiners may do the combining.
+- multiple map output files are written from the key/value pairs produced by the multiple output threads (418).
+- the exemplary method can use the shuffle/reduce process discussed in the conventional system to further process and reduce data.
+- FIG. 5 is a block diagram illustrating an example of a datacenter (500).
+- the data center (500) is used to store data, perform computational tasks, and transmit data to other systems outside of the datacenter using, for example, a network connected to the datacenter.
+- the datacenter (500) may perform large-scale data processing on massive amounts of data.
+- the datacenter (500) includes multiple racks (502). While only two racks are shown, the datacenter (500) may have many more racks.
+- Each rack (502) can include a frame or cabinet into which components, such as processing modules (504), are mounted.
+- each processing module (504) can include a circuit board, such as a motherboard, on which a variety of computer-related components are mounted to perform data processing.
+- the processing modules (504) within each rack (502) are interconnected to one another through, for example, a rack switch, and the racks (502) within each datacenter (500) are also interconnected through, for example, a datacenter switch.
+- the processing modules (504) may each take on a role as a master or worker.
+- the master modules control scheduling and data distribution tasks among themselves and the workers.
+- a rack can include storage, like one or more network attached disks, that is shared by the one or more processing modules (504) and/or each processing module (504) may include its own storage. Additionally, or alternatively, there may be remote storage connected to the racks through a network.
+- the datacenter (500) may include dedicated optical links or other dedicated communication channels, as well as supporting hardware, such as modems, bridges, routers, switches, wireless antennas and towers.
+- the datacenter (500) may include one or more wide area networks (WANs) as well as multiple local area networks (LANs).
+- WANs wide area networks
+- LANs local area networks
+- FIG. 6 is a block diagram illustrating an example computing device (600) that is arranged for parallel processing of data and may be used for one or more of the processing modules (504).
+- the computing device (600) typically includes one or more processors (610) and system memory (620).
+- a memory bus (630) can be used for communicating between the processor (610) and the system memory (620).
+- the processor (610) can be of any type including but not limited to a microprocessor ( ⁇ ), a microcontroller ( ⁇ ), a digital signal processor (DSP), or any combination thereof.
+- the processor (610) can include one more levels of caching, such as a level one cache (611) and a level two cache (612), a processor core (613), and registers (614).
+- the processor core (613) can include an arithmetic logic unit (ALU), a floating point unit (FPU), a digital signal processing core (DSP Core), or any combination thereof.
+- a memory controller (616) can also be used with the processor (610), or in some implementations the memory controller (615) can be an internal part of the processor (610).
+- system memory (620) can be of any type including but not limited to volatile memory (604) (such as RAM), non-volatile memory (603) (such as ROM, flash memory, etc.) or any combination thereof.
+- System memory (620) typically includes an operating system (621), one or more applications (622), and program data (624).
+- the application (622) includes an application that can perform large-scale data processing using parallel processing.
+- Program Data (624) includes storing instructions that, when executed by the one or more processing devices, implement a set of map processes and a set of reduce processes. In some embodiments, the application (622) can be arranged to operate with program data (624) on an operating system (621).
+- the computing device (600) can have additional features or functionality, and additional interfaces to facilitate communications between the basic configuration (601) and any required devices and interfaces.
+- a bus/interface controller (640) can be used to facilitate communications between the basic configuration (601) and one or more data storage devices (650) via a storage interface bus (641).
+- the data storage devices (650) can be removable storage devices (651), non-removable storage devices (652), or a combination thereof. Examples of removable storage and non-removable storage devices include magnetic disk devices such as flexible disk drives and hard-disk drives (HDD), optical disk drives such as compact disk (CD) drives or digital versatile disk (DVD) drives, solid state drives (SSD), and tape drives to name a few.
+- Example computer storage media can include volatile and nonvolatile, removable and non-removable media implemented in any method or technology for storage of information, such as computer readable instructions, data structures, program modules, or other data.
+- System memory (620), removable storage (651), and non-removable storage (652) are all examples of computer storage media.
+- Computer storage media includes, but is not limited to, RAM, ROM, EEPROM, flash memory or other memory technology, CD- ROM, digital versatile disks (DVD) or other optical storage, magnetic cassettes, magnetic tape, magnetic disk storage or other magnetic storage devices, or any other medium which can be used to store the desired information and which can be accessed by computing device 600. Any such computer storage media can be part of the device (600).
+- the computing device (600) can be implemented as a portion of a small-form factor portable (or mobile) electronic device such as a cell phone, a personal data assistant (PDA), a personal media player device, a wireless web-watch device, a personal headset device, an application-specific device, or a hybrid device that include any of the above functions.
+- a small-form factor portable (or mobile) electronic device such as a cell phone, a personal data assistant (PDA), a personal media player device, a wireless web-watch device, a personal headset device, an application-specific device, or a hybrid device that include any of the above functions.
+- PDA personal data assistant
+- the computing device (600) can also be implemented as a personal computer including both laptop computer and non-laptop computer configurations.
+- Examples of a signal bearing medium include, but are not limited to, the following: a recordable type medium such as a floppy disk, a hard disk drive, a Compact Disc (CD), a Digital Video Disk (DVD), a digital tape, a computer memory, etc.; and a transmission type medium such as a digital and/or an analog communication medium, (e.g., a fiber optic cable, a waveguide, a wired communications link, a wireless communication link, etc.)
+Abstract
+Parallel data processing may include map and reduce processes. Map processes may include at least one input thread (212aa-212mn) and at least one output thread (230aa-230mn). Input threads (212aa-212mn) may apply map operations to produce key/value pairs from input data blocks. These pairs may be sent to internal shuffle units (214a-214m) which distribute the pairs, sending specific pairs to particular output threads (230aa-230mn). Output threads (230aa-230mn) may include multiblock accumulators to accumulate and/or multiblock combiners to combine values associated with common keys in the key/value pairs. Output threads (230aa-230mn) can output intermediate pairs of keys and combined values. Reduce processes (208a-208m) may access intermediate key/value pairs using multiple input threads. Reduce operations may be applied to the combined values associated with each key. Reduce processes (208a-208m) may contain internal shuffle units that distributes key/value pairs and sends specific pairs to particular output threads. These threads produce the final output (210a-210m).
+Description
+A SYSTEM AND METHOD FOR A MAP FLOW WORKER
+BACKGROUND
+[0001 ] Large-scale data processing may include extracting records from data blocks within data sets and processing them into key/value pairs. The implementation of large-scale data processing may include the distribution of data and computations among multiple disks and processors to make use of aggregate storage space and computing power. A parallel processing system may include one or more processing devices and one or more storage devices. Storage devices may store instructions that, when executed by the one or more processing devices, implement a set of map processes and a set of reduce processes.
+SUMMARY
+[0002] This specification describes technologies relating to parallel processing of data, and specifically a system and a computer-implemented method for parallel processing of data that improves control over multithreading, consolidates map output, thereby improving data locality and reducing disk seeks, and decreases the aggregate amount of data that needs to be sent over a network and/or read from disk and processed by later stages in comparison to a conventional parallel processing system.
+[0003] In general, one aspect of the subject matter described in this specification can be embodied in a method and system that includes one or more processing devices and one or more storage devices. The storage devices store instructions that, when executed by the one or more processing devices, implement a set of map processes. Each map process includes: at least one map input thread, which accesses and reads an input data block assigned to the map process, parses key/value pairs from the input data block, and applies a map operation to the key/value pairs from the input data block to produce intermediate key/value pairs; an internal shuffle unit that distributes the key /value pairs and directs individual key/value pairs to at least one specific output thread; and a plurality of map output threads to receive key /value pairs from the internal shuffle unit and write the key/value pairs as map output.
+[0004] These and other embodiments can optionally include one or more of the following features. For example, the number of input threads and output threads may be configurable. The number of input threads and output threads may be configurable, but specified independently of one another. The internal shuffle unit may send a key/value pair
+to a specific output thread based on the key. At least one output thread may accumulate key /value pairs using a multiblock accumulator before writing map output. Output threads may optionally use multiblock combiners to combine key/value pairs before writing map output. The output threads may also use both a multiblock accumulator and a multiblock combiner before writing map output. The system may further include a set of reduce processes where each reduce process accesses at least a subset of the intermediate key/value pairs output by the map processes and apply a reduce operation to the values associated with a specific key to produce reducer output. The internal shuffle unit may send a key/value pair to a specific output thread based on an association of a specific key to an output thread which is defined based on a particular subset of the reduce processes.
+[0005] The details of one or more embodiments of the invention are set forth in the accompanying drawings which are given by way of illustration only, and the description below. Other features, aspects, and advantages of the invention will become apparent from the description, the drawings, and the claims. Like reference numbers and designations in the various drawings indicate like elements.
+BRIEF DESCRIPTION OF THE DRAWINGS
+[0006] FIG. 1 is a block diagram illustrating an exemplary parallel data processing system.
+[0007] FIG. 2 is a block diagram illustrating an exemplary embodiment of the invention
+[0008] FIG. 3 is a block diagram illustrating an exemplary map worker
+[0009] FIG. 4 is a flow diagram illustrating an exemplary method for parallel processing of data using input threads, an internal shuffle unit, and multiple output threads.
+[0010] FIG. 5 is a block diagram illustrating an example of a datacenter.
+[001 1 ] FIG. 6 is a block diagram illustrating an exemplary computing device.
+DETAILED DESCRIPTION
+[0012] A conventional system for parallel data processing, commonly called the MapReduce model, is described in detail in MapReduce: Simplified Data Processing on Large Clusters, OSDI'04: Sixth Symposium on Operating System Design and
+Implementation, San Francisco, CA, December, 2004 and U.S. Patent No. 7, 650, 331 and
+incorporated by reference. Certain modifications to the MapReduce system are described in patent application 13/191, 703 for Parallel Processing of Data.
+[001 3] FIG. 1 illustrates an exemplary parallel data processing system. The system receives a data set as input (102), divides the data set into data blocks (101), parses the data blocks into key/value pairs, sends key/value pairs through a user-defined map function to create a set of intermediate key/value pairs (106a....106m), and reduces the key/value pairs by combining values associated with the same key to produce a final value for each key.
+[0014] In order to produce a final value for each key, the conventional system performs several steps. First, the system splits the data sets into input data blocks (101). The division of an input data set (102) into data blocks (101) can be handled automatically by application independent code. Alternately, the system user may specify the size of the shards into which the data sets are divided.
+[001 5] As illustrated in FIG. 1, the system includes a master (120) that may assign workers (104, 108) specific tasks. Workers can be assigned map tasks, for parsing and mapping key/value pairs (104a... 104m), and/or reduce tasks, for combining key/value pairs (108a... 108m). Although FIG. 1 shows certain map workers (104a.... 104m) and certain reduce workers (108a... 108m), any worker can be assigned both map tasks and reduce tasks.
+[001 6] Workers may have one or more map threads (112aa... 112nm) to perform their assigned tasks. For example, a worker may be assigned multiple map tasks in parallel. A worker can assign a distinct thread to execute each map task. This map worker (104) can invoke a map thread (112aa...112an) to read, parse, and apply a user-defined, application- specific map operation to a data block (101). In FIG. 1, each map worker can handle n map tasks in parallel (112an, 112bn, 112mn).
+[001 7] Map threads (112aa... 112nm) parse key/value pairs out of input data blocks (101) and pass each key/value pair to a user-defined, application- specific map operation. The map worker (104) then applies the user-defined map operation to produce zero or more intermediate key/value pairs, which are written to intermediate data blocks (106a....106m)
+[001 8] As illustrated in FIG. 1, using a multiblock combiner (118a...118m), values associated with a given key can be accumulated and/or combined across the input data blocks processed by the input threads (112aa... l l2mn) of a specific map worker (104) before the map worker outputs key/value pairs.
+[001 9] The intermediate data blocks produced by the map workers (104) are buffered in memory within the multiblock combiner and periodically written to intermediate data blocks on disk (106a...106m). The master is passed the locations of metadata, which in turn contains the locations of the intermediate data blocks. The metadata is also directly forwarded from the map workers to the reduce workers (108). If a map worker fails to send the location metadata, the master tasks a different map worker with sending the metadata and provides that map worker with the information on how to find the metadata.
+[0020] When a reduce worker (108) is notified about the locations of the intermediate data blocks, the reduce worker (108) shuffles the data blocks (106a... 106m) from the local disks of the map workers. Shuffling is the act of reading the intermediate key/value pairs from the data blocks into a large buffer, sorting the buffer by key, and writing the buffer to a file. The reduce worker (108) then does a merge sort of all the sorted files at once to present the key/value pairs ordered by key to the user-defined, application-specific reduce function.
+[0021 ] After sorting, the reduce worker (108) iterates over the sorted intermediate key/value pairs. For each unique intermediate key encountered, the reduce worker (108) passes the key and an iterator, which provides access to the sequence of all values associated with the given key, to the user-defined reduce function. The output of the reduce function is written to a final output file. After successful completion, the output of the parallel processing of data system is available in the output data files (110), with one file per reduce task.
+[0022] A conventional system may be used to count the number of occurrences of each word in a large collection of documents. The system may take the collection of documents as the input data set. The system may divide the collection of documents into data blocks. A user could write a map function that can be applied to each of the records within a particular data block in order for a set of intermediate key/value pairs to be computed from the data block. The map function could be represented as:
+map (String key, String value)
+[0023] The function may take in a document name as a key and the document' s contents as the value.
+[0024] This function can recognize a specific word in the document's contents. For each word, w, in the document's contents, the function could produce the word count, 1, and output the key/value pair (w, 1).
+[0025] The map function may be defined as follows:
+map(String key, String value)
+//key: document name
+//value: document's contents
+for each word w in value:
+Emitlntermediate(w, 1);
+[0026] A map worker can process several input data blocks at the same time using multiple input threads. Once the map worker's input threads parse key/value pairs from the input data blocks, the map worker can accumulate and/or combine values associated with a given key across the input data blocks processed by the map worker's input threads. A user could write a combine function that combines some of the word counts produced by the map function into larger values to reduce the amount of data that needs to be transferred during shuffling and the number of values that need to be processed by the reduce process.
+[0027] A multiblock combiner may be used to combine map output streams from multiple map threads within a map process. For example, the output from one input thread (112a) could be ("you, 1"), ("know, 1"), and ("you, 1"). A second input thread (112b) could have the output, ("could, 1"), and a third input thread (112c) could produce ("know, 1") as output. The multiblock combiner can combine the outputs from these three threads to produce the output: ("could, 1"), ("you, 2"), and ("know, 2").
+[0028] The combine function may be defined as follows:
+Combine(String key, Iterator values):
+//key: a word
+//values: a list of counts
+int result = 0;
+for each v in values:
+result += Parselnt(v);
+Emit (key, AsString(result));
+[0029] The key/value pairs produced by the map workers are called intermediate key/value pairs because the key/value pairs are not yet reduced. These key/value pairs are grouped together according to distinct key by a reduce worker's (108) shuffle process. This shuffle process takes the key/value pairs produced by the map workers and groups together
+all the key/value pairs with the same key. The shuffle process then produces a distinct key and a stream of all the values associated with that key for the reduce function to use.
+[0030] In the word count example, the reduce function could sum together all word counts emitted from map workers for a particular word and output the total word count per word for the entire collection of documents.
+[0031 ] The reduce function may be defined as follows:
+reduce (String key, Iterator values):
+//key: a word
+//values: a list of counts
+int result = 0;
+for each v in values:
+result += Parselnt(v);
+Emit (key, AsString(result));
+[0032] After successful completion, the total word count per word per document for the entire collection of documents is written to a final output file (110) with one file per reduce task.
+[0033] A noticeable problem with the conventional system is that the accumulation, combination, and production of output for an entire collection of data blocks processed by a map worker is normally accomplished with a single output thread (122a). Having only one output thread is a bottleneck for applications with large amounts of map worker output because it limits parallelism in the combining step as well as the output bandwidth.
+[0034] In an exemplary embodiment as illustrated by FIG. 2, a map worker (204) can be constructed to include multiple output threads, which allow for accumulating and combining across multiple input data blocks. In order to have multiple output threads that can accumulate and combine, the map worker (204) should also include an internal shuffle unit (214), which is described below.
+[0035] In some instances, as shown in FIG. 2, the map worker (204) may access one or more input data blocks (201) partitioned from the input data set (202) and may perform map tasks for each of the input data blocks. FIG. 2 illustrates that, in an exemplary embodiment, data blocks can either be processed by a single input thread one data block at a time, or some or all of the data blocks can be processed by different input threads in parallel. In order to process data blocks in parallel, the map worker (204) can have multiple input
+threads (212) with each map input thread (212) performing map tasks for one or more input data blocks (201).
+[0036] The number of map input and output threads can be specified independently. For example, an application (290) that does not support concurrent mapping in a single worker can set the number of input threads to 1 , but still take advantage of multiple output threads. Similarly, an application (290) that does not support concurrent combining can set the number of output threads to 1, but still take advantage of multiple input threads.
+[0037] As discussed above, a map worker input thread (212) can parse key/value pairs from input data blocks and pass each key/value pair to a user-defined, application- specific map operation. The user-defined map operation can produce zero or more key/value pairs from the records in the input data blocks.
+[0038] The key/value pairs produced by the user-defined map operation can be sent to an internal shuffle unit (214). The internal shuffle unit (214) can distribute the key/value pairs across multiple output threads (230), sending each key/value pair to a particular output thread destination based on its key.
+[0039] As illustrated in FIG. 2, each map worker should have more than one output thread to provide for parallel computing and prevent bottlenecks in applications with large amounts of map output. With multiple output threads, the map worker can produce output in parallel which improves performance for Input/Output bound jobs, particularly when a large amount of data must be flushed at the end of a collection of data blocks processed as a larger unit. The output threads (230aa 230mn) will output the intermediate key/value pairs to intermediate data blocks (206a...206m). Each output thread typically writes to a subset of the intermediate data blocks, so shuffler processes consume larger reads from fewer map output sources. As a result, the output from the map worker is less fragmented, leading to more efficient shuffling than would be achieved if each output thread produced output for each data block. This benefit occurs even if there is no accumulator or combiner, and, due to the internal shuffle unit, in spite of potentially having many parallel output threads per map worker.
+[0040] FIG. 3 shows that, in some instances, each input thread (312) can execute an input flow (302) that consumes input and produces output. An input flow (302) can have multiple flow processes to input (read) (304) and map (306) input data blocks into key/value
+pairs using a user-defined, application-specific map operation. The input flow (302) then passes the key/value pairs through an internal shuffle unit (320) to output threads (330).
+[0041 ] The map worker's internal shuffle unit should have a set of input ports (350), one per input thread, and a set of output ports (360), one per output thread. The input ports (350) contain buffers to which only the input threads write. The output ports contain buffers that are only read by the output threads.
+[0042] The job of the internal shuffle unit (320) is to move the key/value pairs from the input ports (350) to the appropriate output ports (360). In a simple implementation, the internal shuffle unit (320) could send each incoming key/value pair to the appropriate output port immediately. However, this implementation may result in lock contention.
+[0043] In other implementations, each input port to the internal shuffle unit (320) has a buffer and only moves key/value pairs to an output port when a large number of key/value pairs have been buffered. This move is done in such a way as to avoid, if possible, the input buffer from filling completely and to avoid, if possible, the output buffer from emptying completely, since either condition would block the corresponding input or output thread. The buffer/move process happens repeatedly for each input port and output port until all input data has been consumed by the input thread, at which point all buffered data is flushed to the output threads.
+[0044] Each unique key is shuffled to exactly one reduce task, which is responsible for taking all of the values for that key from different map output blocks from all map workers and producing a final value. The internal shuffle unit consistently routes each key /value pair produced by an input thread to one particular output thread based on its key. This routing ensures that each output thread produces key/value pairs for a particular, non- overlapping, subset of the reduce processes. In some instances, the internal shuffle unit (320) uses modulus-based indexing to choose the appropriate output port in which to send key /value pairs. For example, if there are two (2) output threads, the internal shuffle unit might send all key/value pairs corresponding to even-numbered reduce tasks to thread 1 and all key/value pairs corresponding to odd-numbered reduce tasks to thread 2. This modulus- based indexing ensures that all values for a given key are put in the same output thread for maximum combining.
+[0045] In other instances, the appropriate output port is chosen by taking into account load-balancing and/or application- specific features.
+[0046] Each output thread (330) is responsible for an output flow (340), which can optionally accumulate (308) and/or combine (310) the intermediate key/value pairs before buffering the key/value pairs in the output unit (312) and writing data blocks containing these pairs to disk.
+[0047] Instead of holding the key/value pairs produced by the map input threads individually in memory prior to combining via a multiblock combiner, a multiblock accumulator (308) may be associated with each output thread (330). The multiblock accumulator can accumulate key/value pairs. It can also update the values associated with any key and even create new keys. The multiblock accumulator maintains a running tally of key/value pairs, updating the appropriate state as each key/value pair arrives. For example, in the word count application discussed above, the multiblock accumulator can increase a count value associated with a key as it receives new key/value pairs for that key. The multiblock accumulator could keep the count of word occurrences and also keep a list of the ten (10) longest words seen. If all keys can be held in memory, the multiblock accumulator may hold all of the keys and accumulated values in memory until all of the input data blocks have been processed, at which time the multiblock accumulator may output the key/value pairs to be shuffled and sent to reducers, or optionally to a multiblock combiner for further combining before being shuffled and reduced. If all key/value pairs do not fit in the memory of the multiblock accumulator, the multiblock accumulator may periodically flush its key/value pairs as map output, to a multiblock combiner or directly to be shuffled.
+[0048] In addition to a multiblock accumulator, each output thread may contain a multiblock combiner (310). Although a multiblock combiner in the conventional system could accumulate and combine, the multiblock combiner in the exemplary system only combines values associated with a given key across the input data blocks processed by the input threads (312) of a specific map worker. By using a multiblock combiner to group key values, a map worker can decrease the amount of data that has to be shuffled and reduced by a reduce worker.
+[0049] In some implementations, the multiblock combiner, (310) buffers intermediate key/value pairs, which are then grouped by key and partially combined by a combine function. The partial combining performed by the multiblock combiner may speed up certain classes of parallel data processing operations, in part by significantly reducing the amount of information to be conveyed from the map workers to the reduce workers, and in part by
+reducing the complexity and computation time required by the data sorting and reduce functions performed by the reduce tasks.
+[0050] In other implementations, the multiblock combiner (310) may produce output on the fly as it receives input from the internal shuffle unit. For example, the multiblock combiner can include memory management functionality for generating output as memory is consumed. The multiblock combiner may produce output after processing one or more of the key /value pairs from the internal shuffle unit or upon receiving a Flush() command for committing data in memory to storage. By combining values for duplicate keys across multiple input data blocks, the multiblock combiner can generate intermediate data blocks, which may be more compact than blocks generated by a combiner that only combines values for a single output block. In general, the intermediate data block includes key/value pairs produced by the multiblock combiner after processing multiple input data blocks together.
+[0051 ] For example, when multiple input data blocks include common keys, the intermediate key/value pairs produced by a map worker's map threads (312) can be grouped together by keys using the map worker's multiblock combiner (310). Therefore, the intermediate key/value pairs do not have to be sent to the reduce workers separately.
+[0052] In some cases, such as when the multiblock combiner (310) can hold key /value pairs in memory until the entire input data blocks are processed, the multiblock combiner may generate pairs of keys and combined values after all blocks in the set of input data blocks are processed. For example, upon receiving key/value pairs from a map thread for one of the input data blocks, the multiblock combiner may maintain the pairs in memory or storage until receiving key/value pairs for the remaining input data blocks. In some implementations, the keys and combined values can be maintained in a hash table or vector. After receiving key/value pairs for all of the input data blocks, the multiblock combiner may apply combining operations on the key/value pairs to produce a set of keys, each with associated combined values.
+[0053] For example, in the word count application discussed above, the multiblock combiner produce a combined count associated with each key. Generally, maximum combining may be achieved if the multiblock combiner can hold all keys and combined values in memory until all input data blocks are processed.
+[0054] However, the multiblock combiner may produce output at other times by flushing periodically due to memory limitations. In some implementations, upon receiving a
+Flush() call, the multiblock combiner may iterate over the keys in a memory data structure, and may produce a combined key/value pair for each key. In some cases, the multiblock combiner may choose to flush different keys at different times, based on key properties such as size or frequency. For example, only rare keys may be flushed when the memory data structure becomes large, while more common keys may be kept in memory until a final Flush() command.
+[0055] The key/value pairs produced after the multiblock accumulator and/or multiblock combiner executes are then buffered in memory and periodically written to intermediate data blocks on disk as depicted in FIG. 2 (206a....206m).
+[0056] Map workers, accumulators, and combiners do not need to be prepared to accept concurrent calls from multiple threads. Each input thread (312) has its own map unit (306) and each output thread (330) may have its own multiblock accumulator (308) and/or multiblock combiner (310).
+[0057] FIG. 4 illustrates an exemplary method for parallel processing of data according to aspects of the inventive concepts. The method begins with executing a set of map processes (402). Data input blocks are assigned to each map process (404). A data block is read by at least one input thread of the map process (406). Key/value pairs are parsed from the records within a data block (408). A user-defined, application-specific map operation is then applied to key/value pairs to produce intermediate key/value pairs from the input thread (410). The intermediate key/value pairs produced by the input thread are sent to an internal shuffle unit (412). Using the internal shuffle unit, the key/value pairs are distributed across multiple output threads with individual key/value pairs being sent to specific output threads (414). Within the output threads, the key/value pairs can be optionally accumulated and/or combined (416). Multiblock accumulators can be used to perform the accumulating. Multiblock combiners may do the combining. Finally, multiple map output files are written from the key/value pairs produced by the multiple output threads (418). The exemplary method can use the shuffle/reduce process discussed in the conventional system to further process and reduce data.
+[0058] Although an exemplary embodiment defines a map worker that has multiple input threads, an internal shuffle unit, and multiple output threads, any worker in this parallel data processing system, including reduce workers, can have multiple input threads, an internal shuffle unit, and multiple output threads.
+[0059] FIG. 5 is a block diagram illustrating an example of a datacenter (500). The data center (500) is used to store data, perform computational tasks, and transmit data to other systems outside of the datacenter using, for example, a network connected to the datacenter. In particular, the datacenter (500) may perform large-scale data processing on massive amounts of data.
+[0060] The datacenter (500) includes multiple racks (502). While only two racks are shown, the datacenter (500) may have many more racks. Each rack (502) can include a frame or cabinet into which components, such as processing modules (504), are mounted. In general, each processing module (504) can include a circuit board, such as a motherboard, on which a variety of computer-related components are mounted to perform data processing. The processing modules (504) within each rack (502) are interconnected to one another through, for example, a rack switch, and the racks (502) within each datacenter (500) are also interconnected through, for example, a datacenter switch.
+[0061 ] In some implementations, the processing modules (504) may each take on a role as a master or worker. The master modules control scheduling and data distribution tasks among themselves and the workers. A rack can include storage, like one or more network attached disks, that is shared by the one or more processing modules (504) and/or each processing module (504) may include its own storage. Additionally, or alternatively, there may be remote storage connected to the racks through a network.
+[0062] The datacenter (500) may include dedicated optical links or other dedicated communication channels, as well as supporting hardware, such as modems, bridges, routers, switches, wireless antennas and towers. The datacenter (500) may include one or more wide area networks (WANs) as well as multiple local area networks (LANs).
+[0063] FIG. 6 is a block diagram illustrating an example computing device (600) that is arranged for parallel processing of data and may be used for one or more of the processing modules (504). In a very basic configuration (601), the computing device (600) typically includes one or more processors (610) and system memory (620). A memory bus (630) can be used for communicating between the processor (610) and the system memory (620).
+[0064] Depending on the desired configuration, the processor (610) can be of any type including but not limited to a microprocessor (μΡ), a microcontroller (μθ), a digital signal processor (DSP), or any combination thereof. The processor (610) can include one more levels of caching, such as a level one cache (611) and a level two cache (612), a
+processor core (613), and registers (614). The processor core (613) can include an arithmetic logic unit (ALU), a floating point unit (FPU), a digital signal processing core (DSP Core), or any combination thereof. A memory controller (616) can also be used with the processor (610), or in some implementations the memory controller (615) can be an internal part of the processor (610).
+[0065] Depending on the desired configuration, the system memory (620) can be of any type including but not limited to volatile memory (604) (such as RAM), non-volatile memory (603) (such as ROM, flash memory, etc.) or any combination thereof. System memory (620) typically includes an operating system (621), one or more applications (622), and program data (624). The application (622) includes an application that can perform large-scale data processing using parallel processing. Program Data (624) includes storing instructions that, when executed by the one or more processing devices, implement a set of map processes and a set of reduce processes. In some embodiments, the application (622) can be arranged to operate with program data (624) on an operating system (621).
+[0066] The computing device (600) can have additional features or functionality, and additional interfaces to facilitate communications between the basic configuration (601) and any required devices and interfaces. For example, a bus/interface controller (640) can be used to facilitate communications between the basic configuration (601) and one or more data storage devices (650) via a storage interface bus (641). The data storage devices (650) can be removable storage devices (651), non-removable storage devices (652), or a combination thereof. Examples of removable storage and non-removable storage devices include magnetic disk devices such as flexible disk drives and hard-disk drives (HDD), optical disk drives such as compact disk (CD) drives or digital versatile disk (DVD) drives, solid state drives (SSD), and tape drives to name a few. Example computer storage media can include volatile and nonvolatile, removable and non-removable media implemented in any method or technology for storage of information, such as computer readable instructions, data structures, program modules, or other data.
+[0067] System memory (620), removable storage (651), and non-removable storage (652) are all examples of computer storage media. Computer storage media includes, but is not limited to, RAM, ROM, EEPROM, flash memory or other memory technology, CD- ROM, digital versatile disks (DVD) or other optical storage, magnetic cassettes, magnetic tape, magnetic disk storage or other magnetic storage devices, or any other medium which
+can be used to store the desired information and which can be accessed by computing device 600. Any such computer storage media can be part of the device (600).
+[0068] The computing device (600) can be implemented as a portion of a small-form factor portable (or mobile) electronic device such as a cell phone, a personal data assistant (PDA), a personal media player device, a wireless web-watch device, a personal headset device, an application-specific device, or a hybrid device that include any of the above functions. The computing device (600) can also be implemented as a personal computer including both laptop computer and non-laptop computer configurations.
+[0069] The foregoing detailed description has set forth various embodiments of the devices and/or processes via the use of block diagrams, flowcharts, and/or examples. Insofar as such block diagrams, flowcharts, and/or examples contain one or more functions and/or operations, it will be understood by those within the art that each function and/or operation within such block diagrams, flowcharts, or examples can be implemented, individually and/or collectively, by a wide range of hardware, software, firmware, or virtually any combination thereof. In one embodiment, several portions of the subject matter described herein may be implemented via Application Specific Integrated Circuits (ASICs), Field Programmable Gate Arrays (FPGAs), digital signal processors (DSPs), or other integrated formats. However, those skilled in the art will recognize that some aspects of the embodiments disclosed herein, in whole or in part, can be equivalently implemented in integrated circuits, as one or more computer programs running on one or more computers (e.g., as one or more programs running on one or more computer systems), as one or more programs running on one or more processors (e.g., as one or more programs running on one or more microprocessors), as firmware, or as virtually any combination thereof, and that designing the circuitry and/or writing the code for the software and or firmware would be well within the skill of one of skill in the art in light of this disclosure. In addition, those skilled in the art will appreciate that the mechanisms of the subject matter described herein are capable of being distributed as a program product in a variety of forms, and that an illustrative embodiment of the subject matter described herein applies regardless of the particular type of signal bearing medium used to actually carry out the distribution. Examples of a signal bearing medium include, but are not limited to, the following: a recordable type medium such as a floppy disk, a hard disk drive, a Compact Disc (CD), a Digital Video Disk (DVD), a digital tape, a computer memory, etc.; and a transmission type medium such as a digital and/or an analog communication
+medium, (e.g., a fiber optic cable, a waveguide, a wired communications link, a wireless communication link, etc.)
+[0070] With respect to the use of substantially any plural and/or singular terms herein, those having skill in the art can translate from the plural to the singular and/or from the singular to the plural as is appropriate to the context and/or application. The various singular/plural permutations may be expressly set forth herein for sake of clarity.
+[0071 ] Thus, particular embodiments of the subject matter have been described.
+Other embodiments are within the scope of the following claims. In some cases, the actions recited in the claims can be performed in a different order and still achieve desirable results. In addition, the processes depicted in the accompanying figures do not necessarily require the particular order shown, or sequential order, to achieve desirable results. In certain implementations, multitasking and parallel processing may be advantageous.
+Claims
+1. A system for parallel processing of data, the system comprising:
+one or more processing devices;
+one or more storage devices storing instructions that, when executed by the one or more processing devices, cause the one or more processing devices to implement: a set of map processes (402), each map process including:
+at least one map input thread accessing an input data block assigned to the map process (404);
+the map input thread reading and parsing key/value pairs from the input data block (406, 408);
+the map input thread applying a map operation to the key/value pairs from the input data block to produce intermediate key /value pairs (410);
+an internal shuffle unit that distributes the key/value pairs and directs individual key/value pairs to at least one specific output thread (412); and
+a plurality of map output threads to receive key /value pairs from the internal shuffle unit and write the key /value pairs as map output (414).
+2. The system of Claim 1 , wherein the number of input threads and output threads is configurable.
+3. The system of Claim 2, wherein the number of input and output threads is
+configurable, but specified independently of one another.
+4. The system of Claim 1 , wherein the internal shuffle unit sends a key/value pair to a specific output thread based on the key.
+5. The system of Claim 1, wherein at least one output thread accumulates key/value pairs using a multiblock accumulator before writing map output.
+6. The system of Claim 1 , wherein at least one output thread combines key/value pairs using a multiblock combiner before writing map output.
+7. The system of Claim 1, wherein at least one output thread both accumulates and combines key/value pairs using a multiblock accumulator and a multiblock combiner before writing map output.
+8. The system of Claim 1, further comprising a set of reduce processes, each reduce process accessing at least a subset of the intermediate key/value pairs output by the map processes and applying a reduce operation to the values associated with a specific key to produce reducer output.
+9. The system of Claim 8, wherein the association of a specific key to an output thread is defined based on a particular subset of the reduce processes.
+10. A computer-implemented method for parallel processing of data comprising: executing a set of map processes on one or more interconnected processing devices (402);
+assigning one or more input data blocks to each of the map processes (404);
+in at least one map process, using at least one input thread to read an input data block (406, 408);
+using the input thread to apply a map operation to records in the data block to produce key/value pairs (410);
+shuffling key/value pairs produced by the input thread to direct an individual key/value pair to a specific output thread (412); and
+using the output thread to write key/value pairs as map output (414).
+11. The computer-implemented method of Claim 10, wherein the number of input threads and output threads is configurable.
+12. The computer-implemented method of Claim 11, wherein the number of input and output threads is configurable, but specified independently of one another.
+13. The computer-implemented method of Claim 10, wherein the internal shuffle unit sends key/value pairs to output threads based on the key and consistently routes a specific key to a particular output thread.
+14. The computer-implemented method of Claim 10, wherein the output thread
+accumulates key/value pairs using a multiblock accumulator before writing map output.
+15. The computer-implemented method of Claim 10, wherein the output thread
+combines key/value pairs using a multiblock combiner before writing map output.
+16. The computer-implemented method of Claim 10, wherein the output thread both accumulates and combines key/value pairs using a multiblock accumulator and a multiblock combiner before writing map output.
+17. The computer-implemented method of Claim 10, further comprising:
+executing a set of reduce processes on one or more interconnected processing devices;
+each reduce process accessing at least a subset of the intermediate key/value pairs output by the map processes and applying a reduce operation to the values associated with a specific key to produce reducer output.
+18. The system of Claim 17, wherein the association of a specific key to an output thread is defined based on a particular subset of the reduce processes.
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/399,817 US20130219394A1 (en) | 2012-02-17 | 2012-02-17 | System and method for a map flow worker |
+US13/399,817 | 2012-02-17 |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+WO2013123106A1 true WO2013123106A1 (en) | 2013-08-22 |
+Family
+ID=47741337
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+PCT/US2013/026017 WO2013123106A1 (en) | 2012-02-17 | 2013-02-14 | A system and method for a map flow worker |
+Country Status (2)
+Country | Link |
+---|---|
+US (1) | US20130219394A1 (en) |
+WO (1) | WO2013123106A1 (en) |
+Families Citing this family (11)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US9170848B1 (en) * | 2010-07-27 | 2015-10-27 | Google Inc. | Parallel processing of data |
+KR20130097972A (en) * | 2012-02-27 | 2013-09-04 | 삼성전자주식회사 | Distributed processing apparatus and method for big data using hardware acceleration |
+US9298760B1 (en) * | 2012-08-03 | 2016-03-29 | Google Inc. | Method for shard assignment in a large-scale data processing job |
+US20150205633A1 (en) * | 2013-05-24 | 2015-07-23 | Google Inc. | Task management in single-threaded environments |
+US9483509B2 (en) * | 2013-10-02 | 2016-11-01 | Google Inc. | Dynamic shuffle reconfiguration |
+US9928263B2 (en) * | 2013-10-03 | 2018-03-27 | Google Llc | Persistent shuffle system |
+US9760481B2 (en) * | 2014-06-13 | 2017-09-12 | Sandisk Technologies Llc | Multiport memory |
+JP6547342B2 (en) * | 2015-03-16 | 2019-07-24 | 日本電気株式会社 | Distributed processing controller |
+US10068097B2 (en) | 2015-08-12 | 2018-09-04 | Microsoft Technology Licensing, Llc | Data center privacy |
+CN108008957B (en) * | 2017-11-23 | 2023-01-17 | 北京酷我科技有限公司 | Data reverse analysis method in iOS |
+WO2021236171A1 (en) * | 2020-05-18 | 2021-11-25 | Futurewei Technologies, Inc. | Partial sort phase to reduce i/o overhead |
+Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20080120314A1 (en) * | 2006-11-16 | 2008-05-22 | Yahoo! Inc. | Map-reduce with merge to process multiple relational datasets |
+US7650331B1 (en) | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+Family Cites Families (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7190787B1 (en) * | 1999-11-30 | 2007-03-13 | Intel Corporation | Stream cipher having a combiner function with storage based shuffle unit |
+US8190610B2 (en) * | 2006-10-05 | 2012-05-29 | Yahoo! Inc. | MapReduce for distributed database processing |
+US8555265B2 (en) * | 2010-05-04 | 2013-10-08 | Google Inc. | Parallel processing of data |
+-
+2012
+- 2012-02-17 US US13/399,817 patent/US20130219394A1/en not_active Abandoned
+-
+2013
+- 2013-02-14 WO PCT/US2013/026017 patent/WO2013123106A1/en active Application Filing
+Patent Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7650331B1 (en) | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+US20080120314A1 (en) * | 2006-11-16 | 2008-05-22 | Yahoo! Inc. | Map-reduce with merge to process multiple relational datasets |
+Non-Patent Citations (6)
+Title |
+---|
+HUNG-CHIH YANG ET AL: "Map-reduce-merge: simplified relational data processing on large clusters", PROCEEDINGS OF THE ACM SIGMOD INTERNATIONAL CONFERENCE ON MANAGEMENT OF DATA, BEIJING, CHINA, JUNE 12-14, 2007, ACM, 1 January 2007 (2007-01-01), pages 1029 - 1040, XP040060961, ISBN: 978-1-59593-686-8, DOI: 10.1145/1247480.1247602 * |
+J. TALBOT ET ALT: "Phoenix++: modular MapReduce for shared-memory systems", 8 June 2011 (2011-06-08), XP002695577, Retrieved from the Internet <URL:http://csl.stanford.edu/~christos/publications/2011.phoenixplus.mapreduce.pdf> [retrieved on 20130416] * |
+JOST BERTHOLD ET AL: "Implementing Parallel Google Map-Reduce in Eden", 25 August 2009, EURO-PAR 2009 PARALLEL PROCESSING, SPRINGER BERLIN HEIDELBERG, BERLIN, HEIDELBERG, PAGE(S) 990 - 1002, ISBN: 978-3-642-03868-6, XP019127306 * |
+MAPREDUCE: SIMPLIFIED DATA PROCESSING ON LARGE CLUSTERS, OSDI'04: SIXTH SYMPOSIUM ON OPERATING SYSTEM DESIGN AND IMPLEMENTATION, 2004 |
+SANGWON SEO ET AL: "HPMR: Prefetching and pre-shuffling in shared MapReduce computation environment", CLUSTER COMPUTING AND WORKSHOPS, 2009. CLUSTER '09. IEEE INTERNATIONAL CONFERENCE ON, IEEE, PISCATAWAY, NJ, USA, 31 August 2009 (2009-08-31), pages 1 - 8, XP031547963, ISBN: 978-1-4244-5011-4 * |
+XIANGXIANG CHEN ET AL: "Constructing Classification Model with MapReduce", MULTIMEDIA INFORMATION NETWORKING AND SECURITY (MINES), 2010 INTERNATIONAL CONFERENCE ON, IEEE, PISCATAWAY, NJ, USA, 4 November 2010 (2010-11-04), pages 611 - 615, XP031837515, ISBN: 978-1-4244-8626-7 * |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20130219394A1 (en) | 2013-08-22 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US20130219394A1 (en) | System and method for a map flow worker | |
+US9760595B1 (en) | Parallel processing of data | |
+US7873056B2 (en) | Switch device, switching method and switch control program | |
+US9817700B2 (en) | Dynamic data partitioning for optimal resource utilization in a parallel data processing system | |
+US9367344B2 (en) | Optimized assignments and/or generation virtual machine for reducer tasks | |
+CN106990915B (en) | Storage resource management method based on storage medium type and weighted quota | |
+US11652760B2 (en) | Packet processing system, method and device having reduced static power consumption | |
+CN104781786B (en) | Use the selection logic of delay reconstruction program order | |
+JP2015233178A (en) | Information aggregation system, program, and method | |
+US20170322772A1 (en) | Method for a stage optimized high speed adder | |
+US11704251B2 (en) | Banked memory architecture for multiple parallel datapath channels in an accelerator | |
+CN102158408A (en) | Method for processing data stream and device thereof | |
+CN116627892A (en) | Data near storage computing method, device and storage medium | |
+US10055365B2 (en) | Shared buffer arbitration for packet-based switching | |
+Gao et al. | Bloomfish: a highly scalable distributed k-mer counting framework | |
+US11552907B2 (en) | Efficient packet queueing for computer networks | |
+US20080089352A1 (en) | Buffered crossbar switch | |
+CN105320493A (en) | Hierarchical statistically multiplexed counters and a method thereof | |
+EP3992865A1 (en) | Accelerated loading of unstructured sparse data in machine learning architectures | |
+US20180129507A1 (en) | Method for implementing a line speed interconnect structure | |
+CN111666253B (en) | Delivering programmable data to a system having shared processing elements sharing memory | |
+US8428075B1 (en) | System and method for efficient shared buffer management | |
+WO2005041066A1 (en) | Distributed memory type information processing system | |
+Gao et al. | On the power of combiner optimizations in mapreduce over MPI workflows | |
+US11003459B2 (en) | Method for implementing a line speed interconnect structure |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+121 | Ep: the epo has been informed by wipo that ep was designated in this application |
+Ref document number: 13705373Country of ref document: EPKind code of ref document: A1 |
+|
+NENP | Non-entry into the national phase |
+Ref country code: DE |
+|
+122 | Ep: pct application non-entry in european phase |
+Ref document number: 13705373Country of ref document: EPKind code of ref document: A1 |

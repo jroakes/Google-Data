@@ -1,0 +1,469 @@
+US20180165327A1 - Avoiding index-navigation deadlocks in database systems - Google Patents
+Avoiding index-navigation deadlocks in database systems Download PDFInfo
+- Publication number
+- US20180165327A1 US20180165327A1 US15/405,846 US201715405846A US2018165327A1 US 20180165327 A1 US20180165327 A1 US 20180165327A1 US 201715405846 A US201715405846 A US 201715405846A US 2018165327 A1 US2018165327 A1 US 2018165327A1
+- Authority
+- US
+- United States
+- Prior art keywords
+- index
+- locks
+- primary
+- transaction
+- key
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Abandoned
+Links
+Images
+Classifications
+-
+- G06F17/30377—
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/23—Updating
+- G06F16/2379—Updates performed during online database operations; commit processing
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/22—Indexing; Data structures therefor; Storage structures
+- G06F16/2228—Indexing structures
+- G06F16/2246—Trees, e.g. B+trees
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/23—Updating
+- G06F16/2308—Concurrency control
+- G06F16/2336—Pessimistic concurrency control approaches, e.g. locking or multiple versions without time stamps
+- G06F16/2343—Locking methods, e.g. distributed locking or locking implementation details
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+-
+- G06F17/30327—
+-
+- G06F17/30362—
+-
+- G06F17/30424—
+Definitions
+- This disclosure relates to the field of database systems, and in particular transactional database systems including indexes.
+- Database management systems can store, process, and secure data in a database.
+- Database read and write transactions are directed to the database management system, which processes the transactions in the order received and performs tasks on the database to execute the received instructions.
+- the database management system may issue locks to the received transactions for locking portions of the database that the transactions need to access. If a portion of the database requested by a transaction is already locked, the transaction is halted until the lock becomes available. Once the transaction is complete, the portion of the database is unlocked. In some instances, two transactions may be halted because each holds a lock to a portion of the database to which the other transaction needs access. This results in a deadlock, where neither transaction can be completed.
+- the subject matter described in this disclosure relates to a database management system including a memory including a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and a at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys.
+- the system further includes a controller communicably coupled to the memory, configured to responsive to receiving a query transaction for reading the primary index and the at least one secondary index, request a first set of locks for the at least one secondary index followed by a second set of locks for the primary index.
+- the controller is further configured to responsive to receiving an update transaction for updating the primary index and the at least one secondary index, request a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index.
+- the subject matter described in this disclosure relates to a method for allocating locks to transactions accessing a database.
+- the method includes receiving a query transaction for reading a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and reading at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys.
+- the method further includes receiving a update transaction for updating the primary index and the at least one secondary index.
+- the method also includes responsive to receiving the query transaction, requesting a first set of locks for the at least one secondary index followed by a second set of locks for the primary index.
+- the method further includes responsive to receiving the update transaction, requesting a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index.
+- FIG. 1 shows a representation of an example computing system.
+- FIGS. 2A-2C show representations of example primary and secondary indexes.
+- FIG. 3 illustrates a b-tree index corresponding to the primary index shown in FIG. 2A .
+- FIG. 4 depicts a representations of example lock acquisition sequences for transactions received by the database management system shown in FIG. 1 that result in a deadlock.
+- FIG. 5 depicts a representations of operations carried out by an example lock manager of the database management system shown in FIG. 1 that may avoid deadlock conditions.
+- FIG. 6 shows a flow chart of an example process for handling incoming transactions at the database management system shown in FIG. 1 .
+- FIG. 7 shows a representation of another example computing system 710 .
+- FIG. 1 shows a representation of an example computing system 100 .
+- the system 100 includes a server 102 , a database storage 104 , a network 106 , and devices 108 .
+- the server 102 hosts a database management system 110 , which, in turn, includes a transaction engine 112 , an index engine 114 , and a lock manager 116 .
+- the database storage 104 includes one or more storage volumes 118 , which can include physical storage such as magnetic disk storage, solid state storage, and the like.
+- the devices 108 can include any computing devices that can communicate over a network, such as the network 106 .
+- the devices 108 can include desktop computers, laptop computers, tablet computers, mobile communication devices, mainframe computers, servers, and the like.
+- the devices 108 can provide a user interface to one or more users to allow the user to provide input, receive output, and generally interact with one or more applications running on the devices 108 .
+- the devices 108 can include one or more applications that allow the device 108 to communicate with other computing devices, such as the server 102 , over the network 106 .
+- the devices 108 can run applications such as client applications that allow the user or other applications running on the devices 108 to communicate with the server 102 and the database management system 110 .
+- the devices 108 also may run server applications that can allow other client applications running on other devices to communicate with the devices 108 .
+- the network 106 can include a wireless network and/or a wired network.
+- the network 106 can include the Internet, an intranet, or any other network technology that can allow communications between the devices 108 and between the devices 108 and the server 102 .
+- the server 102 can be include any computing device that can communicate over the network 106 .
+- the server 102 can include devices similar to those discussed above in relation to implementing the devices 108 .
+- the server 102 can also communicate with the database storage 104 via a network and/or a peripheral interface.
+- the server 102 can run an operating system (not shown) which facilitates running on one or more applications, such as the database management system 110 .
+- the database management system 110 can allow one or more users to access a database concurrently. Further the database management system 110 can store, process, and secure data in the database.
+- the database can be stored in the database storage 104 , which can be internal and/or external to the server 102 .
+- the database storage 104 can be local to the server 102 , distributed across a network, or any combination thereof.
+- a user can be user and/or an application that interacts with the database management system 110 by way of the devices 108 or by way of the server 102 .
+- the user can access the database by sending requests to the database management system 110 .
+- the requests can be in the form of queries in a query language specified by the database management system 110 , such as, for example, a structured query language (SQL).
+- SQL structured query language
+- the database management system 110 also can communicate results of processing the requests back to the users.
+- the database management system 110 may split the requests sent by the users into tasks and sub-tasks. In some implementations, these tasks and sub-tasks can be assigned to server 102 threads.
+- the transaction engine 112 can process the requests to generate memory transactions to execute the requests. For example, the transaction engine 112 can generate memory read and/or write transactions corresponding to requests such as queries and updates received from the users. In some embodiments, these transactions may read and/or modify database tables and indexes related to the database.
+- the index engine 114 manages one or more database tables and indexes of the database management system 110 . In particular, the index engine 114 can manipulate elements of the database table and indexes in response to transactions generated by the transaction engine 112 .
+- the lock manager 116 provides shared and exclusive locks for client threads that need to perform protected operations to the data stored in the database. The lock manager 116 also can provide additional locks such as increment locks and intention locks.
+- FIG. 2A shows a representation of an example primary index 200 corresponding to a database table
+- FIG. 2B shows a representation of an example first secondary index 202
+- FIG. 2C shows a representation of an example second secondary index 204 .
+- the primary index 200 includes several records, namely: Employee ID, First Name, Postal Code, and Phone. One of these records, the Employee ID, serves as a primary key. The values of the primary key are unique, and the primary index 200 is sorted according to the primary key values. In some implementations, the primary index 200 may not include values for all the records, and instead include pointers corresponding to each primary key value, where the pointer points to a location in a database table or a data file where the values of the records are stored.
+- the primary key (Employee ID) can be used to perform searches in the primary index 200 .
+- the first secondary index 202 and the second secondary index 204 are non-unique indexes that are arranged with respect to non-unique attributes of the primary index 200 .
+- the first secondary index 202 is arranged with respect to the First Name record (also referred to as “on First Name”) while the second secondary index 204 is arranged with respect to the Phone record (also referred to as “on Phone”).
+- secondary indexes facilitate query-answering on attributes other than the primary key.
+- the first secondary index 202 facilitates query answering on First Name
+- the second secondary index 204 facilitates query answering on Phone.
+- a query to the first secondary index 202 on a First Name value “Jerry” would return two primary key values 90 and 95, which can be used to access the records that correspond to employees with the First Name “Jerry.”
+- a query to the second secondary index 204 on a Phone value 9999 would return the primary key value 90, which can be used to access the records of the employee with the phone number 9999.
+- queries to the secondary indexes can be combined to provide records for a multi-attribute search.
+- an intersection (90) of the result set (90 and 95) of the query to the first secondary index 202 and the result set (90) of the query to the second secondary index 204 can be determined to obtain the appropriate primary key (or keys) in the primary index 200 .
+- Additional secondary indexes on other attributes of the primary index 200 also can be formed.
+- the number of entries in primary and secondary indexes can be different form the ones shown in FIGS. 2A-2C .
+- the number of entries, especially for large databases can run into hundreds, thousands, or hundreds of thousands. The discussion herein is not limited by the size of the indexes.
+- FIG. 3 illustrates a b-tree index 300 corresponding to the primary index 200 shown in FIG. 2A .
+- the b-tree index 300 is an alternative data structure for representing the primary index 200 .
+- the b-tree index 300 includes a root node 302 , a set of intermediate nodes 304 and a set of leaf nodes 306 .
+- Each node in the b-tree index 300 includes at least one search key value and at least two pointers pointing to children nodes or to records.
+- the root node 302 includes one search key 93 and two pointers: a left pointer pointing to a first intermediate node 304 a and a right pointer pointing to a second intermediate node 304 b .
+- the b-tree index 300 is structured such that all the nodes that all nodes in the portion of the tree reached via the left pointer have search key values that are less than the search key value 93 in the root node 302 , and all the nodes in the portion of the tree reached via the right pointer have search key values that are greater than or equal to the search key value 93 of the root node 302 .
+- the first intermediate node 304 a includes a search key value 90, and two pointers that point to the first leaf node 306 a , having a search key 80, which is less than the search key value 90, and a second leaf node 306 b having a search key value 90, which is greater than or equal to the search key value.
+- the second intermediate node 304 b includes a search key value 95, and includes a pointer pointing to a third leaf node 306 c having a search key value 93 and another pointer pointing to a fourth leaf node 306 d having two search key values 95 and 97.
+- Each of the leaf nodes can include or point to records (or columns) associated with their respective search keys.
+- the first leaf node 306 a includes or points to records associated with the Employee ID (or primary index key) 80 in the primary index 200 ( FIG. 2A ).
+- fourth leaf node 306 d includes or points to records associated with the Employee ID 95 and the Employee ID 97.
+- the search keys in the leaf nodes 306 are sorted in an increasing order from left to right.
+- one leaf may include a pointer to the leaf to its immediate right.
+- b-tree index 300 shown in FIG. 3 is only one example b-tree representation of the primary index 200 , and that other configurations of b-trees or other index data structures could be used to represent the primary index 200 .
+- B-tree indexes, similar to the b-tree index 300 also can be used to represent the first secondary index 202 and the second secondary index 204 .
+- the b-tree representations of indexes can provide an efficient tool for searching and manipulating the indexes.
+- the index engine 114 can manage the b-tree indexes by receiving operations from the transaction engine 112 to read or modify the b-tree indexes.
+- the techniques for avoiding deadlocks discussed herein are not limited to particular representations of indexes, and can be applied to any index and any representation thereof.
+- the lock manager 116 provides locks such as shared, exclusive, increment, intention, and the like, for transactions that need to perform protected operations on the data stored in the database.
+- a requesting transaction acquires a lock from the lock manager 116 to a row that the transaction needs to access or update. The row can be locked for that transaction for the duration of the execution of the transaction. If the lock to the row has already been acquired by a different transaction, then the requesting transaction waits to acquire the lock until after the execution of the different transaction is completed and the lock associated with the row is again unlocked.
+- Transactions can include, for example, query and update transactions.
+- Query transactions include searching indexes, such as secondary and primary indexes, with an index key.
+- Update transactions modify, add, or delete records within indexes, such as secondary and primary indexes. Both query and update transactions may operate on multiple indexes.
+- a query transaction may first query one or more secondary indexes to obtain a set of primary index keys, which, or a subset of which, may be used to access records in the primary index.
+- An update transaction may update a record on the primary index, and also related records in one or more secondary indexes.
+- the transaction engine 112 can schedule one or more operations on the one or more indexes.
+- the transaction engine 112 may request locks from the lock manager 116 for each of the one or more operations. If the locks are received, the transaction engine 112 may proceed with the operations by coordinating with the index engine 114 . Once the transaction is complete, the transaction engine 112 notifies the lock manager 116 to unlock or release the locks associated with the transaction. In some implementations, the lock manager 116 may not unlock the locks granted for the transaction until the transaction is fully completed. Thus, if the rows of indexes for which locks have been requested have been previously locked by other transactions that are still being executed, the lock manager 116 may not grant the locks. In such situations, the transaction engine 112 may halt the transaction, and wait for the other transactions to be completed and for the lock manager 116 to unlock the associated locks.
+- FIG. 4 depicts a representations of example lock acquisition sequences for transactions received by the database management system 110 shown in FIG. 1 that result in a deadlock.
+- FIG. 4 depicts, over time, an update lock acquisition sequence 402 corresponding to an update transaction and a query lock acquisition sequence 404 corresponding to a query transaction.
+- the update transaction pertains to updating a phone number of an employee in the database whose employee ID is #90 from 9999 to 8888.
+- the operations sequence for the update operation includes updating a “Phone” record in the primary index 200 corresponding to the primary index key #90 from 9999 to 8888.
+- the update transaction also includes updating the primary key record corresponding to secondary index key #9999 to delete #90, and adding a new secondary index key #8888 and the corresponding record #90 in the second secondary index 204 .
+- the query transaction pertains to obtaining the records of an employee with a First Name “Jerry” and with a Phone number “9999”.
+- the operation sequence for the query operation includes reading, in the first secondary index 202 , a first set of records corresponding to the secondary index key #Jerry, reading, in the second secondary index 204 , a second set of records corresponding to the secondary index #9999, determining the primary indexes common first and the second set of records, and reading, in the primary index 200 , records corresponding to the common primary indexes.
+- the sequence of operations for the update transaction includes accessing the primary index first, and then accessing any secondary indexes that also may need to be modified.
+- the sequence of operation of the query transaction includes accessing the secondary indexes first, and then accessing the primary index.
+- the transaction engine 112 requests for locks from the lock manager 116 in the same sequence as the sequence of operations. That is, the transaction engine 112 , for the update transaction, requests locks for the primary index first, and then, if needed, requests locks for any secondary indexes. Similarly, for the query transaction, the transaction engine 112 first requests locks for the secondary indexes, and then requests locks for the primary index.
+- the granting of locks by lock manager 116 in the sequence discussed above may result in deadlocks.
+- the lock manager 116 receives the request for a lock for primary key #90 at about time t 1 so that the update transaction can update the Phone record corresponding to the primary key #90 in the primary index 200 .
+- the lock manager 116 grants the lock to the update transaction.
+- the update transaction receives the requested lock, it proceeds with updating the Phone record “9999” with “8888” corresponding to the primary index key #90.
+- the lock manager 116 receives a request for locks to the row in the first secondary index 202 corresponding to the secondary index key #Jerry, and for locks to the row in the second secondary index 204 corresponding to the secondary index key #9999. Again, as no earlier lock has been granted to the requested rows, the lock manager 116 grants the requested locks to the query transaction. Once the requested locks are received, the query transaction proceeds with reading the first secondary index 202 with the secondary index key #Jerry, and the second secondary index 204 with the secondary index key #9999.
+- the next operation in the sequence of operations for the update transaction is to modify the second secondary index 204 , specifically modifying the row corresponding to the secondary index key #9999, inserting a new row having a secondary index key #8888.
+- the transaction engine 112 requests locks for these rows from the lock manager 116 .
+- lock manager 116 denies the request to the lock for the row corresponding to the secondary index key #9999 because that lock had been granted to the query transaction at about time t 2 .
+- the transaction engine 112 halts the operation of updating the second secondary index 204 .
+- the next operation in the sequence is accessing, in the primary index 200 , the records corresponding to the primary index key #90.
+- the transaction engine 112 requests a lock for the row corresponding to the primary index key #90.
+- the lock manager 116 denies this request because the lock to the row corresponding to the primary index key #90 was granted to the update transaction at about time t 1 .
+- the transaction engine 112 halts the operation of the query transaction.
+- the update lock acquisition sequence 402 can be modified to reduce the chances of a deadlock.
+- the locks requested for rows in the secondary indexes may be requested prior to requesting the locks for the primary index. This change in the lock acquisition sequence can be changed while maintaining the operation sequence.
+- One example of such a lock acquisition sequence is discussed below.
+- FIG. 5 depicts a representations of operations carried out by an example lock manager of the database management system shown in FIG. 1 that may avoid deadlock conditions.
+- FIG. 5 depicts an update lock acquisition sequence 502 and a query lock acquisition sequence 504 .
+- the update lock acquisition sequence 502 and the query lock acquisition sequence 504 correspond to the update transaction and the query transaction, respectively, discussed above in relation to FIG. 4 .
+- the update transaction sequence includes first updating the primary index, and then, if needed, updating one or more secondary indexes.
+- the update lock acquisition sequence 502 shown in FIG. 4 in which the transaction engine 112 requests locks to the rows in the primary index before requesting locks in the secondary indexes, the update lock acquisition sequence 502 shown in FIG.
+- the transaction engine 112 requests locks to the rows in the secondary indexes first, and then requests locks for rows in the primary index. Specifically, the transaction engine 112 determines the secondary indexes and the rows in those secondary indexes that could be affected by the update in the primary index. The transaction engine 112 then requests the locks for those rows in the secondary indexes from the lock manager 116 . In effect, the transaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction.
+- the transaction engine 112 determines that the second secondary index 204 would be affected by the update of the phone number corresponding to the primary index key #90 in the primary index. In particular, the transaction engine 112 determines that the row corresponding to the secondary index key #9999 needs to be modified, and a new row corresponding to the secondary index key #8888 needs to be added. Therefore, at about time t 1 , the transaction engine 112 requests locks for the secondary index keys #9999 and #8888 from the lock manager 116 . As locks to these secondary index keys have not been previously provided to other transactions, the lock manager 116 grants the lock requests.
+- the query transaction requests locks for the row corresponding to the secondary index key #9999 in the second secondary index 204 , and the row corresponding to the secondary index key #Jerry in the first secondary index 202 .
+- the lock to the row corresponding to the secondary index key #9999 was previously provided to the update transaction. Therefore, the query transactions' lock request for this secondary index key is denied.
+- the lock to the row corresponding to the secondary index key #Jerry is granted. As the desired locks are not granted, the transaction engine 112 halts the query operation until the requested locks become available.
+- the update lock acquisition sequence 502 of the update transaction continues, in which at about time t 3 , the transaction engine 112 requests a lock for the primary index key #90. As this lock has not been previously granted, the lock manager 116 grants the lock to the transaction engine 112 .
+- the update operation sequence is executed in a manner similar to that of the update transaction discussed above in relation to FIG. 4 . That is, the primary index 200 is first updated, followed by the update of the second secondary index 204 .
+- the locks acquired by the update transaction are released. Specifically, at about time t 4 , the locks to the rows corresponding to the secondary index keys #9999 and #8888 are released as well as the lock for the row corresponding to the primary index key #90.
+- the operation sequence of the query operation is halted until the lock for the row corresponding to the secondary index key #9999 is released at about time t 4 .
+- the query transaction can acquire the lock for the row in the second secondary index 204 corresponding to the secondary index key #9999.
+- the record corresponding to the secondary index key #9999 is read from the second secondary index 204 .
+- the update transaction modified the Employee ID record corresponding to the secondary index key #9999 from “90, 97” to “97”. Therefore, querying the modified secondary index would result in the record “97”.
+- the query to the first secondary index 202 with the secondary index key #Jerry would result in the records “90” and “95”.
+- the intersection of the results of the two queries is null. Therefore, the query transaction may terminate with an error, or with a null result.
+- the transaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction. It is to be noted that the operation sequence of the update operation remains unchanged, only the update lock acquisition sequence changes.
+- FIG. 6 shows a flow chart of an example process 600 for handling incoming transactions at the database management system 110 shown in FIG. 1 .
+- the process 600 includes receiving a query transaction for reading a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and reading at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys (stage 602 ), receiving an update transaction for updating the primary index and the at least one secondary index (stage 604 ).
+- At least one example of the process stages 602 and 604 have been discussed above in relation to FIGS. 1-5 .
+- FIG. 4 discusses the database management system 110 shown in FIG. 1 receiving an update transaction and a query transaction. Further the update transaction and the query transaction request access to one or more of the primary index 200 , the first secondary index 202 , and the second secondary index 204 , shown in FIGS. 2A-2C .
+- the process 600 further includes responsive to receiving the query transaction, request a first set of locks for the at least one secondary index followed by a second set of locks for the primary index (stage 606 ).
+- This process stage has been discussed above in relation to FIG. 5 .
+- the locks the rows corresponding to secondary index keys #9999 and #Jerry in the second secondary index 204 and the first secondary index 202 , respectively, are requested by the transaction engine 112 .
+- the process 600 further includes responsive to receiving the update transaction, request a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index (stage 608 ).
+- This process stage has been discussed above in relation to FIG. 5 .
+- the locks to the rows corresponding to the secondary index keys #8888 and #9999 are requested first, followed by the request for the rows corresponding to the primary index key #90.
+- the operation sequence of the transaction still updates the primary index before updating the affected secondary indexes.
+- the transaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction.
+- FIG. 7 shows a block diagram of an example computing system 710 .
+- the computing system 710 may be utilized in implementing the various components shown in the example server 102 shown in FIG. 1 .
+- the computing system 710 can be utilized for implementing one or more modules of the database management system 110 .
+- the computing system 710 can be utilized to implement the database storage 104 .
+- one or more computing systems 710 can be utilized to execute one or more stages of the process 600 shown in FIG. 6 .
+- the computing system 710 includes at least one processor 750 for performing actions in accordance with instructions and one or more memory devices 770 or 775 for storing instructions and data.
+- the illustrated example computing system 710 includes one or more processors 750 in communication, via a bus 715 , with at least one network interface controller 720 with network interface ports 722 ( a - n ) connecting to other network devices 712 ( a - n ), memory 770 , and any other devices 780 , e.g., an I/O interface.
+- a processor 750 will execute instructions received from memory.
+- the processor 750 illustrated incorporates, or is directly connected to, cache memory 775 .
+- the processor 750 may be any logic circuitry that processes instructions, e.g., instructions fetched from the memory 770 or cache 775 .
+- the processor 750 is a microprocessor unit or a special purpose processor.
+- the computing system 710 may be based on any processor, or set of processors, capable of operating as described herein.
+- the processor 750 can be capable of executing the process 600 shown in FIG. 6 .
+- the processor 750 may be a single core or multi-core processor.
+- the processor 750 may be multiple processors.
+- the processor 750 can be configured to run multi-threaded operations.
+- the memory 770 may be any device suitable for storing computer readable data.
+- the memory 770 may be a device with fixed storage or a device for reading removable storage media. Examples include all forms of non-volatile memory, media and memory devices, semiconductor memory devices (e.g., EPROM, EEPROM, SDRAM, and flash memory devices), magnetic disks, magneto optical disks, and optical discs (e.g., CD ROM, DVD-ROM, and Blu-Ray® discs).
+- a computing system 710 may have any number of memory devices 770 .
+- the memory 770 can include instructions corresponding to the process 600 shown in FIG. 6 .
+- the memory 770 may store one or more database indexes such as the indexes shown in FIGS. 2A-2C .
+- the cache memory 775 is generally a form of computer memory placed in close proximity to the processor 750 for fast read times. In some implementations, the cache memory 775 is part of, or on the same chip as, the processor 750 . In some implementations, there are multiple levels of cache 775 , e.g., L2 and L3 cache layers.
+- the network interface controller 720 manages data exchanges via the network interfaces 722 ( a - n ) (also referred to as network interface ports).
+- the network interface controller 720 handles the physical and data link layers of the open systems interconnection (OSI) model for network communication. In some implementations, some of the network interface controller's tasks are handled by the processor 750 . In some implementations, the network interface controller 720 is part of the processor 750 .
+- a computing system 710 has multiple network interface controllers 720 .
+- the network interfaces 722 ( a - n ) are connection points for physical network links. In some implementations, the network interface controller 720 supports wireless network connections and an interface port is a wireless receiver/transmitter.
+- a computing system 710 exchanges data with other network devices 712 ( a - n ) via physical or wireless links to a network interfaces 722 ( a - n ).
+- the network interface controller 720 implements a network protocol such as Ethernet.
+- the other network devices 712 ( a - n ) are connected to the computing system 710 via a network interface port 722 .
+- the other network devices 712 ( a - n ) may be peer computing devices, network devices, or any other computing device with network functionality.
+- a first network device 712 ( a ) may be a network device such as a hub, a bridge, a switch, or a router, connecting the computing system 710 to a data network such as the Internet.
+- the other devices 780 may include an I/O interface, external serial device ports, and any additional co-processors.
+- a computing system 710 may include an interface (e.g., a universal serial bus (USB) interface) for connecting input devices (e.g., a keyboard, microphone, mouse, or other pointing device), output devices (e.g., video display, speaker, or printer), or additional memory devices (e.g., portable flash drive or external media drive).
+- a computing system 710 includes an additional device 780 such as a co-processor, e.g., a math co-processor can assist the processor 750 with high precision or complex calculations.
+- the other devices 780 can include global positioning and geo-fencing modules, that can allow generating and processing of global positioning data associated with the computing system 710 .
+- Implementations of the subject matter and the operations described in this specification can be implemented in digital electronic circuitry, or in computer software embodied on a tangible medium, firmware, or hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them. Implementations of the subject matter described in this specification can be implemented as one or more computer programs embodied on a tangible medium, i.e., one or more modules of computer program instructions, encoded on one or more computer storage media for execution by, or to control the operation of, a data processing apparatus.
+- a computer storage medium can be, or be included in, a computer-readable storage device, a computer-readable storage substrate, a random or serial access memory array or device, or a combination of one or more of them.
+- the computer storage medium can also be, or be included in, one or more separate components or media (e.g., multiple CDs, disks, or other storage devices).
+- the computer storage medium may be tangible and non-transitory.
+- the operations described in this specification can be implemented as operations performed by a data processing apparatus on data stored on one or more computer-readable storage devices or received from other sources.
+- a computer program (also known as a program, software, software application, script, or code) can be written in any form of programming language, including compiled or interpreted languages, declarative or procedural languages, and it can be deployed in any form, including as a stand-alone program or as a module, component, subroutine, object, or other unit suitable for use in a computing environment.
+- a computer program may, but need not, correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data (e.g., one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (e.g., files that store one or more modules, sub programs, or portions of code).
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network.
+- Examples of communication networks include a local area network (“LAN”) and a wide area network (“WAN”), an inter-network (e.g., the Internet), and peer-to-peer networks (e.g., ad hoc peer-to-peer networks).
+- the processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform actions by operating on input data and generating output.
+- the processes and logic flows can also be performed by, and apparatus can also be implemented as, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- references to “or” may be construed as inclusive so that any terms described using “or” may indicate any of a single, more than one, and all of the described terms.
+- the labels “first,” “second,” “third,” and so forth are not necessarily meant to indicate an ordering and are generally used merely to distinguish between like or similar items or elements.
+Abstract
+Description
+- This application claims priority to U.S. Provisional Patent Application Ser. No. 62/433,944, filed Dec. 14, 2016, entitled “SYSTEMS AND METHODS FOR ASSIGNING LOCKS IN DATABASES,” which is incorporated by reference herein in its entirety.
+- This disclosure relates to the field of database systems, and in particular transactional database systems including indexes.
+- Database management systems can store, process, and secure data in a database. Database read and write transactions are directed to the database management system, which processes the transactions in the order received and performs tasks on the database to execute the received instructions. In some implementations, to maintain concurrency, the database management system may issue locks to the received transactions for locking portions of the database that the transactions need to access. If a portion of the database requested by a transaction is already locked, the transaction is halted until the lock becomes available. Once the transaction is complete, the portion of the database is unlocked. In some instances, two transactions may be halted because each holds a lock to a portion of the database to which the other transaction needs access. This results in a deadlock, where neither transaction can be completed.
+- According to one aspect, the subject matter described in this disclosure relates to a database management system including a memory including a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and a at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys. The system further includes a controller communicably coupled to the memory, configured to responsive to receiving a query transaction for reading the primary index and the at least one secondary index, request a first set of locks for the at least one secondary index followed by a second set of locks for the primary index. The controller is further configured to responsive to receiving an update transaction for updating the primary index and the at least one secondary index, request a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index.
+- According to another aspect, the subject matter described in this disclosure relates to a method for allocating locks to transactions accessing a database. The method includes receiving a query transaction for reading a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and reading at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys. The method further includes receiving a update transaction for updating the primary index and the at least one secondary index. The method also includes responsive to receiving the query transaction, requesting a first set of locks for the at least one secondary index followed by a second set of locks for the primary index. The method further includes responsive to receiving the update transaction, requesting a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index.
+- Details of one or more implementations of the subject matter described in this specification are set forth in the accompanying drawings and the description below. Other features, aspects, and advantages will become apparent from the description, the drawings, and the claims. Note that the relative dimensions of the following figures may not be drawn to scale.
+-
+FIG. 1 shows a representation of an example computing system. -
+FIGS. 2A-2C show representations of example primary and secondary indexes. -
+FIG. 3 illustrates a b-tree index corresponding to the primary index shown inFIG. 2A . -
+FIG. 4 depicts a representations of example lock acquisition sequences for transactions received by the database management system shown inFIG. 1 that result in a deadlock. -
+FIG. 5 depicts a representations of operations carried out by an example lock manager of the database management system shown inFIG. 1 that may avoid deadlock conditions. -
+FIG. 6 shows a flow chart of an example process for handling incoming transactions at the database management system shown inFIG. 1 . -
+FIG. 7 shows a representation of anotherexample computing system 710. - Like reference numbers and designations in the various drawings indicate like elements.
+- The various concepts introduced above and discussed in greater detail below may be implemented in any of numerous ways, as the described concepts are not limited to any particular manner of implementation. Examples of specific implementations and applications are provided primarily for illustrative purposes.
+-
+FIG. 1 shows a representation of an example computing system 100. The system 100 includes aserver 102, adatabase storage 104, anetwork 106, anddevices 108. Theserver 102 hosts adatabase management system 110, which, in turn, includes atransaction engine 112, anindex engine 114, and alock manager 116. Thedatabase storage 104 includes one or more storage volumes 118, which can include physical storage such as magnetic disk storage, solid state storage, and the like. - The
+devices 108 can include any computing devices that can communicate over a network, such as thenetwork 106. In some implementations, thedevices 108 can include desktop computers, laptop computers, tablet computers, mobile communication devices, mainframe computers, servers, and the like. In some implementations, thedevices 108 can provide a user interface to one or more users to allow the user to provide input, receive output, and generally interact with one or more applications running on thedevices 108. In some implementations, thedevices 108 can include one or more applications that allow thedevice 108 to communicate with other computing devices, such as theserver 102, over thenetwork 106. For example, in some implementations thedevices 108 can run applications such as client applications that allow the user or other applications running on thedevices 108 to communicate with theserver 102 and thedatabase management system 110. Thedevices 108 also may run server applications that can allow other client applications running on other devices to communicate with thedevices 108. - The
+network 106 can include a wireless network and/or a wired network. In some implementations, thenetwork 106 can include the Internet, an intranet, or any other network technology that can allow communications between thedevices 108 and between thedevices 108 and theserver 102. - The
+server 102 can be include any computing device that can communicate over thenetwork 106. In some implementations, theserver 102 can include devices similar to those discussed above in relation to implementing thedevices 108. Theserver 102 can also communicate with thedatabase storage 104 via a network and/or a peripheral interface. Theserver 102 can run an operating system (not shown) which facilitates running on one or more applications, such as thedatabase management system 110. Thedatabase management system 110 can allow one or more users to access a database concurrently. Further thedatabase management system 110 can store, process, and secure data in the database. In some implementations, the database can be stored in thedatabase storage 104, which can be internal and/or external to theserver 102. In some implementations, thedatabase storage 104 can be local to theserver 102, distributed across a network, or any combination thereof. A user can be user and/or an application that interacts with thedatabase management system 110 by way of thedevices 108 or by way of theserver 102. The user can access the database by sending requests to thedatabase management system 110. The requests can be in the form of queries in a query language specified by thedatabase management system 110, such as, for example, a structured query language (SQL). Thedatabase management system 110 also can communicate results of processing the requests back to the users. - The
+database management system 110 may split the requests sent by the users into tasks and sub-tasks. In some implementations, these tasks and sub-tasks can be assigned toserver 102 threads. Thetransaction engine 112 can process the requests to generate memory transactions to execute the requests. For example, thetransaction engine 112 can generate memory read and/or write transactions corresponding to requests such as queries and updates received from the users. In some embodiments, these transactions may read and/or modify database tables and indexes related to the database. Theindex engine 114 manages one or more database tables and indexes of thedatabase management system 110. In particular, theindex engine 114 can manipulate elements of the database table and indexes in response to transactions generated by thetransaction engine 112. Thelock manager 116 provides shared and exclusive locks for client threads that need to perform protected operations to the data stored in the database. Thelock manager 116 also can provide additional locks such as increment locks and intention locks. -
+FIG. 2A shows a representation of an exampleprimary index 200 corresponding to a database table,FIG. 2B shows a representation of an example firstsecondary index 202, andFIG. 2C shows a representation of an example secondsecondary index 204. Theprimary index 200 includes several records, namely: Employee ID, First Name, Postal Code, and Phone. One of these records, the Employee ID, serves as a primary key. The values of the primary key are unique, and theprimary index 200 is sorted according to the primary key values. In some implementations, theprimary index 200 may not include values for all the records, and instead include pointers corresponding to each primary key value, where the pointer points to a location in a database table or a data file where the values of the records are stored. The primary key (Employee ID) can be used to perform searches in theprimary index 200. - The first
+secondary index 202 and the secondsecondary index 204 are non-unique indexes that are arranged with respect to non-unique attributes of theprimary index 200. For example, the firstsecondary index 202 is arranged with respect to the First Name record (also referred to as “on First Name”) while the secondsecondary index 204 is arranged with respect to the Phone record (also referred to as “on Phone”). Generally, secondary indexes facilitate query-answering on attributes other than the primary key. Here, the firstsecondary index 202 facilitates query answering on First Name, and the secondsecondary index 204 facilitates query answering on Phone. Thus, a query to the firstsecondary index 202 on a First Name value “Jerry” would return two primary key values 90 and 95, which can be used to access the records that correspond to employees with the First Name “Jerry.” Similarly, a query to the secondsecondary index 204 on aPhone value 9999 would return the primarykey value 90, which can be used to access the records of the employee with thephone number 9999. In some implementations, queries to the secondary indexes can be combined to provide records for a multi-attribute search. For example, to search for employee records of one or more employees with First Name “Jerry” and having a Phone number “9999,” an intersection (90) of the result set (90 and 95) of the query to the firstsecondary index 202 and the result set (90) of the query to the secondsecondary index 204 can be determined to obtain the appropriate primary key (or keys) in theprimary index 200. Additional secondary indexes on other attributes of theprimary index 200 also can be formed. In some implementations, the number of entries in primary and secondary indexes can be different form the ones shown inFIGS. 2A-2C . For example, in some implementations, the number of entries, especially for large databases, can run into hundreds, thousands, or hundreds of thousands. The discussion herein is not limited by the size of the indexes. -
+FIG. 3 illustrates a b-tree index 300 corresponding to theprimary index 200 shown inFIG. 2A . The b-tree index 300 is an alternative data structure for representing theprimary index 200. The b-tree index 300 includes aroot node 302, a set of intermediate nodes 304 and a set ofleaf nodes 306. Each node in the b-tree index 300 includes at least one search key value and at least two pointers pointing to children nodes or to records. For example theroot node 302 includes onesearch key 93 and two pointers: a left pointer pointing to a firstintermediate node 304 a and a right pointer pointing to a secondintermediate node 304 b. The b-tree index 300 is structured such that all the nodes that all nodes in the portion of the tree reached via the left pointer have search key values that are less than the searchkey value 93 in theroot node 302, and all the nodes in the portion of the tree reached via the right pointer have search key values that are greater than or equal to the searchkey value 93 of theroot node 302. Similarly the firstintermediate node 304 a includes a searchkey value 90, and two pointers that point to thefirst leaf node 306 a, having asearch key 80, which is less than the searchkey value 90, and asecond leaf node 306 b having a searchkey value 90, which is greater than or equal to the search key value. Further, the secondintermediate node 304 b includes a searchkey value 95, and includes a pointer pointing to athird leaf node 306 c having a searchkey value 93 and another pointer pointing to afourth leaf node 306 d having two searchkey values - Each of the leaf nodes can include or point to records (or columns) associated with their respective search keys. For example, the
+first leaf node 306 a includes or points to records associated with the Employee ID (or primary index key) 80 in the primary index 200 (FIG. 2A ). Similarly,fourth leaf node 306 d includes or points to records associated with theEmployee ID 95 and theEmployee ID 97. The search keys in theleaf nodes 306 are sorted in an increasing order from left to right. In some implementations, one leaf may include a pointer to the leaf to its immediate right. - It is understood that the b-tree index 300 shown in
+FIG. 3 is only one example b-tree representation of theprimary index 200, and that other configurations of b-trees or other index data structures could be used to represent theprimary index 200. B-tree indexes, similar to the b-tree index 300, also can be used to represent the firstsecondary index 202 and the secondsecondary index 204. - The b-tree representations of indexes, such as the
+primary index 200 and thesecondary indexes index engine 114 can manage the b-tree indexes by receiving operations from thetransaction engine 112 to read or modify the b-tree indexes. However, the techniques for avoiding deadlocks discussed herein are not limited to particular representations of indexes, and can be applied to any index and any representation thereof. - As mentioned above in relation to
+FIG. 1 , thelock manager 116 provides locks such as shared, exclusive, increment, intention, and the like, for transactions that need to perform protected operations on the data stored in the database. In some implementations, a requesting transaction acquires a lock from thelock manager 116 to a row that the transaction needs to access or update. The row can be locked for that transaction for the duration of the execution of the transaction. If the lock to the row has already been acquired by a different transaction, then the requesting transaction waits to acquire the lock until after the execution of the different transaction is completed and the lock associated with the row is again unlocked. - Transactions can include, for example, query and update transactions. Query transactions include searching indexes, such as secondary and primary indexes, with an index key. Update transactions modify, add, or delete records within indexes, such as secondary and primary indexes. Both query and update transactions may operate on multiple indexes. For example, a query transaction may first query one or more secondary indexes to obtain a set of primary index keys, which, or a subset of which, may be used to access records in the primary index. An update transaction may update a record on the primary index, and also related records in one or more secondary indexes. Upon receiving a query or an update transaction, the
+transaction engine 112 can schedule one or more operations on the one or more indexes. In addition, thetransaction engine 112 may request locks from thelock manager 116 for each of the one or more operations. If the locks are received, thetransaction engine 112 may proceed with the operations by coordinating with theindex engine 114. Once the transaction is complete, thetransaction engine 112 notifies thelock manager 116 to unlock or release the locks associated with the transaction. In some implementations, thelock manager 116 may not unlock the locks granted for the transaction until the transaction is fully completed. Thus, if the rows of indexes for which locks have been requested have been previously locked by other transactions that are still being executed, thelock manager 116 may not grant the locks. In such situations, thetransaction engine 112 may halt the transaction, and wait for the other transactions to be completed and for thelock manager 116 to unlock the associated locks. -
+FIG. 4 depicts a representations of example lock acquisition sequences for transactions received by thedatabase management system 110 shown inFIG. 1 that result in a deadlock. In particular,FIG. 4 depicts, over time, an updatelock acquisition sequence 402 corresponding to an update transaction and a querylock acquisition sequence 404 corresponding to a query transaction. The update transaction pertains to updating a phone number of an employee in the database whose employee ID is #90 from 9999 to 8888. The operations sequence for the update operation includes updating a “Phone” record in theprimary index 200 corresponding to the primary indexkey # 90 from 9999 to 8888. As there also exists a secondsecondary index 204 on the Phone record, the update transaction also includes updating the primary key record corresponding to secondaryindex key # 9999 to delete #90, and adding a new secondaryindex key # 8888 and thecorresponding record # 90 in the secondsecondary index 204. - The query transaction pertains to obtaining the records of an employee with a First Name “Jerry” and with a Phone number “9999”. The operation sequence for the query operation includes reading, in the first
+secondary index 202, a first set of records corresponding to the secondary index key #Jerry, reading, in the secondsecondary index 204, a second set of records corresponding to thesecondary index # 9999, determining the primary indexes common first and the second set of records, and reading, in theprimary index 200, records corresponding to the common primary indexes. - The sequence of operations for the update transaction includes accessing the primary index first, and then accessing any secondary indexes that also may need to be modified. On the other hand, the sequence of operation of the query transaction includes accessing the secondary indexes first, and then accessing the primary index. As far as the acquiring locks for these transactions is concerned, the
+transaction engine 112 requests for locks from thelock manager 116 in the same sequence as the sequence of operations. That is, thetransaction engine 112, for the update transaction, requests locks for the primary index first, and then, if needed, requests locks for any secondary indexes. Similarly, for the query transaction, thetransaction engine 112 first requests locks for the secondary indexes, and then requests locks for the primary index. - In some implementations, when the update transaction and the query transactions such as the ones discussed above are received close in time, the granting of locks by
+lock manager 116 in the sequence discussed above, may result in deadlocks. - In the example shown in
+FIG. 4 , thelock manager 116 receives the request for a lock forprimary key # 90 at about time t1 so that the update transaction can update the Phone record corresponding to theprimary key # 90 in theprimary index 200. As not earlier lock has been granted to theprimary key # 90 in theprimary index 200, thelock manager 116 grants the lock to the update transaction. Once the update transaction receives the requested lock, it proceeds with updating the Phone record “9999” with “8888” corresponding to the primary indexkey # 90. At about time t2, thelock manager 116 receives a request for locks to the row in the firstsecondary index 202 corresponding to the secondary index key #Jerry, and for locks to the row in the secondsecondary index 204 corresponding to the secondaryindex key # 9999. Again, as no earlier lock has been granted to the requested rows, thelock manager 116 grants the requested locks to the query transaction. Once the requested locks are received, the query transaction proceeds with reading the firstsecondary index 202 with the secondary index key #Jerry, and the secondsecondary index 204 with the secondaryindex key # 9999. - The next operation in the sequence of operations for the update transaction is to modify the second
+secondary index 204, specifically modifying the row corresponding to the secondaryindex key # 9999, inserting a new row having a secondaryindex key # 8888. At about time t3, thetransaction engine 112 requests locks for these rows from thelock manager 116. However,lock manager 116 denies the request to the lock for the row corresponding to the secondaryindex key # 9999 because that lock had been granted to the query transaction at about time t2. As a result, thetransaction engine 112 halts the operation of updating the secondsecondary index 204. - Turning to the query operation, the next operation in the sequence is accessing, in the
+primary index 200, the records corresponding to the primary indexkey # 90. At about time t4, thetransaction engine 112 requests a lock for the row corresponding to the primary indexkey # 90. However, thelock manager 116 denies this request because the lock to the row corresponding to the primary indexkey # 90 was granted to the update transaction at about time t1. As a result, thetransaction engine 112 halts the operation of the query transaction. - The above scenario creates a deadlock. That is, the update transaction waits for the query transaction to complete its operations, while at the same time, the query transaction waits for the update transaction to complete its operations. Thus, neither transactions would be able to complete their operations. In some implementations, the update
+lock acquisition sequence 402 can be modified to reduce the chances of a deadlock. For example, in some implementations, the locks requested for rows in the secondary indexes may be requested prior to requesting the locks for the primary index. This change in the lock acquisition sequence can be changed while maintaining the operation sequence. One example of such a lock acquisition sequence is discussed below. -
+FIG. 5 depicts a representations of operations carried out by an example lock manager of the database management system shown inFIG. 1 that may avoid deadlock conditions. Specifically,FIG. 5 depicts an updatelock acquisition sequence 502 and a querylock acquisition sequence 504. The updatelock acquisition sequence 502 and the querylock acquisition sequence 504 correspond to the update transaction and the query transaction, respectively, discussed above in relation toFIG. 4 . As discussed above, the update transaction sequence includes first updating the primary index, and then, if needed, updating one or more secondary indexes. Unlike the updatelock acquisition sequence 402 shown inFIG. 4 , in which thetransaction engine 112 requests locks to the rows in the primary index before requesting locks in the secondary indexes, the updatelock acquisition sequence 502 shown inFIG. 5 requests locks to the rows in the secondary indexes first, and then requests locks for rows in the primary index. Specifically, thetransaction engine 112 determines the secondary indexes and the rows in those secondary indexes that could be affected by the update in the primary index. Thetransaction engine 112 then requests the locks for those rows in the secondary indexes from thelock manager 116. In effect, thetransaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction. - Referring again to
+FIG. 5 , thetransaction engine 112 determines that the secondsecondary index 204 would be affected by the update of the phone number corresponding to the primary indexkey # 90 in the primary index. In particular, thetransaction engine 112 determines that the row corresponding to the secondaryindex key # 9999 needs to be modified, and a new row corresponding to the secondaryindex key # 8888 needs to be added. Therefore, at about time t1, thetransaction engine 112 requests locks for the secondary index keys #9999 and #8888 from thelock manager 116. As locks to these secondary index keys have not been previously provided to other transactions, thelock manager 116 grants the lock requests. - At about time t2, the query transaction requests locks for the row corresponding to the secondary index key #9999 in the second
+secondary index 204, and the row corresponding to the secondary index key #Jerry in the firstsecondary index 202. However, the lock to the row corresponding to the secondaryindex key # 9999 was previously provided to the update transaction. Therefore, the query transactions' lock request for this secondary index key is denied. The lock to the row corresponding to the secondary index key #Jerry is granted. As the desired locks are not granted, thetransaction engine 112 halts the query operation until the requested locks become available. - The update
+lock acquisition sequence 502 of the update transaction continues, in which at about time t3, thetransaction engine 112 requests a lock for the primary indexkey # 90. As this lock has not been previously granted, thelock manager 116 grants the lock to thetransaction engine 112. Once the locks are acquired, the update operation sequence is executed in a manner similar to that of the update transaction discussed above in relation toFIG. 4 . That is, theprimary index 200 is first updated, followed by the update of the secondsecondary index 204. Once the update transaction is complete, the locks acquired by the update transaction are released. Specifically, at about time t4, the locks to the rows corresponding to the secondary index keys #9999 and #8888 are released as well as the lock for the row corresponding to the primary indexkey # 90. - While the operation sequence of the update operation is executed towards completion, the operation sequence of the query operation is halted until the lock for the row corresponding to the secondary
+index key # 9999 is released at about time t4. Once the lock is released, the query transaction can acquire the lock for the row in the secondsecondary index 204 corresponding to the secondaryindex key # 9999. Subsequently, the record corresponding to the secondaryindex key # 9999 is read from the secondsecondary index 204. As mentioned above, the update transaction modified the Employee ID record corresponding to the secondary index key #9999 from “90, 97” to “97”. Therefore, querying the modified secondary index would result in the record “97”. Further, the query to the firstsecondary index 202 with the secondary index key #Jerry would result in the records “90” and “95”. Thus, the intersection of the results of the two queries is null. Therefore, the query transaction may terminate with an error, or with a null result. - As shown in
+FIG. 5 , for an update transaction, by acquiring locks to all affected secondary indexes prior to acquiring the locks for the primary index, deadlocks can be avoided or mitigated. Thetransaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction. It is to be noted that the operation sequence of the update operation remains unchanged, only the update lock acquisition sequence changes. -
+FIG. 6 shows a flow chart of anexample process 600 for handling incoming transactions at thedatabase management system 110 shown inFIG. 1 . In particular, theprocess 600 includes receiving a query transaction for reading a primary index including a plurality of primary keys and at least one record associated with each of the plurality of primary keys, and reading at least one secondary index, each of the at least one secondary index including at least one secondary key and an associated record referencing one or more of the plurality of primary keys (stage 602), receiving an update transaction for updating the primary index and the at least one secondary index (stage 604). At least one example of the process stages 602 and 604 have been discussed above in relation toFIGS. 1-5 . For example,FIG. 4 discusses thedatabase management system 110 shown inFIG. 1 receiving an update transaction and a query transaction. Further the update transaction and the query transaction request access to one or more of theprimary index 200, the firstsecondary index 202, and the secondsecondary index 204, shown inFIGS. 2A-2C . - The
+process 600 further includes responsive to receiving the query transaction, request a first set of locks for the at least one secondary index followed by a second set of locks for the primary index (stage 606). One example of this process stage has been discussed above in relation toFIG. 5 . For example, the locks the rows corresponding to secondary index keys #9999 and #Jerry in the secondsecondary index 204 and the firstsecondary index 202, respectively, are requested by thetransaction engine 112. - The
+process 600 further includes responsive to receiving the update transaction, request a third set of locks for the at least one secondary index followed by a fourth set of locks for the primary index (stage 608). One example of this process stage has been discussed above in relation toFIG. 5 . For example, the locks to the rows corresponding to the secondary index keys #8888 and #9999 are requested first, followed by the request for the rows corresponding to the primary indexkey # 90. By requesting the locks associated with the affected secondary indexes first, and then requesting the locks for the primary index, deadlocks can be avoided or reduced. It should be noted that while the lock acquisition sequence for the update transaction requests locks for associated with the affected secondary index before requesting locks associated with the primary index, the operation sequence of the transaction still updates the primary index before updating the affected secondary indexes. In effect, thetransaction engine 112 requests locks for the primary and secondary indexes for the update transaction in the same order as requesting locks for the primary and secondary indexes for the query transaction. -
+FIG. 7 shows a block diagram of anexample computing system 710. In some implementations, thecomputing system 710 may be utilized in implementing the various components shown in theexample server 102 shown inFIG. 1 . In some implementations, thecomputing system 710 can be utilized for implementing one or more modules of thedatabase management system 110. In some implementations, thecomputing system 710 can be utilized to implement thedatabase storage 104. In some implementations, one ormore computing systems 710 can be utilized to execute one or more stages of theprocess 600 shown inFIG. 6 . - In broad overview, the
+computing system 710 includes at least oneprocessor 750 for performing actions in accordance with instructions and one ormore memory devices example computing system 710 includes one ormore processors 750 in communication, via abus 715, with at least onenetwork interface controller 720 with network interface ports 722(a-n) connecting to other network devices 712(a-n),memory 770, and anyother devices 780, e.g., an I/O interface. Generally, aprocessor 750 will execute instructions received from memory. Theprocessor 750 illustrated incorporates, or is directly connected to,cache memory 775. - In more detail, the
+processor 750 may be any logic circuitry that processes instructions, e.g., instructions fetched from thememory 770 orcache 775. In many embodiments, theprocessor 750 is a microprocessor unit or a special purpose processor. Thecomputing system 710 may be based on any processor, or set of processors, capable of operating as described herein. In some implementations, theprocessor 750 can be capable of executing theprocess 600 shown inFIG. 6 . Theprocessor 750 may be a single core or multi-core processor. Theprocessor 750 may be multiple processors. In some implementations, theprocessor 750 can be configured to run multi-threaded operations. - The
+memory 770 may be any device suitable for storing computer readable data. Thememory 770 may be a device with fixed storage or a device for reading removable storage media. Examples include all forms of non-volatile memory, media and memory devices, semiconductor memory devices (e.g., EPROM, EEPROM, SDRAM, and flash memory devices), magnetic disks, magneto optical disks, and optical discs (e.g., CD ROM, DVD-ROM, and Blu-Ray® discs). Acomputing system 710 may have any number ofmemory devices 770. In some implementations, thememory 770 can include instructions corresponding to theprocess 600 shown inFIG. 6 . In some implementations, thememory 770 may store one or more database indexes such as the indexes shown inFIGS. 2A-2C . - The
+cache memory 775 is generally a form of computer memory placed in close proximity to theprocessor 750 for fast read times. In some implementations, thecache memory 775 is part of, or on the same chip as, theprocessor 750. In some implementations, there are multiple levels ofcache 775, e.g., L2 and L3 cache layers. - The
+network interface controller 720 manages data exchanges via the network interfaces 722(a-n) (also referred to as network interface ports). Thenetwork interface controller 720 handles the physical and data link layers of the open systems interconnection (OSI) model for network communication. In some implementations, some of the network interface controller's tasks are handled by theprocessor 750. In some implementations, thenetwork interface controller 720 is part of theprocessor 750. In some implementations, acomputing system 710 has multiplenetwork interface controllers 720. The network interfaces 722(a-n) are connection points for physical network links. In some implementations, thenetwork interface controller 720 supports wireless network connections and an interface port is a wireless receiver/transmitter. Generally, acomputing system 710 exchanges data with other network devices 712(a-n) via physical or wireless links to a network interfaces 722(a-n). In some implementations, thenetwork interface controller 720 implements a network protocol such as Ethernet. - The other network devices 712(a-n) are connected to the
+computing system 710 via anetwork interface port 722. The other network devices 712(a-n) may be peer computing devices, network devices, or any other computing device with network functionality. For example, a first network device 712(a) may be a network device such as a hub, a bridge, a switch, or a router, connecting thecomputing system 710 to a data network such as the Internet. - The
+other devices 780 may include an I/O interface, external serial device ports, and any additional co-processors. For example, acomputing system 710 may include an interface (e.g., a universal serial bus (USB) interface) for connecting input devices (e.g., a keyboard, microphone, mouse, or other pointing device), output devices (e.g., video display, speaker, or printer), or additional memory devices (e.g., portable flash drive or external media drive). In some implementations, acomputing system 710 includes anadditional device 780 such as a co-processor, e.g., a math co-processor can assist theprocessor 750 with high precision or complex calculations. - In some implementation, the
+other devices 780 can include global positioning and geo-fencing modules, that can allow generating and processing of global positioning data associated with thecomputing system 710. - Implementations of the subject matter and the operations described in this specification can be implemented in digital electronic circuitry, or in computer software embodied on a tangible medium, firmware, or hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them. Implementations of the subject matter described in this specification can be implemented as one or more computer programs embodied on a tangible medium, i.e., one or more modules of computer program instructions, encoded on one or more computer storage media for execution by, or to control the operation of, a data processing apparatus. A computer storage medium can be, or be included in, a computer-readable storage device, a computer-readable storage substrate, a random or serial access memory array or device, or a combination of one or more of them. The computer storage medium can also be, or be included in, one or more separate components or media (e.g., multiple CDs, disks, or other storage devices). The computer storage medium may be tangible and non-transitory.
+- The operations described in this specification can be implemented as operations performed by a data processing apparatus on data stored on one or more computer-readable storage devices or received from other sources.
+- A computer program (also known as a program, software, software application, script, or code) can be written in any form of programming language, including compiled or interpreted languages, declarative or procedural languages, and it can be deployed in any form, including as a stand-alone program or as a module, component, subroutine, object, or other unit suitable for use in a computing environment. A computer program may, but need not, correspond to a file in a file system. A program can be stored in a portion of a file that holds other programs or data (e.g., one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (e.g., files that store one or more modules, sub programs, or portions of code). A computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network. Examples of communication networks include a local area network (“LAN”) and a wide area network (“WAN”), an inter-network (e.g., the Internet), and peer-to-peer networks (e.g., ad hoc peer-to-peer networks).
+- The processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform actions by operating on input data and generating output. The processes and logic flows can also be performed by, and apparatus can also be implemented as, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- While this specification contains many specific implementation details, these should not be construed as limitations on the scope of any inventions or of what may be claimed, but rather as descriptions of features specific to particular implementations of particular inventions. Certain features that are described in this specification in the context of separate implementations can also be implemented in combination in a single implementation. Conversely, various features that are described in the context of a single implementation can also be implemented in multiple implementations separately or in any suitable sub-combination. Moreover, although features may be described above as acting in certain combinations and even initially claimed as such, one or more features from a claimed combination can in some cases be excised from the combination, and the claimed combination may be directed to a sub-combination or variation of a sub-combination.
+- Similarly, while operations are depicted in the drawings in a particular order, this should not be understood as requiring that such operations be performed in the particular order shown or in sequential order, or that all illustrated operations be performed, to achieve desirable results. In certain circumstances, multitasking and parallel processing may be advantageous. Moreover, the separation of various system components in the implementations described above should not be understood as requiring such separation in all implementations, and it should be understood that the described program components and systems can generally be integrated together in a single software product or packaged into multiple software products.
+- References to “or” may be construed as inclusive so that any terms described using “or” may indicate any of a single, more than one, and all of the described terms. The labels “first,” “second,” “third,” and so forth are not necessarily meant to indicate an ordering and are generally used merely to distinguish between like or similar items or elements.
+- Various modifications to the implementations described in this disclosure may be readily apparent to those skilled in the art, and the generic principles defined herein may be applied to other implementations without departing from the spirit or scope of this disclosure. Thus, the claims are not intended to be limited to the implementations shown herein, but are to be accorded the widest scope consistent with this disclosure, the principles and the novel features disclosed herein.
+Claims (16)
+Priority Applications (4)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US15/405,846 US20180165327A1 (en) | 2016-12-14 | 2017-01-13 | Avoiding index-navigation deadlocks in database systems |
+EP17881112.1A EP3513333B1 (en) | 2016-12-14 | 2017-12-14 | Managing transactions requesting non-existent index keys in database systems |
+CN201780066683.2A CN109906447B (en) | 2016-12-14 | 2017-12-14 | Managing transactions requesting index keys that do not exist in a database system |
+PCT/US2017/066383 WO2018112183A1 (en) | 2016-12-14 | 2017-12-14 | Managing transactions requesting non-existent index keys in database systems |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US201662433944P | 2016-12-14 | 2016-12-14 | |
+US15/405,846 US20180165327A1 (en) | 2016-12-14 | 2017-01-13 | Avoiding index-navigation deadlocks in database systems |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US20180165327A1 true US20180165327A1 (en) | 2018-06-14 |
+Family
+ID=62489401
+Family Applications (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/405,841 Active 2037-01-28 US10489386B2 (en) | 2016-12-14 | 2017-01-13 | Managing transactions requesting non-existing index keys in database systems |
+US15/405,846 Abandoned US20180165327A1 (en) | 2016-12-14 | 2017-01-13 | Avoiding index-navigation deadlocks in database systems |
+Family Applications Before (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/405,841 Active 2037-01-28 US10489386B2 (en) | 2016-12-14 | 2017-01-13 | Managing transactions requesting non-existing index keys in database systems |
+Country Status (4)
+Country | Link |
+---|---|
+US (2) | US10489386B2 (en) |
+EP (1) | EP3513333B1 (en) |
+CN (1) | CN109906447B (en) |
+WO (1) | WO2018112183A1 (en) |
+Cited By (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+CN111427883A (en) * | 2020-02-18 | 2020-07-17 | 深圳壹账通智能科技有限公司 | Data processing method and device based on AeroPike, computer equipment and storage medium |
+WO2021011869A1 (en) * | 2019-07-17 | 2021-01-21 | Aveva Software, Llc | System and server comprising database schema for accessing and managing utilization and job data |
+US11113262B2 (en) * | 2019-04-01 | 2021-09-07 | Sap Se | Time-efficient lock release in database systems |
+US20220350804A1 (en) * | 2021-04-29 | 2022-11-03 | Elasticsearch B.V. | Event Sequences Search |
+US20230315712A1 (en) * | 2022-03-31 | 2023-10-05 | Unisys Corporation | Method of making a file containing a secondary index recoverable during processing |
+Families Citing this family (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+CN111782669B (en) * | 2020-06-28 | 2023-12-12 | 百度在线网络技术（北京）有限公司 | Method and device for realizing distributed lock and electronic equipment |
+Family Cites Families (19)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5555388A (en) | 1992-08-20 | 1996-09-10 | Borland International, Inc. | Multi-user system and methods providing improved file management by reading |
+US5440732A (en) | 1993-02-05 | 1995-08-08 | Digital Equipment Corp., Pat. Law Gr. | Key-range locking with index trees |
+US5832484A (en) * | 1996-07-02 | 1998-11-03 | Sybase, Inc. | Database system with methods for parallel lock management |
+US6105026A (en) | 1997-07-03 | 2000-08-15 | Oracle Corporation | Multi-phase locking for partition maintenance operations |
+US6115703A (en) | 1998-05-11 | 2000-09-05 | International Business Machines Corporation | Two-level caching system for prepared SQL statements in a relational database management system |
+US6606626B1 (en) | 1998-10-20 | 2003-08-12 | Sybase, Inc. | Database system with lock manager enhancement for improving concurrency |
+US7366708B2 (en) | 1999-02-18 | 2008-04-29 | Oracle Corporation | Mechanism to efficiently index structured data that provides hierarchical access in a relational database system |
+US20020065974A1 (en) | 2000-11-30 | 2002-05-30 | Thompson Chad Grey | Measurement-based management of relational databases |
+US6944615B2 (en) | 2001-06-28 | 2005-09-13 | International Business Machines Corporation | System and method for avoiding deadlock situations due to pseudo-deleted entries |
+US8086579B1 (en) | 2002-01-22 | 2011-12-27 | Oracle International Corporation | Semantic response to lock requests to reduce coherence overhead in multi-node systems |
+US7149737B1 (en) | 2002-04-04 | 2006-12-12 | Ncr Corp. | Locking mechanism using a predefined lock for materialized views in a database system |
+EP1566744A1 (en) | 2004-02-19 | 2005-08-24 | Sap Ag | Optimising lock granularity using range locking |
+US7577658B2 (en) | 2006-10-06 | 2009-08-18 | Microsoft Corporation | Hierarchical locking in B-tree indexes |
+US20140040220A1 (en) | 2012-07-31 | 2014-02-06 | Hideaki Kimura | Methods and systems for deadlock detection |
+CN103207908B (en) * | 2013-03-29 | 2017-02-22 | 成都康赛信息技术有限公司 | Multi-data-source dynamic isolated access method |
+CN103218445A (en) | 2013-04-22 | 2013-07-24 | 亿赞普(北京)科技有限公司 | Mobile terminal information pushing method and device |
+US9542439B1 (en) | 2013-06-14 | 2017-01-10 | Emc Corporation | Simplified query language for accessing metadata |
+US10394848B2 (en) * | 2013-07-29 | 2019-08-27 | Amazon Technologies, Inc. | Generating a multi-column index for relational databases by interleaving data bits for selectivity |
+US9824134B2 (en) * | 2014-11-25 | 2017-11-21 | Sap Se | Database system with transaction control block index |
+-
+2017
+- 2017-01-13 US US15/405,841 patent/US10489386B2/en active Active
+- 2017-01-13 US US15/405,846 patent/US20180165327A1/en not_active Abandoned
+- 2017-12-14 CN CN201780066683.2A patent/CN109906447B/en active Active
+- 2017-12-14 WO PCT/US2017/066383 patent/WO2018112183A1/en active Search and Examination
+- 2017-12-14 EP EP17881112.1A patent/EP3513333B1/en active Active
+Cited By (6)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US11113262B2 (en) * | 2019-04-01 | 2021-09-07 | Sap Se | Time-efficient lock release in database systems |
+WO2021011869A1 (en) * | 2019-07-17 | 2021-01-21 | Aveva Software, Llc | System and server comprising database schema for accessing and managing utilization and job data |
+CN111427883A (en) * | 2020-02-18 | 2020-07-17 | 深圳壹账通智能科技有限公司 | Data processing method and device based on AeroPike, computer equipment and storage medium |
+US20220350804A1 (en) * | 2021-04-29 | 2022-11-03 | Elasticsearch B.V. | Event Sequences Search |
+US11734279B2 (en) * | 2021-04-29 | 2023-08-22 | Elasticsearch B.V. | Event sequences search |
+US20230315712A1 (en) * | 2022-03-31 | 2023-10-05 | Unisys Corporation | Method of making a file containing a secondary index recoverable during processing |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20180165326A1 (en) | 2018-06-14 |
+EP3513333A1 (en) | 2019-07-24 |
+CN109906447B (en) | 2020-11-10 |
+EP3513333A4 (en) | 2020-04-29 |
+CN109906447A (en) | 2019-06-18 |
+US10489386B2 (en) | 2019-11-26 |
+EP3513333B1 (en) | 2021-01-20 |
+WO2018112183A1 (en) | 2018-06-21 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US20180165327A1 (en) | Avoiding index-navigation deadlocks in database systems | |
+US7769789B2 (en) | High performant row-level data manipulation using a data layer interface | |
+Curé et al. | Data integration over NoSQL stores using access path based mappings | |
+US20150269215A1 (en) | Dependency-aware transaction batching for data replication | |
+EP2641195A1 (en) | Parallel repartitioning index scan | |
+US10339040B2 (en) | Core data services test double framework automation tool | |
+US11086868B2 (en) | Materialized view rewrite technique for one-sided outer-join queries | |
+Cubukcu et al. | Citus: Distributed postgresql for data-intensive applications | |
+US10866949B2 (en) | Management of transactions spanning different database types | |
+US10289723B1 (en) | Distributed union all queries | |
+Bryla et al. | Oracle Database 12c The Complete Reference | |
+US20210406282A1 (en) | Metadata access for distributed data lake users | |
+Bansal et al. | Apache Hive Cookbook | |
+US9280582B2 (en) | Optimization of join queries for related data | |
+US10678812B2 (en) | Asynchronous database transaction handling | |
+RU2515565C1 (en) | Method of updating structured data in relational database management system | |
+Gurevich | Comparative survey of nosql/newsql db systems | |
+Beedkar et al. | Navigating Compliance with Data Transfers in Federated Data Processing. | |
+Nanda | Review of Query Processing Techniques of Cloud Databases | |
+US20170103097A1 (en) | Customize column sequence in projection list of select queries | |
+Raghavan et al. | Platform extension framework (PXF): Enabling parallel query processing over heterogeneous data sources in greenplum | |
+Kanungo et al. | Original Research Article Concurrency versus consistency in NoSQL databases | |
+Kyte et al. | Locking and issues | |
+Pal et al. | SQL for Streaming, Semi-Structured, and Operational Analytics | |
+Al-Ani | Investigation in MYSQL database and NEO4J database |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:GRAEFE, GOETZ;REEL/FRAME:042639/0329Effective date: 20170112 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044567/0001Effective date: 20170929 |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: NON FINAL ACTION MAILED |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: RESPONSE TO NON-FINAL OFFICE ACTION ENTERED AND FORWARDED TO EXAMINER |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: FINAL REJECTION MAILED |
+|
+STCB | Information on status: application discontinuation |
+Free format text: ABANDONED -- FAILURE TO RESPOND TO AN OFFICE ACTION |

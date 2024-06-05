@@ -1,0 +1,456 @@
+JP2021530787A - Search for similar images for radiology - Google Patents
+Search for similar images for radiology Download PDFInfo
+- Publication number
+- JP2021530787A JP2021530787A JP2021500660A JP2021500660A JP2021530787A JP 2021530787 A JP2021530787 A JP 2021530787A JP 2021500660 A JP2021500660 A JP 2021500660A JP 2021500660 A JP2021500660 A JP 2021500660A JP 2021530787 A JP2021530787 A JP 2021530787A
+- Authority
+- JP
+- Japan
+- Prior art keywords
+- images
+- similar
+- image
+- candidate
+- similarity
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Granted
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G16—INFORMATION AND COMMUNICATION TECHNOLOGY [ICT] SPECIALLY ADAPTED FOR SPECIFIC APPLICATION FIELDS
+- G16H—HEALTHCARE INFORMATICS, i.e. INFORMATION AND COMMUNICATION TECHNOLOGY [ICT] SPECIALLY ADAPTED FOR THE HANDLING OR PROCESSING OF MEDICAL OR HEALTHCARE DATA
+- G16H30/00—ICT specially adapted for the handling or processing of medical images
+- G16H30/40—ICT specially adapted for the handling or processing of medical images for processing medical images, e.g. editing
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/50—Information retrieval; Database structures therefor; File system structures therefor of still image data
+Abstract
+クエリ画像に類似する放射線画像を識別し、取り出すためのコンピュータ実装システムについて記載する。システムは、クエリ画像を受信し、データストアから候補の類似する放射線画像のセットを取り出す1つまたは複数のフェッチャを含む。1つまたは複数のスコアラーは、クエリ画像および候補の類似する放射線画像のセットを受信し、クエリ画像と各候補画像との間の類似度スコアを生成する。プーラーは、1つまたは複数のスコアラーから類似度スコアを受信し、候補画像をランク付けし、ランク付けを反映する候補画像のリストを返す。スコアラーは、モデリング技法を実装して、クエリ画像と候補の類似する放射線画像のセットとの複数の類似度属性、およびそれに関連付けられた注釈をキャプチャする類似度スコアを生成する。たとえば、類似度属性は、患者、診断、および/または視覚の類似度とすることができ、モデリング技法は、トリプレット損失、分類損失、回帰損失、およびオブジェクト検出損失とすることができる。Describes a computer-implemented system for identifying and retrieving radiographic images similar to query images. The system contains one or more fetchers that receive the query image and retrieve a set of candidate similar radiographic images from the data store. One or more scorers receive a set of query images and similar radiographic images of candidates and generate a similarity score between the query images and each candidate image. The puller receives similarity scores from one or more scorers, ranks the candidate images, and returns a list of candidate images that reflect the ranking. The scorer implements a modeling technique to generate a similarity score that captures multiple similarity attributes between a query image and a set of similar radiographic images of candidates, and the annotations associated with them. For example, the similarity attribute can be patient, diagnostic, and / or visual similarity, and the modeling technique can be triplet loss, classification loss, regression loss, and object detection loss.
+Description
+本開示は、クエリ画像に類似する放射線画像を識別し、取り出すための方法およびシステムに関する。 The present disclosure relates to methods and systems for identifying and retrieving radiographic images similar to query images.
+類似画像を検索するための機械学習方法を対象とる多数の文献がある。たとえば、J. Wang, et al., Learning fine-grained image similarity with deep ranking, arXiv:1404.4661 [cs.CV] (2017)、およびそこに引用されている文献を参照されたい。また、米国特許第9,275,456号、第9,081,822号、第8,199,994号、第7,188,103号、および第7,027,633号、ならびに米国特許出願公開第2012/0242817号、第2010/0017389号、第2007/0258630号、および第2003/0013951号も参照されたい。 There is a large amount of literature on machine learning methods for searching for similar images. See, for example, J. Wang, et al., Learning fine-grained image similarity with deep ranking, arXiv: 1404.4661 [cs.CV] (2017), and the references cited therein. Also, U.S. Pat. Nos. 9,275,456, 9,081,822, 8,199,994, 7,188,103, and 7,027,633, and U.S. Patent Application Publications 2012/0242817, 2010/0017389, 2007/0258630, and No. See also 2003/0013951.
+現在の状況(context)での類似画像の検索、すなわち、類似する放射線画像、たとえば胸部X線の検索で直面する問題のうちの1つは、類似度を定義することである。2つの画像の間の視覚の類似度だけでは、一般に、たとえば、診断の助けを提供するためなど、それ自体では臨床的に有用であるには十分ではない。これを認識するために、それは、放射線撮像情報がどのように編成されているかを理解するのに役立つ。異種の注釈データを使用して、医用画像の多段階階層を編成することができる。そのような階層が図1Aに示される。階層の最高レベルには、画像に関連付けられた患者がいる。患者内で、画像を様々な症例にさらに再分割することができる。各症例内で、画像をスタックと呼ばれる空間的向きにさらに再分割することができ、これは、たとえば、3次元の各軸に対応する平面に沿った何らかの形式のデカルト配置に従った画像の向きに対応する(これがコンピュータ断層撮影(CT)画像の編成方法である)。各スタック内で、スタック内の位置に基づいて順序付けられた画像を見つける。最後に、これらのレベルのいずれかで、列挙されたクラス(たとえば、肺炎などの有無または病状)、数値データ(たとえば、年齢、体重、ボディマス指数など)、およびフリーテキスト(放射線レポートなど)、ならびに他のメタデータの混合を含む、関連する異種の注釈がある。 One of the problems faced in searching for similar images in the current context, i.e. searching for similar radiographic images, such as chest x-rays, is to define the degree of similarity. The visual similarity between the two images alone is generally not sufficient to be clinically useful in and of itself, for example to provide diagnostic aid. To recognize this, it helps to understand how the radiographic imaging information is organized. Heterogeneous annotation data can be used to organize a multi-level hierarchy of medical images. Such a hierarchy is shown in Figure 1A. At the highest level of the hierarchy are patients associated with the image. Within the patient, the image can be further subdivided into various cases. Within each case, the image can be further subdivided into spatial orientations called stacks, for example, the orientation of the image according to some form of Cartesian arrangement along the plane corresponding to each axis in three dimensions. (This is how to organize computed tomography (CT) images). Within each stack, find images ordered based on their position in the stack. Finally, at any of these levels, listed classes (eg, with or without pneumonia or medical condition), numerical data (eg, age, weight, body mass index, etc.), and free text (such as radiation reports), as well. There are related heterogeneous annotations, including a mixture of other metadata.
+図1Aに示されるように、この階層の深いネスティングは、たとえばYouTube(登録商標)ビデオに見られ得るものとは異なることに留意されたい。スタック内のCTのスライスはビデオの画像フレームに似ている可能性があるが、他の次元の追加は重要な追加の複雑さである。ビデオは、定期的にサンプリングされたフレームレート(たとえば、毎秒30フレーム)を有することができるが、医療データの時間的性質は、サンプリングレートが固定されておらず、多くの場合、不規則であるという点で異なる。たとえば、患者がICUで毎日胸部X線を撮影する場合でも、別の病院に移送されたり、退院して数週間後に戻ってきたりすると、X線の頻度は、かなり少なくなる可能性がある。 Note that this deep nesting, as shown in Figure 1A, is different from what can be seen, for example, in YouTube® videos. The CT slices in the stack can resemble video image frames, but the addition of other dimensions is an important additional complexity. The video can have a frame rate sampled on a regular basis (eg, 30 frames per second), but the temporal nature of medical data is that the sampling rate is not fixed and is often irregular. It differs in that. For example, if a patient takes a daily chest x-ray in the ICU, but is transferred to another hospital or returned a few weeks after being discharged, the frequency of x-rays can be significantly reduced.
+したがって、放射線医学における類似画像の検索が臨床的に有用であるために、解決する必要がある問題の1つは、異種の注釈/メタデータを有する不規則にサンプリングされたマルチレベルの階層画像をどのように扱うかである。 Therefore, one of the problems that needs to be solved for similar image retrieval in radiology to be clinically useful is to have irregularly sampled multi-level hierarchical images with dissimilar annotations / metadata. How to handle it.
+そのような放射線画像(胸部X線、CT、マンモグラム、超音波など)は、それぞれGoogle画像検索やYouTube(登録商標)で見られる画像やビデオとは大きく異なるように編成されているという違いに加えて、類似度を構成するものは状況に依存する。 In addition to the difference that such radiographic images (chest x-ray, CT, mammogram, ultrasound, etc.) are organized to be very different from the images and videos found on Google Image Search and YouTube®, respectively. Therefore, what constitutes similarity depends on the situation.
+類似の医用画像を取り出すという問題領域内で、返される参照情報は、臨床医が下そうとしている決定に医学的に関連する情報を臨床医に提供する場合にのみ有用である。したがって、たとえば、21歳の女性が、肺結節または腫瘤(フォローアップを必要とするもの)を含む胸部X線検査を受けて、フォローアップCTを受けるべきかどうかを識別しようとしている人の場合、結節や腫瘤のない21歳の女性の胸部X線検査結果は、結節や腫瘤のある胸部X線を返すほど有用ではない。したがって、主な課題の1つは、類似画像の検索ツールによってサポートされている関連する臨床的決定に状況的に合わせた類似度のメトリックを定義することである。 Within the problem area of retrieving similar medical images, the returned reference information is only useful if it provides the clinician with information that is medically relevant to the decision the clinician is trying to make. So, for example, if a 21-year-old woman is going to have a chest x-ray, including a lung nodule or mass (those that require follow-up), to determine if she should have a follow-up CT. Chest x-rays of a 21-year-old woman without nodules or masses are not as useful as returning chest x-rays with nodules or masses. Therefore, one of the main challenges is to define contextual similarity metrics for the relevant clinical decisions supported by similar image search tools.
+本明細書に記載されている作業は、医学的類似度、特に臨床的に有用な類似度が医学的分類とは異なるという認識も反映している。分類は、類似度の医学的に特有の性質に対処する簡単な方法であると考えられ得るが、分類および類似度の問題は同じものではないことに留意されたい。図1Bを参照して、線形分類器の2つの異なる特徴表現の簡略化された例について検討する。正と負の両方のケースを完全に分類する分類器を構築することは可能であるが、図1Bの左側の図100によって示される1つの分類器において、各正の例(+記号によって示されている)は、他の正の例よりも近い対応する負の例(-記号によって示されている)を有し、図1Bの右側の図102によって示される別の分類器では、すべての正の例は、任意の負の例よりも互いに近い。この簡略化された例は、図1Aの状況で上述した放射線医療情報の時間的および空間的コンポーネントと組み合わされた注釈付き情報の複数の次元の類似度を考慮すると、さらに複雑になる。したがって、クラス間の決定境界を決定するのに役立つ特徴をキャプチャできるだけでは不十分である。むしろ、図1Bの右側の例に示されるように、特徴自体が同じクラス内の画像を互いに近くにクラスタ化する必要がある。 The work described herein also reflects the perception that medical similarity, especially clinically useful similarity, differs from the medical classification. It should be noted that classification can be considered an easy way to deal with the medically unique nature of similarity, but the issues of classification and similarity are not the same. With reference to Figure 1B, consider a simplified example of two different feature representations of a linear classifier. It is possible to build a classifier that completely classifies both positive and negative cases, but in one classifier shown by Figure 100 on the left side of Figure 1B, each positive example (indicated by the + sign). Has a corresponding negative example (indicated by the-symbol) that is closer than the other positive examples, and in another classifier shown by Figure 102 on the right side of Figure 1B, all positives. Examples are closer to each other than any negative example. This simplified example is further complicated by the multidimensional similarity of the annotated information combined with the temporal and spatial components of the radiological medical information described above in the context of FIG. 1A. Therefore, it is not enough to capture features that help determine decision boundaries between classes. Rather, images within the same class of features themselves need to be clustered closer together, as shown in the example on the right side of Figure 1B.
+類似する医用放射線画像を識別し、取り出すための現在のシステムは、いくつかのニーズによって刺激されている。1つは、放射線科医に加えて、救急室の医師のような他の開業医がX線写真を読む必要がある可能性があることである。放射線科医は、以前に見たものに基づいて、特定の状態が他の状態よりもどのように見えるかをよく知っている可能性がある。加えて、症例の分布は病院ごとに異なる可能性がある。たとえば、結核は病院Aでより一般的であり、病院Bでは非常にまれである可能性がある。分類のために多数の陽性を分離することが困難なまれな状態のロングテールが存在する。 Current systems for identifying and retrieving similar medical radiological images have been stimulated by several needs. One is that in addition to the radiologist, other practitioners, such as emergency room doctors, may need to read the radiographs. Radiologists may be familiar with what a particular condition looks like over others, based on what they have seen before. In addition, the distribution of cases may vary from hospital to hospital. For example, tuberculosis is more common in hospital A and can be very rare in hospital B. There are rare long tails where it is difficult to separate a large number of positives due to classification.
+本明細書は、フェッチャおよびスコアラーを含むバックエンド設計(ソフトウェアインフラストラクチャ)と、クエリ画像と候補の類似する放射線画像のセットとの複数の類似度属性(たとえば、診断、視覚、患者など)、およびそれに関連付けられた注釈(たとえば、メタデータまたは医療レポートなど)をキャプチャする類似度スコアを生成するスコアラーに実装されたモデリング技法との組合せを特徴とするシステムによって、これらの問題の解決策を提案する。 This specification describes a back-end design (software infrastructure) that includes a fetcher and scorer, and multiple similarity attributes (eg, diagnostic, visual, patient, etc.) between a query image and a set of similar radiographic images of candidates, and Propose solutions to these problems with a system that features a combination of modeling techniques implemented in the scorer that generates a similarity score that captures the annotations associated with it (for example, metadata or medical reports). ..
+特に、システムは、クエリ画像を受信し、グラウンドトゥルース注釈付き参照放射線画像のライブラリの形式でデータストアから候補の類似する放射線画像のセットを取り出す1つまたは複数のフェッチャを含む。フェッチャは、トレーニングされたディープ畳み込みニューラルネットワーク、画像から抽出された特徴ベクトルに基づく最近傍アルゴリズム、または分類器の形式をとることができる。これらの候補画像は、すでにスコアに関連付けられている場合もあり、関連付けられていない場合もある。たとえば、1つの可能な構成では、クエリ画像にすでにインデックスが付けられている場合、類似画像のスコアが事前に計算され、キャッシュされ、フェッチャは、事前にキャッシュされた類似画像を利用して、候補の類似画像を取り出し得る。 In particular, the system includes one or more fetchers that receive the query image and retrieve a set of candidate similar radiation images from the data store in the form of a library of ground truth annotated reference radiation images. The fetcher can take the form of a trained deep convolutional neural network, a nearest neighbor algorithm based on a feature vector extracted from an image, or a classifier. These candidate images may or may not already be associated with the score. For example, in one possible configuration, if the query image is already indexed, the similar image score is pre-computed and cached, and the fetcher leverages the pre-cached similar image to make a candidate. Similar images can be retrieved.
+システムは、クエリ画像および候補の類似する放射線画像のセットを受信し、クエリ画像と各候補画像との間の類似度スコアを生成する1つまたは複数のスコアラーをさらに含む。スコアは、たとえば、事前に計算された埋込み、および埋込み空間内の標準的な距離メトリック(たとえば、コサインまたはユークリッド距離)に基づいて計算することができる。たとえば、スコアラーはデータベース内の画像の埋込みを調べ、次いで、埋込み空間内の距離尺度を使用して、クエリ画像が候補の類似する放射線画像とどの程度類似しているかを決定する。 The system further includes one or more scorers that receive a set of query images and similar radiographic images of candidates and generate a similarity score between the query images and each candidate image. Scores can be calculated, for example, based on pre-computed embeddings and standard distance metrics within the embedding space (eg, cosine or Euclidean distance). For example, the scorer examines the image embedding in the database and then uses a distance scale in the embedding space to determine how similar the query image is to a candidate's similar radiographic image.
+システムは、1つまたは複数のスコアラーから類似度スコアを受信し、候補画像を(たとえば、進行度/重大度に基づいて)ランク付けし、ランク付けを反映する候補画像のリストを返すプーラーをさらに含む。 The system also receives a similarity score from one or more scorers, ranks the candidate images (eg, based on progress / severity), and returns a list of candidate images that reflect the ranking. include.
+スコアラーは、モデリング技法を実装して、多くの異なる属性または軸(たとえば、診断、視覚、患者など)の類似度をキャプチャすることができる類似度スコアを生成する。診断、視覚、および患者の属性は、類似度の特定の軸で重要となり得る多くの信号の一部であるが、これら3つは、網羅的なリストであることを意図するものではない。いくつかの異なるモデリング技法が企図されており、複数のスコアラーが存在する典型的な実装形態では、各々が、類似度のこれらの異なる属性(たとえば、診断、視覚、患者など)をキャプチャする異なるモデリング技法を使用する。 The scorer implements modeling techniques to generate similarity scores that can capture the similarity of many different attributes or axes (eg, diagnostic, visual, patient, etc.). Diagnosis, vision, and patient attributes are some of the many signals that can be important on a particular axis of similarity, but these three are not intended to be an exhaustive list. Several different modeling techniques are intended, and in a typical implementation where there are multiple scorers, each captures these different attributes of similarity (eg, diagnostic, visual, patient, etc.). Use the technique.
+加えて、フェッチャは、これらの様々なモデリング手法を使用して、データストアから類似の医用画像を取り出すこともできる。特に、スコアリングおよびランク付けする初期画像および使用されるモデルをフェッチまたは選択する方法には相互作用がある。たとえば、システムが気胸など特定の状態に陽性である類似画像を返すツールとして構成されており、クエリ画像が気胸に陽性として分類されると確信している場合、気胸が陽性であることがわかっている画像のみをフェッチし(データストア内の参照画像はグラウンドトゥルース注釈を有するので)、スコアラーによるスコアリングとその後のランク付けにそれらを使用することができる。この場合、フェッチャは、クエリ画像の状態について推論するためにモデルを実行し、それを使用してスコアリングのために送信される候補画像をフィルタリングすることになる。 In addition, the fetcher can also use these various modeling techniques to retrieve similar medical images from the data store. In particular, there is an interaction between the initial images to be scored and ranked and the method of fetching or selecting the model to be used. For example, if the system is configured as a tool that returns similar images that are positive for a particular condition, such as pneumothorax, and you are confident that the query image will be classified as positive for pneumothorax, then you know that pneumothorax is positive. You can fetch only the images that you have (since the reference images in the data store have ground truth annotations) and use them for scoring by the scorer and subsequent ranking. In this case, the fetcher would run the model to infer about the state of the query image and use it to filter the candidate images sent for scoring.
+モデリング技法の一部は、トリプレット損失、分類損失、回帰損失、オブジェクト検出損失を含む。画像内の追加の領域情報を考慮に入れるアテンションモデルを使用することもでき、これによって、画像内の当該の領域の階層の1つの追加の層、すなわち、サブ画像レベルのメタデータを検討することができる。 Some modeling techniques include triplet loss, classification loss, regression loss, and object detection loss. You can also use an attention model that takes into account additional region information in the image, thereby considering one additional layer of the hierarchy of that region in the image, namely sub-image level metadata. Can be done.
+以下で説明するように、トリプレット損失は、類似度を概念上キャプチャする方法で、異種データを一貫して扱う技法である。具体的には、クエリ画像と2つの候補画像の3つの画像があると仮定する。候補画像のうちの一方(正)に他方の画像(負)よりも近いクエリ画像があることがわかっている場合、正のペア(クエリと正の候補)間の抽出された特徴間の距離は、クエリと負の候補との間の距離よりも小さくなると予想される。したがって、トリプレット損失は、これら2つの距離の間の差である。本明細書は、患者および臨床メタデータ(たとえばBMI、年齢、体重などの数値データを含む)、構造化ラベル、医療レポートに基づく分類ラベルのベクトル上のハミング距離、および画像内の異常の位置を含む、トリプレット損失(すなわち、クエリ画像と2つの候補画像との間の距離メトリック)を計算する様々な方法について記載する。前述のように、類似度を決定するための他のモデリング技法も企図されており、1つの可能な構成では、スコアラーは各々、異なるモデリング技法を使用する。 As described below, triplet loss is a technique for consistently treating heterogeneous data in a way that conceptually captures similarity. Specifically, it is assumed that there are three images, a query image and two candidate images. If one of the candidate images (positive) is known to have a query image closer than the other image (negative), then the distance between the extracted features between the positive pairs (query and positive candidate) is , Expected to be less than the distance between the query and the negative candidates. Therefore, triplet loss is the difference between these two distances. This specification describes the Hamming distance on a vector of patient and clinical metadata (including numerical data such as BMI, age, weight, etc.), structured labels, classification labels based on medical reports, and the location of anomalies in images. Describes various methods of calculating the triplet loss (ie, the distance metric between the query image and the two candidate images), including. As mentioned above, other modeling techniques for determining similarity are also contemplated, and in one possible configuration, each scorer uses a different modeling technique.
+フェッチャ、スコアラー、およびプーラーの一般的な配置によって、類似する放射線画像をスケーラブルに処理し、取り出すことができる。さらに、フェッチングおよびスコアラーの類似度に異なるモデリング技法を使用することによって、類似度モデリングの様々な側面を組み合わせて、ユーザに診断上有用な情報を提供し、特に放射線学の状況で、類似する医用画像検索の臨床応用のニーズを満たす類似する医用画像のセットを生成することができる。 The general arrangement of fetchers, scorers, and pullers allows similar radiographic images to be processed and retrieved in a scalable manner. In addition, by using different modeling techniques for fetching and scorer similarity, various aspects of similarity modeling can be combined to provide the user with diagnostically useful information, especially in the context of radiology, for similar medical use. It is possible to generate a set of similar medical images that meet the needs of clinical applications of image retrieval.
+一構成では、類似画像のフェッチ、スコアリング、およびランク付けを実行した後、ユーザに返される情報は、類似画像(および関連するメタデータ)だけでなく、類似画像の結果セットから選別、推測、または集約することができる情報も含む。したがって、システムは、候補の類似画像からのデータの集約または推論を実行する処理ユニットを含む。いくつかの例は、以下の通りである。
+1)画像は、単に画像のリストとして返されるのでなく、臨床上の決定をサポートするのに有用な共通の属性にわたってグループ化されて返され得る。たとえば、特定の異物の誤配置(たとえば、経鼻胃管の誤配置など)を含む画像は、気胸の診断に関連付けられた画像とは別にグループ化され得る。
+2)グループ化は、放射線科のフリーテキストレポートからの関連する共通のテキストの集約を含むことができる。たとえば、気管内チューブが誤配置されていることを示す特定のラベルはない場合があるが、たとえば、「カリーナのレベルで気管内チューブ」、「気管内チューブの先端は右主気管支で終了」、または「ETチューブの先端は、標準的な位置決めのために数センチ進めることができる」というテキスト入力を有するレポートなど、この状態が存在することを示唆する共通のフレーズを有するレポートに関連付けられた画像を集約することができる。
+3)上記の例2)のように、レポート内のこれらの共通のフレーズによって(または他のメタデータ内の列挙された状態の有無によって)グループ化すると、これらを値に集約し、ベースラインと比較し、比較を、たとえば、統計として報告することができる。たとえば、類似画像の結果が100枚の画像であり、データベース(参照ライブラリ)内の1000枚の画像のうち1枚だけが気胸を含んでいるにもかかわらず、100枚の画像のうち60枚が気胸が存在することを示したという事実を報告する場合がある。
+In one configuration, after performing similar image fetching, scoring, and ranking, the information returned to the user is sorted, inferred, from the similar image result set as well as the similar image (and associated metadata). Or it also includes information that can be aggregated. Therefore, the system includes a processing unit that performs aggregation or inference of data from similar images of candidates. Some examples are as follows.
+1) Images may be returned grouped across common attributes useful to support clinical decisions, rather than simply being returned as a list of images. For example, images containing a particular foreign body misposition (eg, nasogastric tube misposition) can be grouped separately from the images associated with the diagnosis of pneumothorax.
+2) Grouping can include aggregating relevant common texts from radiology free text reports. For example, there may not be a specific label indicating that the endotracheal tube is misplaced, but for example, "endotracheal tube at the level of Carina", "the tip of the endotracheal tube ends at the right main bronchus", Or an image associated with a report with a common phrase suggesting that this condition exists, such as a report with the text input "The tip of the ET tube can be advanced a few centimeters for standard positioning". Can be aggregated.
+3) Grouping by these common phrases in the report (or by the presence or absence of enumerated states in other metadata), as in Example 2) above, aggregates them into values and sets them as baselines. You can compare and report the comparison, for example, as statistics. For example, 60 out of 100 images have a similar image result of 100 images, even though only 1 out of 1000 images in the database (reference library) contains pneumothorax. It may report the fact that it has shown that pneumothorax is present.
+したがって、類似画像のセットが識別されると、関連情報がこのセットからユーザに返される。これは、通常、画像自体だけでなく、放射線レポート、行われた臨床的決定(たとえば、抗生物質、利尿薬の処方など)、類似画像に関連付けられた疾患/状態の分類、これらの結果のグループ化/集約に関連する情報または統計など、これらの画像の各々に関連付けられたメタデータも含む。その集約は、類似する特性を有する画像結果のクラスタリング、画像内の特定の状態/診断の有病率を要約したピボットテーブルの生成、および放射線レポート内の共通のフレーズの有病率の表示を含むことができる。これらの集約は、所与の患者の将来の結果にも基づき得ることに留意されたい。 Therefore, when a set of similar images is identified, the relevant information is returned to the user from this set. This is usually not just the image itself, but also radiation reports, clinical decisions made (eg, antibiotics, diuretic prescriptions, etc.), disease / condition classification associated with similar images, a group of these results. It also includes metadata associated with each of these images, such as information or statistics related to transformation / aggregation. The aggregation includes clustering image results with similar properties, generating a pivot table summarizing the prevalence of a particular condition / diagnosis in the image, and displaying the prevalence of common phrases in radiation reports. be able to. Note that these aggregations can also be based on the future outcomes of a given patient.
+フェッチャ、スコアラー、およびプーラーは、上述した様々な機能を実行するように構成されていることが諒解されよう。 It will be appreciated that the fetchers, scorers, and pullers are configured to perform the various functions described above.
+別の態様では、クエリ放射線画像に類似する放射線画像を識別し、取り出すための方法が開示されている。クエリ画像は、メタデータを含む注釈に関連付けられている。この方法は、グラウンドトゥルース注釈付き放射線画像のデータストアをキュレートする(すなわち、開発し、記憶する)ステップa)を含み、放射線画像の各々はメタデータを含む注釈に関連付けられている。この方法は、クエリ画像を受信し、データストアから候補の類似する放射線画像のセットを取り出すステップb)を含む。この方法は、少なくとも2つの異なるスコアラーを使用して、クエリ画像と候補の類似する各放射線画像との間の類似度スコアを生成するステップc)を含む。少なくとも2つのスコアラーは、異なるモデリング技法を実装して、クエリ画像と候補の類似する放射線画像のセットとの複数の類似度属性、およびそれに関連付けられた注釈をキャプチャする類似度スコアを生成する。この方法は、候補の類似する放射線画像をランク付けするステップd)を含む。この方法は、候補の類似する放射線画像のセットに関連付けられた注釈から取得されたランク付けおよび集約情報を反映する候補の類似する放射線画像のリストを返すステップe)をさらに含む。 In another aspect, a method for identifying and retrieving a radiographic image similar to a query radiographic image is disclosed. The query image is associated with an annotation that contains metadata. This method involves curating (ie, developing and storing) a data store of ground-truth annotated radiographic images a), where each radiographic image is associated with an annotation containing metadata. This method involves step b) of receiving a query image and retrieving a set of similar radiographic images of candidates from a data store. This method includes step c) of using at least two different scorers to generate a similarity score between the query image and each similar radiographic image of the candidate. At least two scorers implement different modeling techniques to generate similarity scores that capture multiple similarity attributes between query images and a set of similar radiographic images of candidates, and the annotations associated with them. This method includes step d) of ranking similar radiographic images of candidates. The method further includes step e) returning a list of similar radiographic images of the candidate that reflect the ranking and aggregated information obtained from the annotations associated with the set of similar radiographic images of the candidate.
+本明細書は、クエリ画像に類似する放射線画像を識別するためのコンピュータ実装システムについて記載する。このシステムは、胸部X線、マンモグラム、またはCTスキャンなど、患者の放射線画像に基づいて患者の診断に到達する際に、放射線科医、ER医師、またはプライマリケア医などの医療専門家を支援するためのツールと見なすことができる。システムは、入力画像に基づいて、診断上有用な出力情報をユーザに提供する。 This specification describes a computer-implemented system for identifying radiographic images that are similar to query images. The system assists medical professionals such as radiologists, ER doctors, or primary care physicians in reaching a patient's diagnosis based on the patient's radiographic images, such as chest x-rays, mammograms, or CT scans. Can be considered as a tool for. The system provides the user with diagnostically useful output information based on the input image.
+システムがどのように機能するかについての一般的な考え方を図2に示す。放射線画像200は、たとえば、従来の撮像機器を使用して取得され、本開示のシステム202に供給される。画像200は、クエリ画像と見なされ、すなわち、医療専門家は、画像200に類似する画像を見つけようとする。クエリ画像200は、医療情報、メタデータ、レポートなど(総称して「注釈」)に関連付けられている。システム202は、クエリ放射線画像200のタイプのグラウンドトゥルース注釈付き放射線画像の参照ライブラリの形式でデータストアから取得された類似する放射線画像(SMILY、「similar medical image like yours」)の形式で結果204のリストを返す。結果204は、類似画像だけでなく、それに関連付けられた注釈も含む。本明細書の後半で図3および図8〜図10で詳細に説明するように、結果は、一般に、グループ化および集約情報、たとえば統計などとともに返される。次いで、開業医は、クエリ画像202および結果204を検討することによって、たとえば、フリーテキストレポートまたは構造化されたノートの形式で、患者の医療記録に所見206、典型的には診断所見を入力する。本開示のシステムの1つの目的は、意思決定タスクを改善するためのツールを提供することであり、医療専門家は、他の診断手順および方法に加えて結果を使用して、臨床所見を生成する。画像のすべての所見が特定の行動/計画に臨床的に関連していない場合があることに留意されたい。ここでは、臨床的に関連する所見として、図2の所見A、B、およびCを参照する。
+Figure 2 shows a general idea of how the system works. The
+図3は、ユーザの観点からシステムの操作方法を示す。図3に示されるように、従来のコンピュータワークステーション(図示せず)上で医療専門家にユーザインターフェースを提供するフロントエンドコンポーネント300が存在する。フロントエンドコンポーネントは、カスタムデザインの場合もあり得る、PACS(画像アーカイブおよび通信)システム内のタブまたはアイコンをアクティブにするなどして、PACSシステムから入力される。フロントエンドコンポーネントは、臨床医にとってローカルであるか、リモートのクラウドコンピューティング環境であり得るコンピュータシステム内で実行される、図4に示されるコンピュータソフトウェアモジュールのセットの形式で、バックエンドシステムに、たとえば、アプリケーションプログラミングインターフェース(API)のセットを介して、ソフトウェアインターフェースを提供する。フロントエンドコンポーネントは、ユーザがクエリ画像を選択するためのオプションを提供する。システムは、302に示されるように、クエリ画像と類似する画像の検索を実行する。フロントエンドシステムは、ワークステーション上にクエリ画像200および結果204の表示を提供する。結果は図3に要約形式で示されているが、他の様々な形式については図8〜図10と併せて後で説明し、詳細は、図3に示されているものとは異なる場合がある。ユーザは、結果204内の類似画像のいずれか1つをクリックまたは選択する(矢印303で示される)オプションを有し、選択された類似画像304の詳細ビューが表示される。フロントエンドコンポーネントのインターフェースは、検索を絞り込む(矢印306で示されている)ためのツールも含み、指定された絞り込みに基づいて類似画像が取り出される。そのような絞り込みは、テキストボックスにテキストを入力するか、特定の年齢層、喫煙者のステータス、性別、診断、または他の基準で患者のみを選択するか、特定の診断または状態に関連付けられた画像のセットのみを選択することによって指定することができる。
+FIG. 3 shows how to operate the system from the user's point of view. As shown in Figure 3, there is a front-
+類似する放射線画像のセットが識別されると、関連情報がこのセットからユーザに返される。これは、通常、画像自体だけでなく、放射線レポート、行われた臨床的決定(たとえば、抗生物質、利尿薬の処方など)、類似画像に関連付けられた疾患/状態の分類、これらの結果のグループ化/集約に関連する情報など、画像の各々に関連付けられたメタデータも含む。その集約は、類似する特性を有する画像結果のクラスタリング、画像内の特定の状態/診断の有病率を要約したピボットテーブルの生成、および放射線レポート内の共通のフレーズの有病率の表示を含むことができる。これらの種類の集約の例については、本明細書で後述する。 Once a set of similar radiographic images has been identified, the relevant information is returned to the user from this set. This is usually not just the image itself, but also radiation reports, clinical decisions made (eg, antibiotics, diuretic prescriptions, etc.), disease / condition classification associated with similar images, a group of these results. It also includes metadata associated with each of the images, such as information related to conversion / aggregation. The aggregation includes clustering image results with similar properties, generating a pivot table summarizing the prevalence of a particular condition / diagnosis in the image, and displaying the prevalence of common phrases in radiation reports. be able to. Examples of these types of aggregations will be described later herein.
+図4は、クエリ画像を受信し、結果のリストを生成するソフトウェアモジュールまたはオブジェクトのセットの形式のバックエンド400の1つの可能な構成のブロック図である。ソフトウェアモジュールは、当業者によって諒解されるように、コンピューティングリソースおよび処理ユニット、たとえば、グラフィックス処理ユニット、機械学習モデルのメモリ記憶パラメータ、統計を計算するための処理ユニットなどを有するコンピュータシステムで実行される。図4の凡例に示されているように、要求および応答の流れは、細い矢印および太い矢印で示されている。
+FIG. 4 is a block diagram of one possible configuration of a
+バックエンドのオブジェクトは、大きく2つのカテゴリに分割することができる。
+(a)バックエンド400の状態機械を制御するオブジェクト:
+コントローラ402:バックエンドの外部(たとえば、図3のフロントエンド300)からクエリを受信し、ディスパッチャ404、フェッチャ406、およびプーラー410を調整して、類似画像の結果のリストを生成し、結果をランク付けするオブジェクト。コントローラはまた、構成または初期状態からこれらのオブジェクトを構築する。
+ディスパッチャ404:いくつかの異なるフェッチャ406とスコアラー408との間でクエリを配信し、次いでプーラー410を使用して結果を照合するオブジェクト。ディスパッチャは、候補画像およびクエリされた画像をスコアラーのセットに並行して送信し、結果をフェッチし、得られたスコアをランク付けのためにプーラー410に渡す。
+(b)類似画像を識別し、取り出すために必要な特定の操作を実行するオブジェクト:
+(1)フェッチャ406-クエリ画像200を受信し、すでにスコアに関連付けられていても関連付けられていなくてもよいグラウンドトゥルース注釈付き参照画像のライブラリの形式でデータストア(図3には図示せず)にクエリを実行することによって、候補の類似画像のセットを生成するオブジェクト。一実施形態では、各々異なるモデリング技法を使用して候補の類似する放射線画像のセットを取り出す2つ以上のフェッチャが存在し得る。
+(2)スコアラー408-クエリ画像および候補画像のセットを受信し、クエリ画像と各候補画像との間の類似度スコアを返すオブジェクト。好ましい実施形態では、2つ以上のスコアラーが存在する。以下で説明するように、スコアラーは、モデリング技法を実装して、クエリ画像と候補の類似する放射線画像のセットとの複数の類似度属性、ならびに、たとえば診断、視覚、および患者の類似度など、それに関連付けられた注釈をキャプチャする類似度スコアを生成する。複数のスコアラーが存在する場合、各々が異なるモデリング技法を実装する。
+(3)プーラー410-ディスパッチャ404によって照合された、いくつかの異なるスコアラーまたはフェッチャからスコアリング結果を受信し、結合された結果の単一のリストを返すオブジェクト。プーラーは、候補画像を(たとえば、進行度/重大度に基づいて)ランク付けし、ランク付けを反映する候補画像のリストを返す。
+Backend objects can be broadly divided into two categories.
+(a) State of
+Controller 402: Receives a query from outside the backend (for example, the
+Dispatcher 404: An object that delivers queries between several
+(b) Objects that perform certain operations necessary to identify and retrieve similar images:
+(1) Fetcher 406-Receives
+(2) Scorer 408-An object that receives a set of query images and candidate images and returns a similarity score between the query image and each candidate image. In a preferred embodiment, there are two or more scorers. As described below, the scorer implements modeling techniques to include multiple similarity attributes between query images and a set of similar radiographic images of candidates, as well as, for example, diagnostic, visual, and patient similarity. Generate a similarity score that captures the annotations associated with it. If there are multiple scorers, each implements a different modeling technique.
+(3) Puller 410-An object that receives scoring results from several different scorers or fetchers matched by
+図4のソフトウェアアーキテクチャは、異なるモデルからトレーニングされた異なるスコアリング技法を組み合わせ、それらを組み合わせてスケーラブルな方法で最終的なランク付けを生成する能力を提供する。 The software architecture in Figure 4 provides the ability to combine different scoring techniques trained from different models and combine them to generate the final ranking in a scalable manner.
+図4のソフトウェアアーキテクチャは、基本ビルディングブロックまたはオブジェクトの他の形式および配置で実現することができる。図5は、考えられる1つの変形を示す。この構成では、クエリ画像200は、データストアまたはリポジトリ500から類似画像の候補セットを取り出すフェッチャ406を含むディスパッチャ/プーラー502によって受信される。画像のセットは、画像クエリおよび候補画像を3つの異なるスコアラー408A、408B、および408Cを含むスコアリングモジュール408に送信するディスパッチャ404に送信される。各モジュール408A、408B、および408Cは、異なるモデリング技法を使用して、候補画像の類似度スコアを生成する。これらのモデリング技法は各々、クエリ画像と候補の類似する放射線画像のセットとの間の2つ以上の類似度属性、および患者、診断、視覚の類似度など、関連する注釈をキャプチャするか、または考慮に入れる。これらの類似度の属性は、多次元埋込み空間の座標軸として表すことができ、図11を参照すると、ここで、画像の特徴ベクトルおよび関連する注釈を使用して、この特徴空間内にクエリ画像および類似画像の候補セットの位置をプロットし、次いで、距離メトリックまたは以下で説明する他のタイプのモデリング技法を使用して、類似度を反映する類似度スコアを生成する。
+The software architecture of Figure 4 can be implemented in other forms and arrangements of basic building blocks or objects. Figure 5 shows one possible variant. In this configuration, the
+次いで、類似度スコアおよび類似画像の候補セットは、ディスパッチャ404に返され、次いで、プーラー410に供給され、次いで、スコアを使用して類似画像の候補セットをランク付けする。次いで、プーラーは、ランク付けされた画像を結果204として返す(この場合も、好ましくは、他の場所で詳細に説明されているように、集約情報、統計、グループ化、メタデータなどを含む)。
+The similarity score and the candidate set of similar images are then returned to the
+図6は、別の可能な構成を示す。番号1、2、3.1、3.2などは、オブジェクト402、404A、406A、408A、410Aなどが呼び出される順序を表す。
+FIG. 6 shows another possible configuration.
+この実施形態は、コントローラ402、およびフェッチ要求を異なるフェッチャ406Aおよび406Bにディスパッチするフェッチディスパッチャ404Aを特徴とし、各々が異なるモデリング技法を使用して、データストアから候補の類似画像のセットを識別する。フェッチ結果は、プーラー410にプールされ、次いで、コントローラ402を介してスコアディスパッチャ404Bに送信され、スコアディスパッチャ404Bは、クエリ画像および類似画像の候補セットをスコアラー408Aおよび408Bにディスパッチし、スコアラー408Aおよび408Bは各々異なるモデリング技法を使用して、類似度スコアを生成する。スコア要求7.1および7.2の場合と同様に、フェッチ要求3.1および3.2を並行して計算することができることに留意されたい。
+This embodiment features
+図7は、さらに別の構成を示す。たとえば、図5のように構成されたディスパッチャ/プーラー502は、候補画像およびクエリ画像を5つの異なるスコアラー408A、408B、408C、408Dおよび408Eの各々に並行して転送する。スコアラーの各々は、異なるモデリング技法を使用して、クエリ画像と候補の類似する放射線画像のセットとの類似度属性と、診断、患者、視覚の類似度など、関連する注釈をキャプチャする類似度スコアを生成する。各スコアリングモジュールは、たとえば図11に示されるように、クエリ画像の特徴ベクトルの多次元空間への埋込みまたは投影に基づく距離メトリックを使用してスコアを生成する。スコアリングモジュール408Aは、局所的な状態におけるRegional Maximum Activations of Convolutions(R-MAC)からの埋込みを使用する。さらなる詳細については、たとえば、A Gordo et al., Deep Image Retrieval: Learning global representations for image search, arXiv.org [cs.CV] 1604.0132 (July 2016)を参照されたい。スコアリングモジュール408Bは、教師あり学習モデルから取得された埋込みを使用する。スコアリングモジュール408Cは、以下で説明するトリプレット損失からの埋込みを使用する。スコアリングモジュール408Dは、きめの細かい画像特徴からの埋込みを使用する。J. Wang, et al., Learning fine-grained image similarity with deep ranking, https://arxiv.org/abs/1404.4661 (2017)を参照されたい。スコアリングモジュール408Eは、NCA(ネットワーク成分分析)を備える分類器からの埋込みを使用する。
+FIG. 7 shows yet another configuration. For example, the dispatcher /
+図11は、多次元空間または埋込みへのフェッチャによって参照ライブラリから取得された多数の候補の放射線画像の埋込みのプロットの一例である。埋込みの視覚化を容易にするために、埋込みは、3つの軸からなる。軸は、視覚、診断、および患者など、類似度の異なる側面を表す。各長方形パッチ1102A、1102Bなどは、単一の放射線画像を表す。類似する画像は、互いに近くにクラスタ化され、類似しない画像はクラスタ化されていない。クエリ画像と類似する医用画像は、クエリ画像の特徴ベクトルを、多次元空間において距離によって隣接する画像をスコアリングする図4の埋込みに投影することによって見つけられる。たとえば、図11を参照すると、画像1102Aを含む画像1104のクラスタは、3つの軸すべてにおいて、星で示されるクエリ画像1106に類似している画像のグループを表す。この例では、クエリ画像が胸部X線で気胸が陽性であった場合、患者が喫煙者であった場合など、クエリ画像は、星408の位置に配置され、クラスタ内の画像1104のスコアは、たとえば、より遠くにある画像1102Bよりも低くなる(すなわち、より類似している)。
+FIG. 11 is an example of an embedding plot of a large number of candidate radiographic images obtained from a reference library by a fetcher into a multidimensional space or embedding. To facilitate the visualization of the embedding, the embedding consists of three axes. The axes represent different aspects of similarity, such as vision, diagnosis, and patient. Each
+図4、図5、図6、および図7でアーキテクチャ全体とアーキテクチャの様々な可能な構成について説明したので、次に、フェッチャ、スコアラー、およびプーラーについてさらに詳しく説明する。 Having described the entire architecture and the various possible configurations of the architecture in Figures 4, 5, 6, and 7, the fetchers, scorers, and pullers will be discussed in more detail next.
+フェッチャ406
+前に説明したように、フェッチャは、クエリ画像を受信し、グラウンドトゥルース注釈付き参照放射線画像のライブラリの形式でデータストアから候補の類似する放射線画像のセットを取り出す。データストアは、公的に入手可能なまたは私的なソースからグラウンドトゥルース注釈付き放射線画像を取得することによって、または公的または私的ソースから画像を取得し、トレーニングされたリーダーを使用してグラウンドトゥルース注釈を追加することによって、キュレート、すなわち開発および維持することができる。
+As described earlier, the fetcher receives the query image and retrieves a set of candidate similar radiation images from the data store in the form of a library of ground truth annotated reference radiation images. Data stores obtain images from publicly available or private sources by obtaining ground truth annotated radiographic images, or from public or private sources and ground using trained readers. It can be curated, i.e. developed and maintained, by adding truth annotations.
+フェッチャは、トレーニングされたディープ畳み込みニューラルネットワークまたは分類器の形式をとることができ、オプションでフィルタを使用して、たとえば、クエリ画像に存在する特定の条件について陽性であるものなど、一部の画像のみを除外または含めることができる。フェッチャは、最初にクエリ画像を分類し(たとえば、気胸が陽性であると決定する)、その分類を使用して、気胸のグラウンドトゥルース注釈を有するもののみに類似画像をフィルタリングする関数を含むこともできる。フェッチャは、いくつかの形式をとることができ、たとえば、以下の参考文献のうちの1つに従って構成することができ、その内容は参照により本明細書に組み込まれる。C. Szegedy et al., Going Deeper with Convolutions, arXiv:1409.4842 [cs.CV] (September 2014); C. Szegedy et al., Rethinking the Inception Architecture for Computer Vision, arXiv: 1512.00567 [cs.CV] (December 2015)、また、2015年8月28日に出願されたC. Szegedyらの「Processing Images Using Deep Neural Networks」と題した米国特許出願第14/839,452号も参照されたい。lnception-v4として知られる第4世代は、別の可能なアーキテクチャと見なされる。C. Szegedy et al., lnception-v4, Inception-ResNet and the Impact of Residual Connections on Learning, arXiv:1602.0761 [cs.CV] (February 2016)を参照されたい。また、2016年12月30日に出願されたC. Vanhouckeの「Image Classification Neural Networks」と題した米国特許出願第15/395,530号、および2017年2月23日に出願されたPCT出願第PCT/US2017/019051号も参照されたい。 Fetchers can take the form of trained deep convolutional neural networks or classifiers and optionally use filters on some images, for example those that are positive for certain conditions present in the query image. Only can be excluded or included. The fetcher may also include a function that first classifies the query image (for example, determines that the pneumothorax is positive) and then uses that classification to filter similar images only to those with a pneumothorax ground truth annotation. can. Fetchers can take several forms, for example, can be constructed according to one of the following references, the contents of which are incorporated herein by reference. C. Szegedy et al., Going Deeper with Convolutions, arXiv: 1409.4842 [cs.CV] (September 2014); C. Szegedy et al., Rethinking the Inception Architecture for Computer Vision, arXiv: 1512.00567 [cs.CV] (December) See also US Patent Application No. 14 / 839,452 entitled "Processing Images Using Deep Neural Networks" by C. Szegedy et al., Filed August 28, 2015. The 4th generation, known as lnception-v4, is considered another possible architecture. See C. Szegedy et al., Lnception-v4, Inception-ResNet and the Impact of Residual Connections on Learning, arXiv: 1602.0761 [cs.CV] (February 2016). Also, C. Vanhoucke's US Patent Application No. 15 / 395,530 entitled "Image Classification Neural Networks" filed on December 30, 2016, and PCT Application No. PCT / filed on February 23, 2017. See also US2017 / 019051.
+これらの候補画像は、すでにスコアに関連付けられている場合もあり、関連付けられていない場合もある。たとえば、1つの可能な構成では、類似画像へのスコアが事前に割り当てられてもよく、フェッチャは、事前にキャッシュされた類似画像を利用して、候補の類似画像を取り出し得る。 These candidate images may or may not already be associated with the score. For example, in one possible configuration, scores for similar images may be pre-assigned, and the fetcher may utilize the pre-cached similar images to retrieve candidate similar images.
+一実施形態では、1つまたは複数のフェッチャは、事前にキャッシュされたフェッチャとして構成することができる。事前にキャッシュされたフェッチャでは、所与のクエリ画像の類似する候補画像が事前に計算されている。類似画像の事前計算は、任意の適切な技法を使用することができる。 In one embodiment, one or more fetchers can be configured as pre-cached fetchers. The pre-cached fetcher pre-computs similar candidate images for a given query image. Any suitable technique can be used for the pre-calculation of similar images.
+フェッチャは、様々な異なるモデリング技法を使用して画像の類似度を決定することができ、そのようなモデリング技法については、スコアラーの説明でより詳細に説明する。そのようなモデリング技法は、トリプレット損失、分類損失、回帰損失、オブジェクト検出損失を含むことができる。 Fetchers can use a variety of different modeling techniques to determine the similarity of images, and such modeling techniques will be described in more detail in the scorer's description. Such modeling techniques can include triplet loss, classification loss, regression loss, object detection loss.
+スコアラー408
+上述のように、システムは、クエリ画像および候補の類似する放射線画像のセット(フェッチャによって識別される)を受信する1つまたは複数のスコアラーを使用し、画像データならびに画像に関連付けられた基礎となる注釈(画像メタデータ、レポート、患者情報など)を使用して、クエリ画像と各候補画像との間の類似度スコアを生成する。スコアは、たとえば、事前に計算された埋込み、および埋込み空間内の標準的な距離メトリック(たとえば、コサインまたはユークリッド距離)に基づいて計算することができる。たとえば、スコアラーはデータベース内の画像の埋め込みを調べ、次いで、埋込み空間内の距離尺度を使用する。上記の図11の説明を参照されたい。
+As mentioned above, the system uses one or more scorers to receive a query image and a set of similar radiographic images of candidates (identified by the fetcher) and is the basis associated with the image data as well as the image. Use annotations (image metadata, reports, patient information, etc.) to generate a similarity score between the query image and each candidate image. Scores can be calculated, for example, based on pre-computed embeddings and standard distance metrics within the embedding space (eg, cosine or Euclidean distance). For example, the scorer examines the image embedding in the database and then uses the distance scale in the embedding space. See the description in Figure 11 above.
+スコアラーは、モデリング技法を実装して、多くの異なる軸(たとえば、診断、視覚、患者など)の類似度をキャプチャすることができる類似度スコアを生成する。診断、視覚、および患者の属性は、類似度の特定の軸で重要となり得る多くの信号の一部であるが、これら3つは、網羅的なリストであることを意図するものではない。いくつかの異なるモデリング技法が企図されており、複数のスコアラーが存在する典型的な実装形態では、各々が、類似度のこれらの異なる属性(たとえば、診断、視覚、患者など)をキャプチャする異なるモデリング技法を使用する。 The scorer implements modeling techniques to generate similarity scores that can capture the similarity of many different axes (eg, diagnostic, visual, patient, etc.). Diagnosis, vision, and patient attributes are some of the many signals that can be important on a particular axis of similarity, but these three are not intended to be an exhaustive list. Several different modeling techniques are intended, and in a typical implementation where there are multiple scorers, each captures these different attributes of similarity (eg, diagnostic, visual, patient, etc.). Use the technique.
+類似度のモデリングでは、スコアラーの一構成は、診断、視覚、および患者の類似度をキャプチャする様々な信号を並行して開発する。これらの信号からの出力は、類似度信号をキャプチャする画像埋込み、またはすべての候補画像の類似度スコアのいずれかである。スコアリングモジュールは、様々な信号を組み合わせ、最終的なスコアリングおよび候補画像のランク付けの役目を果たす。類似度モデルのいくつかの提案には、以下を含む。 In similarity modeling, one configuration of the scorer develops various signals in parallel to capture diagnostic, visual, and patient similarity. The output from these signals is either an image embedding that captures the similarity signal, or a similarity score for all candidate images. The scoring module combines various signals to serve as the final scoring and ranking of candidate images. Some suggestions for similarity models include:
+診断の類似度
+(1)対応するレポートテキストベースの類似度を利用して、診断類似度画像トリプルを生成する。たとえば、自然言語処理(NLP)レポート抽出埋込みを利用して、レポートの類似度をキャプチャし、これらのレポートに対応する画像は、診断画像の類似度に関するトレーニングを提供する。類似度は、放射線レポートの内容全体に基づいているので、これらの例は、すべての診断状態をキャプチャし、サブセットに焦点を当てない。
+(2)結節、気胸、不透明度などの状態のために構築された既存のX線分類モデルからの埋込みを利用する。これらは、適度に性能の高いモデルであり、これらのモデルの上位の数層に基づく類似度は、診断の類似度をキャプチャする必要がある。
+Diagnosis similarity
+(1) Generate diagnostic similarity image triples using the corresponding report text-based similarity. For example, natural language processing (NLP) report extraction embedding is used to capture the similarity of reports, and the images corresponding to these reports provide training on the similarity of diagnostic images. Since the similarity is based on the entire content of the radiation report, these examples capture all diagnostic conditions and do not focus on a subset.
+(2) Utilize implantation from existing X-ray classification models constructed for conditions such as nodules, pneumothorax, and opacity. These are reasonably high performance models, and the similarity based on the upper layers of these models needs to capture the diagnostic similarity.
+診断+位置の類似度
+(1)パッチ検出手法を使用して、小さい異常(たとえば結節など)をその位置とともに特定する。小さい異常を含む入力画像を与えられると、異常およびその位置を自動的に識別し、類似する位置で類似する異常を含む画像を取り出し、入力画像と取り出された画像の両方の異常を強調表示する。
+(2)トレーニング画像データセットからパッチベースの画像トリプルを使用して、分類器を再トレーニングする(たとえば、J. Wang et ai., Learning Fine-grained Image Similarity with Deep Ranking, arXiv:1404.4661 [cs.CV] (2014)を参照されたい)。スコアリング方式は、同じ位置からの同じ異常>異なる位置からの同じ異常>同じ位置からの異なる異常>他のすべて、とすることができる。
+Diagnosis + position similarity
+(1) Use patch detection techniques to identify small anomalies (such as nodules) along with their location. Given an input image containing small anomalies, it automatically identifies the anomaly and its location, extracts images containing similar anomalies at similar positions, and highlights anomalies in both the input image and the extracted image. ..
+(2) Retrain the classifier using patch-based image triples from the training image dataset (eg, J. Wang et ai., Learning Fine-grained Image Similarity with Deep Ranking, arXiv: 1404.4661 [cs. CV] (2014)). The scoring method can be the same anomaly from the same position> the same anomaly from a different position> a different anomaly from the same position> everything else.
+人口統計および患者の類似度
+(1)2つのX線が同じ人物に帰属するかどうかを識別するためのモデル。所与の患者の縦方向のX線を含むデータセットは、同じ人物の複数の画像を経時的に提供し、これを使用して、同じ人物と違う人物のトレーニングセットを構築し、モデルをペアまたはトリプレットでトレーニングして、同じ人物かどうかを分類することができる。
+(2)年齢、性別、民族性、喫煙歴、BMI(ボディマス指数)、身長、体重などのトレーニングデータセットの個人テーブルのフィールドを使用して、人口統計の類似度のトリプレットを生成する。トレーニングデータを生成するために、これらの特性をどのようにランク付けするかについてヒューリスティックにより導出する。
+Demographics and patient similarity
+(1) A model for identifying whether two X-rays belong to the same person. A dataset containing longitudinal X-rays of a given patient provides multiple images of the same person over time, which can be used to build training sets for the same person and different people and pair models. Or you can train with triplets to classify them as the same person.
+(2) Use the fields of the personal table of the training dataset such as age, gender, ethnicity, smoking history, BMI (body mass index), height, weight, etc. to generate a triplet of demographic similarity. Heuristically derive how to rank these properties to generate training data.
+視覚の類似度
+(1)上記のJ. Wang et al., Learning Fine-grained Image Similarity with Deep Rankingの論文に記載されているようなディープCNN画像分類器を使用する。または、X線データを使用した特徴選択にNCA(ネットワーク成分分析)を用いた分類器を使用する。
+(2)人口統計、患者、および診断の類似度のために生成されたトリプルを使用して、(1)の分類器を再トレーニングする。
+Visual similarity
+(1) Use a deep CNN image classifier as described in the above paper by J. Wang et al., Learning Fine-grained Image Similarity with Deep Ranking. Alternatively, a classifier using NCA (Network Component Analysis) is used for feature selection using X-ray data.
+(2) Retrain the classifier in (1) using the triples generated for demographic, patient, and diagnostic similarity.
+異常の類似度
+(1)正常対異常の画像分類器をトレーニングする。異常なラベルを提供し、包括的なトレーニングデータセットを使用または開発する。一構成では、注釈内のフリーテキストレポートから正常対異常のレポートエクストラクタを構築することができ、対応する画像を使用して分類器を生成する。
+(2)敵対的生成ネットワーク(GAN)を循環させて、異常な領域を特定する。異常タイプと16の異常位置のうちの1つを含むトレーニングデータセット内の各画像の異常ベクトルを生成する。画像のペアについて異常ベクトルの類似度を予測する分類器をトレーニングして、同じ位置に異常がある画像を効果的により類似させる。
+Abnormal similarity
+(1) Train a normal vs. abnormal image classifier. Provide anomalous labels and use or develop a comprehensive training dataset. In one configuration, a normal vs. abnormal report extractor can be constructed from the free text report in the annotation, and the corresponding image is used to generate the classifier.
+(2) circulate the Generative Adversarial Network (GAN) to identify anomalous areas. Generate an anomaly vector for each image in the training dataset that contains the anomaly type and one of 16 anomaly positions. Train a classifier that predicts the similarity of anomaly vectors for a pair of images to effectively resemble images with anomalies in the same position.
+図1Bの説明で上述したように、分類器のトレーニング自体は、良好な類似度メトリックを保証するのに十分ではなく、クエリ画像とフェッチャによって取り出された候補画像のセットの両方に、異種の注釈のセットがある。好ましい構成では、類似度スコアを生成するために、いくつかの異なるモデリング技法を使用する。以下に、いくつかの技法を提示する。これらは、(a)トリプレット損失、画像の順序付けの何らかの概念のみを必要とし、それによって、不規則にサンプリングされたデータ、階層、および異種の注釈/メタデータを扱うことができる、(b)回帰損失、すなわち、埋め込みを報告するために回帰し、これは、画像およびレポートデータのモダリティを組み合わせることができる1つの技法である、(c)分類損失、および(d)オブジェクト検出損失、たとえば、画像内の追加の地域情報を考慮したアテンションモデルの使用によるものであり、これによって、画像内の関心領域の階層の1つの追加の層、すなわち、サブ画像レベルのメタデータを考慮することができる。 As mentioned above in the discussion of Figure 1B, the classifier training itself is not sufficient to guarantee good similarity metrics, and heterogeneous annotations on both the query image and the set of candidate images retrieved by the fetcher. There is a set of. The preferred configuration uses several different modeling techniques to generate similarity scores. Some techniques are presented below. They require only (a) triplet loss, some concept of image ordering, which allows them to handle irregularly sampled data, hierarchies, and heterogeneous annotations / metadata, (b) regression. Returning to report losses, i.e. embeddings, this is one technique that allows you to combine image and report data modalities: (c) classification loss, and (d) object detection loss, eg, image. This is due to the use of an attention model that takes into account the additional regional information within, which allows one additional layer of hierarchy of regions of interest in the image, i.e., sub-image level metadata.
+トリプレット損失
+これは、文献に記載されている技法であり、概念的に類似度をキャプチャする方法で、異種データを一貫して扱うことができる。具体的には、クエリ画像と2つの候補画像の3つの画像があると仮定する。候補画像のうちの一方(正)に他方の画像(負)よりも近いクエリ画像があることがわかっている場合、正のペア(クエリと正の候補)間の抽出された特徴間の距離は、クエリと負の候補との間の距離よりも小さくなると予想される。したがって、トリプレット損失は、これら2つの距離の間の差である。したがって、トリプレット損失は、次のように、たとえば、距離関数D(.,.)の場合、画像のいくつかの順序付けを作成することによって画像を比較する方法である。
+D(queryImage, image1)<D(queryImage, image2)
+Triplet loss This is a technique described in the literature that conceptually captures similarity and allows for consistent handling of heterogeneous data. Specifically, it is assumed that there are three images, a query image and two candidate images. If one of the candidate images (positive) is known to have a query image closer than the other image (negative), then the distance between the extracted features between the positive pairs (query and positive candidate) is , Expected to be less than the distance between the query and the negative candidates. Therefore, triplet loss is the difference between these two distances. Therefore, triplet loss is a way of comparing images by creating some ordering of the images, for example, in the case of the distance function D (.,.), As follows.
+D (queryImage, image1) <D (queryImage, image2)
+距離の任意の概念は、トリプレット損失に変えることができる。ハミング距離は、同じ状態(類似の病状、類似の人口統計学的情報、同じ領域に局所的異常が現れるなど)が多い画像が、少ない画像よりも類似しているということによって、そのような順序付けを構築する1つの方法である。 Any concept of distance can be turned into triplet loss. Hamming distances are so ordered by the fact that images with more of the same condition (similar medical conditions, similar demographic information, local abnormalities appearing in the same area, etc.) are more similar than images with less. Is one way to build.
+より正式には、評価メトリックを距離関数としてカプセル化することができる。 More formally, the evaluation metric can be encapsulated as a distance function.
+p(.,.):{condition(状態)}×{画像}→{0,1}
+p(c,u)=1、ただし、画像uが画像内の状態cを示す場合かつその場合に限る。
+πp(.,.,.):{image regions (画像領域)}×{localizable conditions (局所化可能な状態)}×{画像}→{0,1}
+π(r,c,u)=1、ただし、画像uが領域r内で状態cを示す場合かつその場合に限る。
+ここでは、状態は、医学的な異常と人口統計学的情報の両方をキャプチャするために大まかに使用される。
+d(t,u)<d(t,v)
+である場合、画像tは画像vにより類似していると言う。
+p (.,.): {condition} × {image} → {0,1}
+p (c, u) = 1, but only when the image u indicates the state c in the image and in that case.
+πp (.,.,.): {Image regions} × {localizable conditions} × {image} → {0,1}
+π (r, c, u) = 1, but only when the image u shows the state c in the region r and in that case.
+Here, the condition is loosely used to capture both medical anomalies and demographic information.
+d (t, u) <d (t, v)
+If, image t is said to be more similar to image v.
+ハミング距離は、そのような順序付けを構築する唯一の方法ではない。いくつかの代替は、以下を含む。
+a)時間的に近い同じ患者が撮影された画像は、離れている同じ患者が撮影された画像よりも類似している。
+b)開業医は、画像のいくつかの独自の主観的な順序付けを提供する。
+c)共通の埋込み空間に投影された関連する放射線レポートテキストを含む胸部X線画像は、異なる胸部X線画像に関連付けられた放射線レポートを含む元のX線よりも互いに類似している。
+d)共通の埋込み空間に投影されたフォローアップ胸部CTを含む胸部X線画像は、異なる胸部X線をフォローアップした胸部CTを含む元の胸部X線よりも互いに類似している。
+e)c)およびd)のすべての順列は、放射線レポート、胸部X線、および胸部CTの位置を交換する。
+Hamming distance is not the only way to build such an ordering. Some alternatives include:
+a) Images taken by the same patient who are close in time are more similar than images taken by the same patient who are far apart.
+b) The practitioner provides some unique subjective ordering of the images.
+c) Chest x-ray images containing associated radiation report text projected into a common implantation space are more similar to each other than the original x-ray containing radiation reports associated with different chest X-ray images.
+d) Chest x-rays containing follow-up chest CT projected into a common implantation space are more similar to each other than the original chest x-ray containing chest CT following up different chest X-rays.
+e) All permutations of c) and d) exchange radiographic reports, chest x-rays, and chest CT positions.
+分類損失
+トリプレット損失の代替として類似度をモデリングするための他の方法がある。1つは、分類損失である。具体的には、特定の状態について分類器を直接トレーニングすることができる。分類損失は、いくつかの形式をとることができる。1つは、クロスエントロピー損失またはログ損失であり、これは、出力が0〜1の確率値である分類モデルの性能を測定する。クロスエントロピー損失は、予測された確率が実際のラベルから分かれるにつれて増加する。詳細は、当技術分野で知られており、文献、たとえばチュートリアルhttp://ml-cheatsheet.readthedocs.io/en/latest/loss_functions.htmlに記載されている。
+Classification Loss There are other ways to model similarity as an alternative to triplet loss. The first is classification loss. Specifically, the classifier can be trained directly for a particular condition. Classification losses can take several forms. One is cross-entropy loss or log loss, which measures the performance of a classification model whose output is a probability value between 0 and 1. Cross-entropy loss increases as the predicted probability separates from the actual label. Details are known in the art and can be found in the literature, such as the tutorial http://ml-cheatsheet.readthedocs.io/en/latest/loss_functions.html.
+回帰損失
+これは、トリプレット損失技法のもう1つの代替である。たとえば、胸部X線に関連付けられた放射線レポートまたは同じ胸部X線に関連付けられた胸部CTなど、関連する画像モダリティの埋込みがある場合、回帰問題としてそれを定式化することができる。ここでの考え方は、画像から直接レポート埋込みベクトルを予測し、それを回帰問題としてモデリングすることである。レポート埋込みが類似度を正確にキャプチャする範囲で、画像の良好な回帰モデルも類似度をキャプチャする。
+Regression Loss This is another alternative to the triplet loss technique. If there is an implantation of the relevant image modality, for example, a radiological report associated with a chest x-ray or a chest CT associated with the same chest x-ray, it can be formulated as a regression problem. The idea here is to predict the report embedding vector directly from the image and model it as a regression problem. A good regression model of the image also captures similarity, to the extent that report embedding accurately captures similarity.
+回帰の最も単純な概念は、1次元線形回帰であり、これは、入力特徴を出力値にマッピングできるように、傾きと切片を見つけることに対応し、たとえば、以下の通りであり、
+y=mx+b
+式中、(x_i,y_i)ペアの例が与えられると、傾きmと切片は、二乗誤差など、何らかの損失を最小限に抑えるものを見つける。
+min_{m,b}\＼sum_i(y_i-(mx_i+b))^2
+The simplest concept of regression is one-dimensional linear regression, which corresponds to finding slopes and intercepts so that input features can be mapped to output values, for example:
+y = mx + b
+Given the example of the (x_i, y_i) pair in the equation, the slope m and intercept find something that minimizes some loss, such as root mean square error.
+min_ {m, b} \\ sum_i (y_i- (mx_i + b)) ^ 2
+レポートから特徴を抽出するための何らかの関数f、ならびに画像から特徴を抽出するための別の関数gを有する場合、このアイデアを一般化することができる。出力はベクトルである可能性があるため、以下の式が存在し得る。
+f(report)=Mg(image)+b、式中、Mは行列、bはベクトルである。
+This idea can be generalized if it has some function f for extracting features from a report, as well as another function g for extracting features from an image. Since the output can be a vector, the following equation can exist.
+f (report) = Mg (image) + b, in the formula, M is a matrix and b is a vector.
+さらに、gがニューラルネットワークである場合、固定のfおよびgについてMおよびbの値を調整できるだけでなく、時間の経過とともにgの値を更新することもできる。gの出力次元がfのものと同じである場合、これはMを単位行列およびbをゼロベクトルにすることと同等であることがわかり、そのため、サンプルペア(report_i,image_i)が与えられると、何らかの損失について、たとえば、二乗誤差を最小化することによって、回帰問題を解決することができる。min_{g}\＼sum_i(f(report_i)-g(image_i))^2。 Furthermore, if g is a neural network, not only can the values of M and b be adjusted for fixed f and g, but the value of g can be updated over time. If the output dimension of g is the same as that of f, then this turns out to be equivalent to making M an identity matrix and b a zero vector, so given a sample pair (report_i, image_i), For some loss, the regression problem can be solved, for example, by minimizing the root mean square error. min_ {g} \\ sum_i (f (report_i) -g (image_i)) ^ 2.
+オブジェクト検出損失
+オブジェクト検出損失は、類似度をキャプチャするための別のモデリング技法である。候補画像のクエリと同じ部分に気胸が見つかった場合、それらの画像は、互いに近くなる可能性があることに気付くかもしれない。ETチューブが正しく配置されているかどうか、または肺結節の位置およびサイズを決定するために、たとえば、カリーナの位置とETチューブの先端など、画像内の要素の存在、サイズ、または位置が類似度を決定するために重要である場合、オブジェクト検出の問題(オブジェクト検出損失、たとえば、交差オーバーユニオンなど)として、それを定式化することができる。
+Object Detection Loss Object detection loss is another modeling technique for capturing similarity. If pneumothorax is found in the same area as the candidate image query, you may find that the images can be close to each other. The presence, size, or position of elements in the image, such as the position of the carina and the tip of the ET tube, is similar to determine if the ET tube is properly placed or to determine the position and size of the lung nodule. If it is important to determine, it can be formulated as an object detection problem (object detection loss, eg, crossover union).
+したがって、画像のどこに状態があるかがわかっている場合、それを使用して類似度をモデル化することができる。アテンションメカニズムは、これを行う能力を与える。アテンションメカニズムの一例として、統合勾配の技法を使用することができる。統合勾配などのアテンションメカニズムは、モデル予測に最も寄与するデータセットの部分を基本的に識別する機械学習ツールである。X線またはCTスキャンデータセットのこれらの部分は、アテンションメカニズムから識別された異常な組織または腫瘍を囲む境界ボックスを画像に追加することによって強調表示することができる。統合勾配アルゴリズムは、M.Sundararajan et al., Axiomatic Attribution for Deep Networks, arXiv: 1703.01365 [cs.LG](June 2017)の論文に記載されており、その内容全体が参照により組み込まれる。方法は、画像全体の分類における画像内の個々のピクセルの帰属の状況で概念的に記載される。基本的に、画像内の各ピクセルiの統合勾配スコアIGi(または属性の重みまたは値)は、ベースライン(ゼロ情報、すべてのピクセルが黒、a=0)から入力画像内の完全な情報(a=1)までの入力画像情報コンテンツ(この例では輝度のスペクトル)の均一なスケーリング(a)にわたって計算され、ここでIGi(各ピクセルのスコア)は、式(1)で与えられる。
+(1) IGi(image)=imagei*∫0-1∇Fi(α*image)dα
+式中、Fは、ラベルの予測関数であり、
+imageiは、i番目のピクセルのRGB強度であり、
+IGi(image)は、i番目のピクセルに関する統合勾配であり、すなわち、i番目のピクセルの帰属であり、
+∇は、imageiに関する勾配演算子である。
+Therefore, if you know where the state is in the image, you can use it to model the similarity. The attention mechanism gives the ability to do this. As an example of the attention mechanism, the technique of integration gradient can be used. Attention mechanisms such as integration gradients are machine learning tools that basically identify the parts of the dataset that contribute most to model prediction. These parts of the x-ray or CT scan dataset can be highlighted by adding a border box to the image that surrounds the abnormal tissue or tumor identified by the attention mechanism. The integrated gradient algorithm is described in the paper by M. Sundararajan et al., Axiomatic Attribution for Deep Networks, arXiv: 1703.01365 [cs.LG] (June 2017), the entire content of which is incorporated by reference. The method is conceptually described in the context of the attribution of individual pixels within an image in the classification of the entire image. Basically, the integrated gradient score IGi (or attribute weight or value) for each pixel i in the image is the complete information in the input image (zero information, all pixels are black, a = 0) from the baseline. Calculated over uniform scaling (a) of the input image information content (brightness spectrum in this example) up to a = 1), where the IGi (score for each pixel) is given by Eq. (1).
+(1) IG i (image) = image i * ∫ 0-1 ∇ F i (α * image) dα
+In the formula, F is the label predictor,
+image i is the RGB intensity of the i-th pixel,
+IG i (image) is the integration gradient for the i-th pixel, that is, the attribution of the i-th pixel.
+∇ is a gradient operator for image i.
+Sundararajanらのセクション3の論文は、アルゴリズムをさらに説明し、その説明は参照により組み込まれる。 The section 3 paper by Sundararajan et al. Further describes the algorithm, the description of which is incorporated by reference.
+ディープラーニングニューラルネットワークでのアテンションメカニズムの使用については、D. Bahdanau et al., Neural Machine Translation by Jointly Learning to Align and Translate, Jan. 2014 (arXiv:1409.0473[cs.CL]の会議プレゼンテーションに記載されている。ヘルスケアの状況におけるアテンションメカニズムのさらなる説明は、Choi et al., GRAM: Graph- based attention model for Healthcare Representation Learning, arXiv:1611.07012v3 [cs.LG] April 2017、およびChoi et al., RETAIN: an Interpretable Predictive Model for Healthcare using Reverse Time Attention Mechanism, arXiv:1608.05745v3[cs.GL] February 2017を含む。 The use of attention mechanisms in deep learning neural networks is described in the conference presentation of D. Bahdanau et al., Neural Machine Translation by Jointly Learning to Align and Translate, Jan. 2014 (arXiv: 1409.0473 [cs.CL]). A further explanation of the attention mechanism in the healthcare context is Choi et al., GRAM: Graph-based attention model for Healthcare Representation Learning, arXiv: 1611.07012v3 [cs.LG] April 2017, and Choi et al., RETAIN. : an Interpretable Predictive Model for Healthcare using Reverse Time Attention Mechanism, arXiv: 1608.05745v3 [cs.GL] Includes February 2017.
+ここでの目的は、画像のどこで何かが発生するかを使用して類似度を知らせるだけではない。上記で説明したソフトアテンションおよび統合勾配の技法を含む、画像内のどのコンポーネント(ピクセル)がモデル予測に最も寄与するかを説明するためのいくつかの技法がある。また、たとえば、トリプレット損失、すなわちオブジェクト検出問題の上記の代替において、c)と同じ静脈内にあるカリーナの位置など、画像内の特定のアイテムがどこにあるかを、画像にマークを付けるラベラーの助けを借りて、明示的にキャプチャすることもできる。 The purpose here is not just to inform the similarity by using where in the image something happens. There are several techniques for explaining which components (pixels) in an image contribute most to model prediction, including the soft attention and integration gradient techniques described above. It also helps the labeler to mark the image where a particular item is in the image, for example, triplet loss, i.e. the location of Karina in the same vein as c) in the above alternative to the object detection problem. You can also borrow and capture explicitly.
+フェッチャ、スコアラー、およびプーラーのフレームワークによって、これらの異なる損失および距離の方法のいずれかまたはすべてを使用することができる技法をシームレスに組み合わせることができる。 The fetcher, scorer, and puller frameworks allow you to seamlessly combine techniques that allow you to use any or all of these different loss and distance methods.
+プーラー410およびランク付け
+上述のように、図4〜図7のシステムは、1つまたは複数のスコアラー408から類似度スコアを受信し、候補画像を(たとえば、進行度/重大度に基づいて)ランク付けし、ランク付けを反映する候補画像のリストを返すプーラー410をさらに含む。したがって、プーラー410は、異なるスコアラー408からのスコアに基づいて候補画像をプールし、ランク付けする。
+一構成では、最終的なランク付けは、たとえば、類似度スコアに基づいて、スコアラーによって提案された中間のランク付けにより、プーラー410で行われる。フェッチャ406によって返される画像の候補セットに基づいて、ランク付けから特定の画像を暗黙的に除外することもできる。
+In one configuration, the final ranking is done at the
+最終的なランク付けは、ハミング距離などの客観的な測定値と、たとえば、医療専門家が実際に、作業している臨床の状況で類似画像と見なすものなど、主観的な測定値から導出されたスコアとの混合とすることができる。主観的な測定値を、異なるモデルまたはランク付け方法の最終比較に使用することができる。たとえば、クエリ画像のセットq_1,…,q_Nについて検討し、これらのクエリごとに、ランク付けされた画像r_1(q_i),r_2(q_i),…,r_k(q_i)のクエリ画像q_iに対して返される上位k個の画像を受信する。次いで、医師や他の医療専門家は、r_1(q_i),r_2(q_i),…,r_k(q_i)の順序付けが画像q_iにとって意味があるかどうか、およびそれらの関連性を示すことができる。これらから、画像ペアのスコアを計算することができる。
+q_i,r_1(q_i)
+q_i,r_2(q_i)
+…
+q_i,r_k(q_i)
+これらのラベルをさらに収集し、異なるランク付け方法を生成/評価すると、上記で収集したスコアに基づいてランク付け方法がどの程度うまくいくかを評価することができ、そのため、異なるランク付け方法を相互に比較する方法が提供される。
+The final ranking is derived from objective measurements such as Hamming distance and subjective measurements, such as what medical professionals consider to be similar images in the clinical context in which they are actually working. It can be mixed with the score. Subjective measurements can be used for the final comparison of different models or ranking methods. For example, consider a set of query images q_1,…, q_N, and for each of these queries, return for the query image q_i of the ranked images r_1 (q_i), r_2 (q_i),…, r_k (q_i). Receive the top k images. Physicians and other medical professionals can then show whether the ordering of r_1 (q_i), r_2 (q_i),…, r_k (q_i) makes sense for image q_i and their relevance. From these, the score of the image pair can be calculated.
+q_i, r_1 (q_i)
+q_i, r_2 (q_i)
+...
+q_i, r_k (q_i)
+By collecting these labels further and generating / evaluating different ranking methods, we can evaluate how well the ranking methods work based on the scores collected above, so we can mutually collect different ranking methods. A method of comparison is provided.
+最終的なランク付けには、いくつかのオプションがある。
+オプション1-スコアの加重和を使用したロジスティック回帰モデル
+このオプションでは、スコアラーからの様々なスコアをいつどのように重み付けするかにおいて、特定の非線形性をキャプチャできない場合がある。
+オプション2 一般化された加法モデル
+このオプションは、異なるスコアリングコンポーネントからの特徴を組み合わせるためのフレームワークを提供する。一般化された加法モデルは、線形予測子がいくつかの予測変数の未知の滑らかな関数に線形に依存する一般化された線形モデルであり、関心はこれらの滑らかな関数に関する推論に焦点を当てている。それらは、科学技術文献に記載されており、たとえば、https://en.wikipedia.org/wiki/Generalized_additive_modelの説明を参照されたい。したがって、簡潔のために詳細な説明は省略されている。
+オプション3-入力としてのスコアに基づくニューラルネットワーク。
+一般的な問題として、ここでは、単純なヒューリスティックから最終的なランク付けを計算するために使用することができるいくつかの技法は以下の通りであり、たとえば、各スコアラーによって生成された中間ランク付けの調和平均を、加重近似ペアワイズ(WARP)損失を使用するようにモデルをトレーニングするなどのより洗練されたものにする。たとえば、J. Weston et al., Learning to Rank Recommendations with the k-Order Statistic Loss, RecSys'13, October 12-16, 2013, Hong Kong, Chinaの会議論文を参照されたい。https://research.google.com/pubs/ archive/41534.pdfからオンラインで入手可能である。
+There are several options for final ranking.
+Option 1-Logistic Regression Model with Score Weighted Sum This option may not be able to capture a particular non-linearity in how and when the various scores from the scorer are weighted.
+Option 3-Neural network based on score as input.
+As a general matter, here are some techniques that can be used to calculate the final ranking from a simple heuristic, for example, the intermediate ranking generated by each scorer. Make the harmonic mean of the model more sophisticated, such as training the model to use a weighted approximate pairwise (WARP) loss. See, for example, the conference papers of J. Weston et al., Learning to Rank Recommendations with the k-Order Statistic Loss, RecSys'13, October 12-16, 2013, Hong Kong, China. It is available online at https://research.google.com/pubs/ archive / 41534.pdf.
+例示的なユーザインターフェース
+図3で説明されているように、類似画像が取り出され、スコアリングされ、ランク付けされると、それらはユーザに提示される。ユーザに返される情報は、類似画像(および関連する注釈、たとえばメタデータ、レポート、またはその抜粋)だけでなく、クエリ画像から計算することができる統計など、類似画像の結果セットから選別、推測、または集約できる情報も含む。いくつかの例は、以下の通りである。
+1)画像は、単に画像のリストとして返されるのでなく、臨床上の決定をサポートするのに有用な共通の属性にわたってグループ化されて返され得る。たとえば、図8には、クエリ画像202および結果204を多数の類似画像304の形式で示すワークステーション上のディスプレイが示されている。類似画像304は行にグループ化され、各行に関連付けられた診断または精緻化の形式の凡例が付いている。行802、NGT(経鼻胃管)が正しく配置済み、は、その特徴を有する4つの画像304のセットを有する。行804は、肺炎の汎用を有する。行806は、気胸の汎用を有する。したがって、この例では、異物(たとえば、経鼻胃管など)が正しく配置された画像は、気胸の診断および肺炎の診断に関連付けられた画像とは別にグループ化される。
+2)グループ化は、放射線科のフリーテキストレポートからの関連する共通のテキストの集約を含むことができる。たとえば、気管内チューブが誤配置されていることを示す特定のラベルはない場合があるが、たとえば、「カリーナのレベルで気管内チューブ」、「気管内チューブの先端は右主気管支で終了」、または「ETチューブの先端は、標準的な位置決めのために数センチ進めることができる」というテキスト入力を有するレポートなど、この状態が存在することを示唆する共通のフレーズを有するレポートに関連付けられた画像を集約することができる。スコアラーのアテンションメカニズムを使用して、特定の単語やフレーズなど、類似度スコアに最も寄与するフリーテキストレポートの部分を識別することができる。
+3)上記の例2)のように、レポート内のこれらの共通のフレーズによって(または他のメタデータ内の列挙された条件の有無によって)グループ化すると、これらを値に集約し、ベースラインと比較し、比較を報告することができる。たとえば、類似画像の結果が100枚の画像であり、参照ライブラリデータベース内の1000枚の画像のうち1枚だけが気胸を含んでいるにもかかわらず、100枚の画像のうち60枚が気胸が存在することを示したという事実を報告する場合がある。
+Illustrative User Interface As illustrated in Figure 3, similar images are retrieved, scored, and ranked and presented to the user. The information returned to the user is sorted, inferred, from a result set of similar images, such as similar images (and related annotations, such as metadata, reports, or excerpts thereof), as well as statistics that can be calculated from query images. Or include information that can be aggregated. Some examples are as follows.
+1) Images may be returned grouped across common attributes useful to support clinical decisions, rather than simply being returned as a list of images. For example, FIG. 8 shows a display on a workstation
+2) Grouping can include aggregating relevant common texts from radiology free text reports. For example, there may not be a specific label indicating that the endotracheal tube is misplaced, but for example, "endotracheal tube at the level of Carina", "the tip of the endotracheal tube ends at the right main bronchus", Or an image associated with a report with a common phrase suggesting that this condition exists, such as a report with the text input "The tip of the ET tube can be advanced a few centimeters for standard positioning". Can be aggregated. The scorer's attention mechanism can be used to identify the parts of a free-text report that contribute most to the similarity score, such as a particular word or phrase.
+3) Grouping by these common phrases in the report (or by the presence or absence of the enumerated conditions in other metadata), as in Example 2) above, aggregates them into values and with the baseline. You can compare and report the comparison. For example, 60 out of 100 images have pneumothorax, even though the result of a similar image is 100 images and only one of the 1000 images in the reference library database contains pneumothorax. It may report the fact that it has been shown to exist.
+図8は、スコアリングモジュールによって使用されるモデルでのアテンションメカニズムの使用も示す。「NG管が正しく配置済み」という凡例を含む画像の最上行802について、円808は、NG管が正しく配置された胸部X線のエリア(ピクセルのパッチ)を示し、これらは、この診断のためにクエリ画像に対する類似度の高いスコアを生成するためにモデルが最も重く重み付けした画像内のエリアを示すために、対照的な色、たとえば赤で着色されている。同様に、円810は、画像の「肺炎」行のX線画像の領域を示し、これらは、この診断のためにクエリ画像に対する類似度の高いスコアを生成するためにモデルが最も重く重み付けした画像内のパッチまたはエリアを示すために、対照的な色で示される。気胸の診断のための画像の行806は、モデルによって最大の重みを示すために強調表示されている類似のエリアを有する。アテンションモデルは、画像に関連付けられた放射線レポート内のフリーテキストなど、類似画像に関連付けられた注釈にも適用することができ、図8の画像の下のフリーテキストエリア812に、アテンションモデルがクエリ画像との類似度を決定する際にそのような単語またはフレーズにかなりの重みを与えたことを示すために強調表示された注釈からの単語やフレーズがあり得る。
+Figure 8 also shows the use of the attention mechanism in the model used by the scoring module. For the
+図9は、クエリ画像202および結果204の別の表示の図である。この構成は、時間の経過とともに類似する患者データを要約することを強調するが、依然として類似画像の個々のインスタンスを提供する。水平バー900は、返された類似画像のカウント(数)とともに、類似の状態を識別する。たとえば、第1のバーは、「気胸」の状態および13のカウントを有し、第2のバーは、「肺塞栓症」の状態および31のカウントを有する。右側のバー902は、状態「ラインまたはチューブの配置の変更」、およびクエリ画像の診断に関係がない場合、その状態を削除するためのオプション(X)を有する。領域904は、類似する患者のタイムライン上の要約統計を示す。このタイムラインは、最も類似する画像の前後に類似する患者にどのような投薬/事象が発生したかを示す。タイムラインの傾向は、クエリ画像に関連付けられた患者に対して行う明らかな介入を浮き彫りにする可能性がある。領域906は、他の重要な分布のプロットを示す。漸進的な傾向は、正しい診断が最初に見落とされたことを示している可能性があり、この患者の症例を注意深く検討することが有用である可能性があることを示唆する。バー908をクリックすることができ、その場合、その選択されたバーで表されるもののみに類似画像をフィルタリングするフィルタリング操作が行われる。他の集約統計は、領域910に示されている。エリア912は、クエリ画像に最も類似する画像を示す。ロードモアアイコン914は、ユーザがより多くの画像をロードすることを可能にし、スクロールバーは、ユーザが新しくロードされた画像にナビゲートすることを可能にする。
+FIG. 9 is another view of the
+図10は、類似画像が診断(行)および患者の性別(列)によってグループ化またはクラスタ化された別の代替表示を示す。各クラスタ1000のサムネイル画像の数は、返された類似画像の数を直接または比例して反映する。ユーザは、クラスタ、たとえば、女性、複数注入、クラスタ1000Aなどを選択することができ、そのクラスタ内の類似画像が、たとえば図3または図8に示されるように表示される。
+FIG. 10 shows another alternative display in which similar images are grouped or clustered by diagnosis (row) and patient gender (column). The number of thumbnail images in each
+要約すると、類似画像のセットが識別されると、関連情報がこのセットからユーザに返される。これは、通常、画像自体だけでなく、放射線レポート、行われた臨床的決定(たとえば、抗生物質、利尿薬の処方など)、類似画像に関連付けられた疾患/状態の分類、これらの結果のグループ化/集約に関連する情報など、これらの画像の各々に関連付けられたメタデータも含む。その集約は、類似する特性を有する画像結果のクラスタリング、画像内の特定の状態/診断の有病率を要約したピボットテーブルの生成、および放射線レポート内の共通のフレーズの有病率の表示を含むことができる。 In summary, once a set of similar images has been identified, the relevant information is returned to the user from this set. This is usually not just the image itself, but also radiation reports, clinical decisions made (eg, antibiotics, diuretic prescriptions, etc.), disease / condition classification associated with similar images, a group of these results. It also includes metadata associated with each of these images, such as information related to transformation / aggregation. The aggregation includes clustering image results with similar properties, generating a pivot table summarizing the prevalence of a particular condition / diagnosis in the image, and displaying the prevalence of common phrases in radiation reports. be able to.
+本開示のシステムは、(たとえば、クラウドにおいて、たとえば、類似画像のフェッチ、スコアリング、ランク付けに使用されるディープラーニングモデルをトレーニングし、開発し、グラウンドトゥルース注釈付き放射線画像のリファレンスライブラリをキュレートしたサービスプロバイダによって)図4〜図7のバックエンドがリモートで実装されるクラウド環境に展開することができる。この構成では、クエリ画像セットがコンピュータネットワーク(たとえばインターネットなど)を介して送信され、サービスプロバイダは、ランク付け、集約情報、注釈などを含む候補の類似画像を、クエリ画像が取得された、放射線科医がクエリ画像を検討している、または医師がクエリ画像に関して患者と相談し、さらなる治療を計画している診療所、病院、またはオフィスに実装されたフロントエンドに返す。あるいは、本開示のシステムは、ローカルに実装することができ、すなわち、バックエンドおよび関連するコンピューティングリソース、参照ライブラリ、ソフトウェアモジュール、およびディープラーニングモデルが、クエリ画像が取得される、または、たとえば、放射線科医またはプライマリケア医によってワークステーション上で閲覧されるオフィス、クリニック、または病院にローカルに配置される。 The systems of the present disclosure have trained and developed deep learning models (eg, in the cloud, used, for example, for fetching, scoring, and ranking similar images, and curated a reference library for ground truth annotated radiographic images. It can be deployed in a cloud environment where the backends in Figures 4-7 are implemented remotely (depending on the service provider). In this configuration, the query image set is sent over a computer network (for example, the Internet), and the service provider retrieves candidate similar images, including rankings, aggregated information, annotations, etc., from the radiology department. The doctor is reviewing the query image, or the doctor consults with the patient about the query image and returns it to the front end implemented in the clinic, hospital, or office planning further treatment. Alternatively, the systems of the present disclosure can be implemented locally, i.e., backends and associated computing resources, reference libraries, software modules, and deep learning models are retrieved, or, for example, query images are obtained. Locally located in an office, clinic, or hospital viewed on a workstation by a radiologist or primary care physician.
+200 放射線画像、クエリ画像、クエリ放射線画像
+202 システム
+204 結果
+206 所見
+300 フロントエンドコンポーネント
+304 類似画像
+400 バックエンド
+402 オブジェクト、コントローラ
+404 ディスパッチャ
+406 フェッチャ
+408 スコアリングモジュール、スコアラー
+410 プーラー
+500 リポジトリ
+502 ディスパッチャ/プーラー
+812 フリーテキストエリア
+900 水平バー
+902 バー
+904 領域
+906 領域
+908 バー
+910 領域
+912 エリア
+914 ロードモアアイコン
+1000 クラスタ
+1102 画像
+1104 画像
+1106 クエリ画像
+200 Radiation Image, Query Image, Query Radiation Image
+202 system
+204 Results
+206 Findings
+300 front-end components
+304 Similar image
+400 back end
+402 Object, controller
+404 Dispatcher
+406 fetcher
+408 Scoring Module, Scorer
+410 puller
+500 repositories
+502 Dispatcher / Puller
+812 Free text area
+900 horizontal bar
+902 bar
+904 area
+906 area
+908 bar
+910 area
+912 area
+914 Roadmore icon
+1000 clusters
+1102 image
+1104 image
+1106 query image
+Claims (25)
+a)前記クエリ放射線画像を受信し、データストアから候補の類似する放射線画像のセットを取り出す1つまたは複数のフェッチャと、
+b)前記クエリ画像および前記1つまたは複数のフェッチャによって取り出された前記候補の類似する放射線画像のセットを受信する1つまたは複数のスコアラーであり、前記クエリ画像と各候補の類似する放射線画像との間の類似度スコアを生成する1つまたは複数のスコアラーと、
+c)前記1つまたは複数のスコアラーから前記類似度スコアを受信し、前記候補の類似する放射線画像をランク付けし、前記ランク付けを反映する前記候補の類似する放射線画像のリストを返すプーラーと
+を含み、前記1つまたは複数のスコアラーは、モデリング技法を実装して、前記クエリ画像と前記候補の類似する放射線画像のセットとの複数の類似度属性、およびそれに関連付けられた注釈をキャプチャする前記類似度スコアを生成する、
+コンピュータ実装システム。 A computer-implemented system for identifying and retrieving radiographic images that are similar to query radiological images.
+a) With one or more fetchers that receive the query radiation image and retrieve a set of candidate similar radiation images from the data store.
+b) One or more scorers that receive the query image and a set of similar radiographic images of the candidate retrieved by the one or more fetchers, with the query image and similar radiographic images of each candidate. With one or more scorers that generate a similarity score between,
+c) A puller that receives the similarity score from the one or more scorers, ranks similar radiographic images of the candidate, and returns a list of similar radiographic images of the candidate that reflects the ranking. Including, said one or more scorers implement a modeling technique to capture a plurality of similarity attributes between the query image and a similar set of radiographic images of the candidate, and the annotations associated therewith. Generate a degree score,
+Computer mounting system.
+a)グラウンドトゥルース注釈付き放射線画像のデータストアをキュレートするステップであり、前記放射線画像の各々がメタデータを含む注釈に関連付けられている、キュレートするステップと、
+b)前記クエリ画像を受信し、前記データストアから候補の類似する放射線画像のセットを取り出すステップと、
+c)少なくとも2つの異なるスコアラーを使用して、前記クエリ画像と各候補の類似する放射線画像との間の類似度スコアを生成するステップであり、前記少なくとも2つのスコアラーは、異なるモデリング技法を実装して、前記クエリ画像と前記候補の類似する放射線画像のセットとの複数の類似度属性、およびそれに関連付けられた前記注釈をキャプチャする前記類似度スコアを生成する、類似度スコアを生成するステップと、
+d)前記候補の類似する放射線画像をランク付けするステップと、
+e)前記候補の類似する放射線画像のセットに関連付けられた前記注釈から取得された前記ランク付けおよび集約情報を反映する前記候補の類似する放射線画像のリストを返すステップと
+を含む方法。 A method for identifying and retrieving a radiographic image similar to a query radiographic image, said query image being associated with an annotation containing metadata.
+a) A curating step of curating a data store of ground-truth annotated radiographic images, each of which is associated with an annotation containing metadata.
+b) In the step of receiving the query image and retrieving a set of similar radiographic images of candidates from the data store,
+c) The step of using at least two different scorers to generate a similarity score between the query image and similar radiographic images of each candidate, the at least two scorers implementing different modeling techniques. A step of generating a similarity score, which generates the similarity score that captures a plurality of similarity attributes of the query image and a set of similar radiographic images of the candidate, and the comment associated therewith.
+d) In the step of ranking similar radiographic images of the candidates,
+e) A method comprising the step of returning a list of similar radiographic images of the candidate that reflects the ranking and aggregated information obtained from the annotation associated with the set of similar radiographic images of the candidate.
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+PCT/US2018/041557 WO2020013814A1 (en) | 2018-07-11 | 2018-07-11 | Similar image search for radiology |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+JP2021530787A true JP2021530787A (en) | 2021-11-11 |
+JP7157232B2 JP7157232B2 (en) | 2022-10-19 |
+Family
+ID=63036479
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+JP2021500660A Active JP7157232B2 (en) | 2018-07-11 | 2018-07-11 | Finding Similar Images for Radiology |
+Country Status (4)
+Country | Link |
+---|---|
+EP (1) | EP3785274A1 (en) |
+JP (1) | JP7157232B2 (en) |
+AU (1) | AU2018431593A1 (en) |
+WO (1) | WO2020013814A1 (en) |
+Families Citing this family (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+MY135853A (en) * | 2003-02-04 | 2008-07-31 | Inventio Ag | Safety device for an elevator |
+EP3910645A1 (en) * | 2020-05-13 | 2021-11-17 | Siemens Healthcare GmbH | Image retrieval |
+JP7259910B1 (en) | 2021-10-08 | 2023-04-18 | フジテック株式会社 | elevator |
+Citations (6)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH10326286A (en) * | 1997-05-27 | 1998-12-08 | Mitsubishi Electric Corp | Similarity retrieval device and recording medium where similarity retrival program is recorded |
+JP2011048672A (en) * | 2009-08-27 | 2011-03-10 | Fujifilm Corp | Device, method and program for registering case image |
+US20120283574A1 (en) * | 2011-05-06 | 2012-11-08 | Park Sun Young | Diagnosis Support System Providing Guidance to a User by Automated Retrieval of Similar Cancer Images with User Feedback |
+JP2013504112A (en) * | 2009-09-04 | 2013-02-04 | コーニンクレッカ フィリップス エレクトロニクス エヌ ヴィ | Relevance visualization for content-based image retrieval |
+JP2016045662A (en) * | 2014-08-21 | 2016-04-04 | 富士フイルム株式会社 | Similar image retrieval device, operation method of similar image retrieval device and similar image retrieval program |
+JP2017064387A (en) * | 2015-09-30 | 2017-04-06 | パナソニックＩｐマネジメント株式会社 | Control method and program |
+Family Cites Families (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+AU2001291175A1 (en) | 2000-09-21 | 2002-04-02 | Md Online Inc. | Medical image processing systems |
+US7027633B2 (en) | 2000-11-30 | 2006-04-11 | Foran David J | Collaborative diagnostic systems |
+JP2004164503A (en) | 2002-11-15 | 2004-06-10 | Olympus Corp | Three-dimensional model retrieval method, three-dimensional model retrieval device, three-dimensional model retrieval program and three-dimensional model retrieval system |
+US8243999B2 (en) | 2006-05-03 | 2012-08-14 | Ut-Battelle, Llc | Method and system for the diagnosis of disease using retinal image content and an archive of diagnosed human patient data |
+TW200818058A (en) | 2006-05-29 | 2008-04-16 | Univ Wollongong | Content based image retrieval |
+US20120242817A1 (en) | 2008-12-30 | 2012-09-27 | Ebm Technologies Incorporated | System and method for identifying a pathological tissue image |
+US8199994B2 (en) | 2009-03-13 | 2012-06-12 | International Business Machines Corporation | Automatic analysis of cardiac M-mode views |
+US9275456B2 (en) | 2010-10-29 | 2016-03-01 | The Johns Hopkins University | Image search engine |
+US9081822B2 (en) | 2013-03-15 | 2015-07-14 | Sony Corporation | Discriminative distance weighting for content-based retrieval of digital pathology images |
+-
+2018
+- 2018-07-11 AU AU2018431593A patent/AU2018431593A1/en not_active Abandoned
+- 2018-07-11 EP EP18746507.5A patent/EP3785274A1/en active Pending
+- 2018-07-11 WO PCT/US2018/041557 patent/WO2020013814A1/en unknown
+- 2018-07-11 JP JP2021500660A patent/JP7157232B2/en active Active
+Patent Citations (6)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH10326286A (en) * | 1997-05-27 | 1998-12-08 | Mitsubishi Electric Corp | Similarity retrieval device and recording medium where similarity retrival program is recorded |
+JP2011048672A (en) * | 2009-08-27 | 2011-03-10 | Fujifilm Corp | Device, method and program for registering case image |
+JP2013504112A (en) * | 2009-09-04 | 2013-02-04 | コーニンクレッカ フィリップス エレクトロニクス エヌ ヴィ | Relevance visualization for content-based image retrieval |
+US20120283574A1 (en) * | 2011-05-06 | 2012-11-08 | Park Sun Young | Diagnosis Support System Providing Guidance to a User by Automated Retrieval of Similar Cancer Images with User Feedback |
+JP2016045662A (en) * | 2014-08-21 | 2016-04-04 | 富士フイルム株式会社 | Similar image retrieval device, operation method of similar image retrieval device and similar image retrieval program |
+JP2017064387A (en) * | 2015-09-30 | 2017-04-06 | パナソニックＩｐマネジメント株式会社 | Control method and program |
+Also Published As
+Publication number | Publication date |
+---|---|
+WO2020013814A1 (en) | 2020-01-16 |
+AU2018431593A1 (en) | 2021-02-04 |
+JP7157232B2 (en) | 2022-10-19 |
+EP3785274A1 (en) | 2021-03-03 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11126649B2 (en) | Similar image search for radiology | |
+US11894114B2 (en) | Complex image data analysis using artificial intelligence and machine learning algorithms | |
+Wu et al. | Comparison of chest radiograph interpretations by artificial intelligence algorithm vs radiology residents | |
+US20200321100A1 (en) | Systems and methods for improved analysis and generation of medical imaging reports | |
+US11069432B2 (en) | Automatic disease detection from unstructured textual reports | |
+EP2419849B1 (en) | Clinical decision support systems and methods | |
+US10667794B2 (en) | Automatic detection of disease from analysis of echocardiographer findings in echocardiogram videos | |
+US11195600B2 (en) | Automatic discrepancy detection in medical data | |
+US20220028507A1 (en) | Workflow for automatic measurement of doppler pipeline | |
+JP2015524107A (en) | System and method for matching patient information to clinical criteria | |
+JP2007280229A (en) | Similar case retrieval device, similar case retrieval method and program | |
+CN110853739B (en) | Image management display method, device, computer equipment and storage medium | |
+US10617396B2 (en) | Detection of valve disease from analysis of doppler waveforms exploiting the echocardiography annotations | |
+US20180107791A1 (en) | Cohort detection from multimodal data and machine learning | |
+US20190108175A1 (en) | Automated contextual determination of icd code relevance for ranking and efficient consumption | |
+JP7157232B2 (en) | Finding Similar Images for Radiology | |
+US20210183487A1 (en) | Cognitive patient care event reconstruction | |
+KR20240008838A (en) | Systems and methods for artificial intelligence-assisted image analysis | |
+CN114694780A (en) | Method, apparatus and medium for data processing | |
+US20240071586A1 (en) | Systems and methods of radiology report processing and display enhancements | |
+US20230290451A1 (en) | Medical data storage and retrieval system and method thereof |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+A521 | Request for written amendment filed |
+Free format text: JAPANESE INTERMEDIATE CODE: A523Effective date: 20210305 |
+|
+A621 | Written request for application examination |
+Free format text: JAPANESE INTERMEDIATE CODE: A621Effective date: 20210305 |
+|
+A977 | Report on retrieval |
+Free format text: JAPANESE INTERMEDIATE CODE: A971007Effective date: 20220310 |
+|
+A131 | Notification of reasons for refusal |
+Free format text: JAPANESE INTERMEDIATE CODE: A131Effective date: 20220425 |
+|
+A521 | Request for written amendment filed |
+Free format text: JAPANESE INTERMEDIATE CODE: A523Effective date: 20220701 |
+|
+TRDD | Decision of grant or rejection written | ||
+A01 | Written decision to grant a patent or to grant a registration (utility model) |
+Free format text: JAPANESE INTERMEDIATE CODE: A01Effective date: 20220912 |
+|
+A61 | First payment of annual fees (during grant procedure) |
+Free format text: JAPANESE INTERMEDIATE CODE: A61Effective date: 20221006 |
+|
+R150 | Certificate of patent or registration of utility model |
+Ref document number: 7157232Country of ref document: JPFree format text: JAPANESE INTERMEDIATE CODE: R150 |

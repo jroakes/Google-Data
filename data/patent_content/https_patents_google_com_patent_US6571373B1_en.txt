@@ -1,0 +1,555 @@
+US6571373B1 - Simulator-independent system-on-chip verification methodology - Google Patents
+Simulator-independent system-on-chip verification methodology Download PDFInfo
+- Publication number
+- US6571373B1 US6571373B1 US09/494,565 US49456500A US6571373B1 US 6571373 B1 US6571373 B1 US 6571373B1 US 49456500 A US49456500 A US 49456500A US 6571373 B1 US6571373 B1 US 6571373B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- simulator
+- model
+- design
+- stimulus
+- specific information
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G01—MEASURING; TESTING
+- G01R—MEASURING ELECTRIC VARIABLES; MEASURING MAGNETIC VARIABLES
+- G01R31/00—Arrangements for testing electric properties; Arrangements for locating electric faults; Arrangements for electrical testing characterised by what is being tested not provided for elsewhere
+- G01R31/28—Testing of electronic circuits, e.g. by signal tracer
+- G01R31/317—Testing of digital circuits
+- G01R31/3181—Functional testing
+- G01R31/3183—Generation of test inputs, e.g. test vectors, patterns or sequences
+- G01R31/318342—Generation of test inputs, e.g. test vectors, patterns or sequences by preliminary fault modelling, e.g. analysis, simulation
+- G01R31/318357—Simulation
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F30/00—Computer-aided design [CAD]
+- G06F30/30—Circuit design
+- G06F30/32—Circuit design at the digital level
+- G06F30/33—Design verification, e.g. functional simulation or model checking
+Definitions
+- the present invention relates to the testing of computer system designs by software simulation, and more particularly to a verification methodology which provides portability across simulator types.
+- IC chip development includes a design phase and a verification phase for determining whether a design works as expected.
+- the verification phase has moved increasingly toward a software simulation approach to avoid the costs of first implementing designs in hardware to verify them.
+- Time-to-market A key factor for developers and marketers of IC chips in being competitive in business is time-to-market of new products; the shorter the time-to-market, the better the prospects for sales. Time-to-market in turn depends to a significant extent on the duration of the verification phase for new products to be released.
+- simulator refers to specialized software whose functions include accepting software written in a hardware description language (HDL) such as Verilog or VHDL which models a circuit design (for example, a core as described above), and using the model to simulate the response of the design to stimuli which are applied by a test case to determine whether the design functions as expected. The results are observed and used to de-bug the design.
+- HDL hardware description language
+- a complete SOC design usually includes an embedded processor core; simulation which includes a processor core tends to require an inordinate amount of time and computing resources, largely because the processor is usually the most complex piece of circuitry on the chip and interacts with many other cores.
+- each simulator type When interpreting HDL to generate a software model of a design for simulation, each simulator type identifies constituent elements of a model, such as input or output signals or registers, according to a simulator-specific format. A test case which is applying stimulus to a particular model being simulated needs to communicate with the model in the format used by the particular simulator.
+- the present invention provides a method for performing simulator-independent verification of component cores of a SOC design.
+- a simulator-independent environment is implemented in computer-executable instructions which allows for verification software to be easily portable across simulator types and verification stages.
+- the simulator-independent environment interfaces between a test case generator and a specific simulator type being used to simulate a model (core), receives a request from the test case generator representing a stimulus to a design element in the model, and converts the stimulus into a simulator-specific form which may be applied to the model.
+- the simulator-independent environment utilizes hierarchical data structures to organize simulator-specific information. Depending upon what kind of simulator is being used for a simulation session, corresponding functions in the simulator-independent environment are invoked to obtain simulator-specific information from files built during initialization, and used to access a design element in the simulated model in response to a request from a test case generator.
+- the simulator-independent environment further includes simulator-independent clock models corresponding to varying simulation clock frequencies.
+- a given clock model may be linked to a plurality of bus functional models to drive the bus functional models at the appropriate user-defined clock frequency. This allows a generalized bus functional model to be configured to run at any clock speed, simply by being associated with the appropriate clock model object.
+- FIG. 1 shows a high-level functional block diagram of a simulator-independent environment (SIE) according to the present invention
+- FIG. 2 shows a more detailed representation of the SIE
+- FIG. 3 shows a simulator class hierarchy implemented and used by the invention
+- FIG. 4 shows an example of a test case generator using the SIE to apply a stimulus to a simulated model in a simulator-specific format
+- FIG. 5 shows a model facility class hierarchy implemented and used by the invention
+- FIG. 6 shows an initialization process implemented by the invention to build simulator-specific information files for a simulation session
+- FIG. 7 shows a more detailed example of a test case generator using the SIE to apply a stimulus to a simulated model in a simulator-specific format
+- FIG. 8 shows a clock-triggered model class hierarchy implemented and used by the invention
+- FIG. 9 shows clock model objects implemented by the invention, corresponding to distinct simulator clock frequencies, linked to a plurality of bus functional models (BFMs) implemented by the invention
+- FIG. 10 shows an example of three BFMs linked to a clock model object corresponding a particular simulation clock frequency
+- FIG. 11 shows a general purpose computer system for practicing the invention.
+- a preferred embodiment of the invention comprises computer-executable instructions which implement a simulator-independent environment for use in design verification.
+- the simulator-independent environment provides a platform for running a test case on any simulator which is supported.
+- FIG. 1 shows a high-level functional block diagram of an embodiment.
+- the model 103 represents a HDL description of a logic design.
+- An HDL description can describe the function of a design at varying levels of abstraction, prior to its actual physical implementation in silicon.
+- the model 103 is input to simulator 102 .
+- Simulator 102 interprets the HDL descriptions in the model 103 to simulate the behavior of a hardware device corresponding thereto, in response to a test stimulus which is input from a test case generator 101 via the simulator-independent environment (SIE) 100 .
+- SIE simulator-independent environment
+- the stimulus generated by test case generator (TCG) 101 typically takes the form of a generic, high-level request for access to the model which is applied by a bus functional model (BFM) in a specific bus protocol, to verify that the model can communicate in that bus protocol.
+- a verification test comprising the application of a sequence of such stimuli typically produces, as output, results data representing the response of the simulated design which is compared to expected results, to determine whether the design functions as expected.
+- the design may subsequently be revised to improve performance or de-bug errors.
+- the SIE 100 comprises computer-executable instructions for enabling the BFM to apply a stimulus to the model 103 on behalf of the TCG 101 without having to provide any simulator-specific information.
+- a more detailed representation of the SIE 100 is shown in FIG. 2 .
+- the SIE 100 comprises a simulator supervisor 201 which configures the SIE 100 by initializing other components of the SIE 100 , using configuration, control and support functions 204 .
+- the SIE 100 further comprises simulator-independent clocks 202 which enable BFMs 200 to run at any clock speed used by the simulator 102 , as described in greater detail hereinafter.
+- the BFMs 200 use the simulator-independent interface (SII) 203 to perform requests to the simulator 102 on behalf of the TCG 101 and to feed back information to the TCG 101 , thereby isolating the TCG 101 from the specific simulator used in the verification and allowing a developer of BFMs to concentrate on a specific bus protocol used by the BFM without being concerned about specific simulator details.
+- SII simulator-independent interface
+- BFMs are used at both the unit level of testing and in tests of SOC designs comprising core combinations to generate specific processor bus cycles to emulate the behavior of a processor which will eventually interface with the designs under test.
+- a P-Bus (Processor-Bus) Master BFM, a DCR (Device Control Register) Master BFM (for SOC designs having a DCR bus, such as those using Power PC® architected processors), and a PLB (Processor Local Bus) Slave BFM are three examples.
+- BFMs are not portable across different simulator types, since the BFMs are usually written in a simulator-specific HDL (e.g., Verilog or VHDL) at a behavioral RTL (Register Transfer Language) level of abstraction.
+- a simulator-specific HDL e.g., Verilog or VHDL
+- a behavioral RTL Restriction Transfer Language
+- an RTL style of behavioral description describes an input/output relationship for a design in terms of dataflow operations on signal and register values.
+- the BFMs 200 according to the present invention may be designed without consideration for simulator-specific detail, as described hereinafter.
+- the computer-executable instructions which implement the SIE 100 are written in a high-level object-oriented language such as C++.
+- a high-level object-oriented language such as C++.
+- the programming structures and functionality disclosed herein for practicing the invention may find specific implementations in a variety of forms using other programming languages, which implementations are considered to be within the abilities of a programmer of ordinary skill in the art after having reviewed the specification.
+- Object-oriented programming techniques involve the creation and use of independent software entities known as “objects”. Each object typically comprises a grouping of data generally referred to as “attributes” and software routines for manipulating the data known as “member functions”.
+- a “class” refers generally to a grouping of related objects. A class serves as a general template from which particular objects are said to be “instantiated” by a “constructor” for a particular application.
+- a programmer conceives classes and objects so as to provide an interface to users which “abstracts” details of functionality. That is, software which invokes a class or object need only be aware of a general property or functionality of that class or object to utilize it, while the details of implementation are transparent to the invoking software.
+- FIG. 3 represents a simulator class hierarchy of the SII 203 including a base or parent simulator class 300 .
+- Derived or child classes 301 - 303 may correspond to distinct simulator types, such as event, cycle or instruction set simulators.
+- Each derived class may include member objects representing distinct simulators; thus, simulator objects 1 , 2 , 3 (ref. no.s 304 - 306 ) represent three distinct simulators.
+- the simulator classes and member objects exemplified above are arbitrary and not limited to three. Examples of distinct commercially-available simulators include the Model Technology, Inc. (MTI) Verilog Programming Language Interface (PLI) simulator, the MTI Foreign Language Interface (FLI) simulator, and the IBM Cycle simulator.
+- MMI Model Technology, Inc.
+- PLA Verilog Programming Language Interface
+- FLI MTI Foreign Language Interface
+- IBM Cycle simulator IBM Cycle simulator
+- a derived class or object includes the attributes of its base class or classes.
+- simulator classes 301 - 303 are said to “inherit” simulator class 300 .
+- An inherited class is a member object of its derived class.
+- simulator class 300 is a member object of each of simulator classes 301 - 303 .
+- the simulator class 300 is one aspect of the SIE 100 which abstracts the simulator-specific detail from a BFM.
+- a BFM can call generic member functions in the simulator class 300 to access a model 103 for purposes of applying a stimulus on behalf of the TCG 101 , while the simulator-specific details of implementation are carried out by a simulator object such as 304 - 306 .
+- a high-level flow diagram of a stimulus generated by a TCG 101 and applied by a BFM which uses a specific simulator object to access a model 103 during a simulation session is illustrated in FIG. 4 .
+- the TCG 101 generates a stimulus 400 (“S”) by issuing a request (in the form of a function call, for example, in a C ++ implementation, to perform a DCR access, memory-mapped I/O, or a memory access) to the BFMs 200 .
+- the particular BFM 200 which is responsible for driving signals to the particular model 103 for which the stimulus 400 is intended invokes an access function in the simulator object 304 corresponding to the specific simulator being used (in this case, for example, simulator object 1 corresponding to simulator class 1 ).
+- the simulator object 304 obtains simulator-specific information 401 for the BFM needed to service the request from the TCG, from objects built in the SII 203 during an initialization process for the simulation session.
+- the simulator-specific information 401 is correlated with high-level symbols used by the SIE 100 to refer to design elements being simulated.
+- API Application Program Interface
+- PLA Programming Language Interface
+- FLI Foreign Language Interface
+- the simulator object 304 passes the simulator-specific information corresponding to the stimulus 400 to the API 102 a , which uses the information to access the corresponding element in the model 103 to apply the stimulus.
+- the model will change its state in response, and the TCG or BFM may request the new state from the simulator.
+- additional hierarchical structures in the SIE 100 implement the simulator-specific information 401 .
+- these include a model facility class hierarchy.
+- Model refers to a design under test such as model 103 .
+- “Facility” refers to a design element within the model as it is defined within a particular simulator 102 for purposes of simulating a corresponding hardware element.
+- “facility” may refer, for example, to a logic input or output signal of the model, a register, or a HDL “entity”, i.e., a portion of HDL code identifying and defining a design at some level or levels of abstraction.
+- a facility may exist at some hierarchical level within the model.
+- HDL code describing a logic design typically comprises entities. Entities may be arranged hierarchically, with a top-level entity being logically connected to a set of lower-level entities, each of those lower-level entities being logically connected to still lower-level entities, and so on down to a gate level of description.
+- a facility has various attributes which are simulator-specific, including the facility's data type (e.g., register, net, enumeration, etc.), the kind of facility (e.g., signal or variable), and how it is to be written (e.g., as a temporary or stuck value).
+- the facility's data type e.g., register, net, enumeration, etc.
+- the kind of facility e.g., signal or variable
+- how it is to be written e.g., as a temporary or stuck value
+- Model facility classes of the SIE 100 are used to abstract the simulator-specific information associated with corresponding facilities in a simulator model, such as model 103 .
+- the model facility classes include integer facility class 502 and character facility class 506 .
+- the integer facility class inherits the integer class 500 and the facility class 501
+- the character facility class inherits the character class 504 and the facility class 501 .
+- Integer facility objects such as 503 correspond to facilities in a model on which a test case needs to perform arithmetic operations without being concerned with non-binary values.
+- Character facility objects such as 507 represent model facilities which take on binary and non-binary values.
+- Other facility objects (not shown) supported by the SIE 100 include long integer facility objects, floating point facility objects, and string facility objects.
+- Long integer facility objects correspond to model facilities used in arithmetic and logical operations greater than 32 bits.
+- Floating point facility objects correspond to floating point model facilities, and string facility objects correspond to string model facilities.
+- the above-described classes are passed to a simulator object when obtaining simulator-specific information for a BFM as described above, and the simulator object converts them to a specific simulator's API.
+- the instantiated simulator object will use the facility class portion and a value from the integer class inherited by the integer facility class 502 to perform the necessary conversion.
+- “Alias” files in the SIE 100 associate high-level programming language symbols used by the SIE, e.g., simple character strings, with corresponding model facilities.
+- hierarchical facilities in a model may be associated with a character string in the high-level programming language. This allows re-compilation of the SIE code to be avoided in case of hierarchical name changes in the model.
+- the alias file also can be used to specify how the facility is represented in the corresponding high-level code, for example, as an integer facility.
+- the alias files are used to initialize the facility objects described above with the simulator-specific information, including a facility's “handle” or identifier, its length in bits, and other simulator-specific information as noted above during an initialization process for a simulation session on a specific simulator.
+- the facility objects are used by a simulator object to respond to a stimulus as described in connection with FIG. 4 .
+- FIG. 6 illustrates the initialization process.
+- the process includes constructing a BFM 200 for applying a bus protocol to a facility or facilities in a model 103 .
+- an alias file object 601 is invoked which reads the alias file 600 and creates a corresponding model facility object 603 , which is passed to a simulator object 304 .
+- a specialization portion of the simulator object invokes functions in the simulator API 102 a to initialize the model facility object 603 with simulator-specific information.
+- This model facility object is then added to a facility table 602 .
+- the BFM 200 is initialized with references to the model facility objects which enable the BFM to use the references throughout a simulation session without having to look up model facility objects in the facility table.
+- FIG. 7 An implementation of the application of a stimulus discussed earlier in connection with FIG. 4 may be described more particularly as follows, referring to FIG. 7 :
+- the simulator class 300 includes generic member functions for accessing facilities in the model 103 being simulated by simulator 102 , termed herein for purposes of illustration “Write Facility” and “Read Facility”, for example. These member functions can be passed different types of facility objects as described above, e.g., integer facility objects, character facility objects, long integer facility objects, etc.
+- the simulator supervisor 201 obtains the specific simulator type being used in a simulation session during initialization, and instantiates the corresponding simulator object from corresponding simulator class, which defines how “Write Facility” and “Read Facility” are implemented for that specific simulator.
+- the simulator supervisor passes the BFMs 200 only the generic simulator class 300 ; due to the abstraction provided by the simulator class and object, the BFM need only call “Write Facility” or “Read Facility” without needing to provide any details of implementation.
+- the TCG 101 issues a stimulus 400 in the form of a request to BFM 200 to access a facility in the model 103 , for example, to read from or write to the facility.
+- the particular BFM which is configured to drive the facility being accessed services the request by passing a model facility object 603 corresponding to the request to the simulator object 304 corresponding to the specific simulator being used for the simulation session (in this example, simulator object 1 ).
+- the BFM uses the references 700 obtained from the facility table 602 built during the initialization process to obtain the model facility object corresponding to the request.
+- the model facility object 603 contains information including the handle, length and simulator-specific information relating to the facility being accessed.
+- the simulator object uses the information in the model facility object to invoke the appropriate access function in the specific simulator's API 102 a .
+- the API accesses the facility in the model 103 to service the request.
+- the simulator-independent clocks 202 represent software structures which simplify BFM development and execution by abstracting clocking details using a base clock-triggered model (CTM) class to include all BFMs.
+- BFMs 200 are all members or specializations of the CTM class 800 .
+- Member BFMs, the P-Bus Master BFM 200 . 1 , DCR Master BFM 200 . 2 , and PLB Slave BFM 200 . 3 mentioned above are shown as examples, although the member BFMs of the CTM class are not limited to these.
+- Lock-triggered refers to bus protocol, i.e., whether bus operations are performed on a rising edge or a falling edge of the clock.
+- the CTM class includes functions relating to both of these protocols, which are referred to herein as “Run Rising Edge” and/or “Run Falling Edge” functions, respectively.
+- Each member BFM object includes its own version of one or both of these functions.
+- the CTM further includes a parameter table (not shown) and code to initialize the parameter table via a configuration file class (not shown). The parameter table is used to uniquely configure the BFMs.
+- Using a base CTM class which includes the clock-triggered functions described above allows the use of “polymorphism” by a clock model object, as described hereinafter, to invoke a linked BFM without having to know what kind of BFM it is.
+- Polymorphism refers to a concept in object-oriented programming in which a generic interface may be provided to a group of related functions.
+- the BFM inherits the attributes of the CTM class, a BFM developer can utilize the all of the features of the CTM class, and yet not be concerned with any of its details. The foregoing simplifies BFM development by providing for clocking details to be abstracted from a developer of a BFM.
+- the simulator supervisor 201 instantiates clock model objects, and then instantiates BFM objects, passing each BFM object a parameter which creates a pointer, via the CTM class, that links the BFM with a clock model object representing a clock speed at which the BFM is to execute.
+- Linking via the generic CTM class interface allows the use of polymorphism by the clock model objects as described above.
+- the clock model objects correspond with a range of user-specified clock frequencies at which a model or models are to be driven during a simulation session. Multiple BFMs of the same type may be linked to different clock model objects.
+- the linking permits a clock model object to invoke a linked BFM using functions in the clock model object that correspond to a clock edge function in the BFMs.
+- a clock model object may use a table containing pointers to all BFM objects that are linked to that particular clock model object.
+- Simulator 102 generates distinct clock frequencies 1 through N for purposes of simulating the behavior of design components of a model 103 running at these distinct clock speeds.
+- Clock model objects 1 -N correspond to the distinct clock frequencies 1 -N.
+- the clock model objects are each linked to one or more BFMs 200 . Multiple BFMs of the same type (e.g. BFM type 1 ) may be linked to different clock model objects.
+- a BFM may include a set of functions each representing a state of the bus being modeled.
+- a bus state function monitors the state of the bus and decides whether to perform some work required of it or to change its state.
+- a change of state may be implemented by a function jump table using a bus state variable as its index, to effect a jump to a function representing a different bus state.
+- control begins in the simulator 102 .
+- the simulator begins to execute simulation cycles to simulate the response of a model being stimulated by a test case generator.
+- the simulator generates different clock speeds to drive different portions of the model.
+- the simulator turns over control to the SIE 100 for execution of the BFMs linked to that clock model object.
+- FIG. 10 illustrates an example of the foregoing.
+- a single clock frequency 1 is illustrated, which is represented by clock model object 1 , although typically each simulation cycle involves executing all the BFMs active in the session at their respective clock speeds, which are linked to a plurality of clock model objects as shown in FIG. 9 .
+- FIG. 10 shows simulator 102 invoking clock model object 900 corresponding to clock frequency 1 of the simulator.
+- the clock model object 900 invoked by the simulator includes functions corresponding one-to-one with the “Run Rising Edge” and “Run Falling Edge” functions in the base CTM class.
+- the clock model object is invoked by the clock rising edge.
+- the clock model using pointers obtained via the base CTM class 800 to all of its linked BFMs 200 , serially invokes each of its linked BFMs using its “Run Rising Edge” function.
+- Each of the invoked BFMs 200 executes its own specialized version of a “Run Rising Edge” function, which includes invoking its current bus state function, e.g., one of bus state functions 1003 .
+- the invoked bus state function may then perform some work required of it by a stimulus from the TCG 101 , which typically entails reading model facilities in the design and deciding whether to drive other model facilities or enter another state. After doing any required work, the invoked BFM returns control to the clock model so that the other linked BFMs are executed. Once all BFMs linked to all clock models invoked by the simulator have executed, control is returned by the SIE 100 to the simulator 102 .
+- the simulator-independent environment allows a test case generator to apply test cases to a model without having to be concerned with any simulator-specific detail.
+- Test cases can be written in a high-level language, using, for example, simple character strings to refer to corresponding design elements in a model.
+- the simulator-independent environment allow the tests case to be run on any simulator supported by the environment.
+- simulator-independent clocking mechanisms described above enables a general BFM, i.e., a BFM which is not specific to an HDL or a simulator, to be configured to run at any clock speed, simply by being associated with the appropriate clock model object as described above.
+- FIG. 11 illustrates a general purpose computer system which can be used to practice the invention.
+- the system includes a computer 1100 comprising a memory 1101 and a processor 1102 which may be embodied, for example, in a workstation.
+- the system further includes a user interface 1103 comprising a display device 1104 and user-input devices such as a keyboard 1105 and mouse 1106 for purposes of, for example, initiating and controlling a simulation session and observing simulation status and results.
+- the SIE 100 may be implemented as computer-executable instructions which may be stored on a computer-usable medium such as disk 1107 , tape 1108 or CD-ROM 1109 .
+- the instructions may be read from a computer-usable medium as noted into the memory 1101 and executed by the processor 1102 to effect the advantageous features of the invention.
+- the simulator 102 may be any of a variety of commercially-available simulators, including event simulators, cycle simulators and instruction set simulators.
+- the simulator may run on the same workstation 1100 as the SIE 100 .
+- the processor 1102 would execute the simulator (simulation software) 102 , which would use the input simulatable model 103 to simulate the behavior of a corresponding hardware device in response to instructions executed by the TCG 101 .
+Abstract
+Description
+Claims (38)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/494,565 US6571373B1 (en) | 2000-01-31 | 2000-01-31 | Simulator-independent system-on-chip verification methodology |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/494,565 US6571373B1 (en) | 2000-01-31 | 2000-01-31 | Simulator-independent system-on-chip verification methodology |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US6571373B1 true US6571373B1 (en) | 2003-05-27 |
+Family
+ID=23964990
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/494,565 Expired - Lifetime US6571373B1 (en) | 2000-01-31 | 2000-01-31 | Simulator-independent system-on-chip verification methodology |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US6571373B1 (en) |
+Cited By (86)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020083112A1 (en) * | 2000-12-21 | 2002-06-27 | Wheeler William R. | Apparatus and method of developing software for a multi-processor chip |
+US20020117749A1 (en) * | 1996-09-19 | 2002-08-29 | Farnworth Warren M. | Heat transfer material for an improved die edge contacting socket |
+US20030145290A1 (en) * | 2002-01-30 | 2003-07-31 | International Business Machines Corporation | System for controlling external models used for verification of system on a chip (SOC) interfaces |
+US20030158688A1 (en) * | 2001-10-24 | 2003-08-21 | Abhijit Chatterjee | Method and apparatus for testing a system-on-a-chip |
+US20030192032A1 (en) * | 1998-02-17 | 2003-10-09 | National Instruments Corporation | System and method for debugging a software program |
+US20030237062A1 (en) * | 2002-06-24 | 2003-12-25 | Whitehill Clifford A. | Application of co-verification tools to the testing of IC designs |
+US20040010401A1 (en) * | 2002-07-11 | 2004-01-15 | International Business Machines Corporation | Unified simulation system and method for selectively including one or more cores in an integrated circuit simulation model |
+US6708317B2 (en) * | 2001-01-26 | 2004-03-16 | Arm Limited | Validating integrated circuits |
+US6966039B1 (en) | 2001-11-19 | 2005-11-15 | Cypress Semiconductor Corp. | Method for facilitating microcontroller programming |
+US7010773B1 (en) * | 2001-11-19 | 2006-03-07 | Cypress Semiconductor Corp. | Method for designing a circuit for programmable microcontrollers |
+US20060075315A1 (en) * | 2004-09-29 | 2006-04-06 | Cruz R T | Method and process for manufacturing test generation |
+US20060129765A1 (en) * | 2004-11-29 | 2006-06-15 | Arm Limited | System, method and computer program product for testing software |
+US20060229858A1 (en) * | 2005-04-08 | 2006-10-12 | International Business Machines Corporation | System, method and program storage device for simulation |
+US20060271515A1 (en) * | 2005-05-24 | 2006-11-30 | Alley Charles L | Systems, methods, and media for reconstructing data from simulation models |
+US20070016880A1 (en) * | 2005-07-14 | 2007-01-18 | Brinson Kenneth O | Apparatus and method for testing sub-systems of a system-on-a-chip using a configurable external system-on-a-chip |
+US20070050604A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Fetch rerouting in response to an execution-based optimization profile |
+US20070050660A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Handling processor computational errors |
+US20070050609A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc | Cross-architecture execution optimization |
+US20070050776A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Predictive processor resource management |
+US20070055848A1 (en) * | 2005-08-29 | 2007-03-08 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Processor resource management |
+CN1304994C (en) * | 2003-08-27 | 2007-03-14 | 四川南山之桥微电子有限公司 | Exchanger and router chip drawn by running chip general stardards and core logic and method |
+US7194705B1 (en) * | 2003-03-14 | 2007-03-20 | Xilinx, Inc. | Simulation of integrated circuitry within a high-level modeling system using hardware description language circuit descriptions |
+US20070074173A1 (en) * | 2005-08-29 | 2007-03-29 | Bran Ferren | Cross-architecture optimization |
+US20070169562A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Orthopedic simulator with integral load actuators |
+US20070169573A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Orthopedic simulator with fluid concentration maintenance arrangement for controlling fluid concentration of specimen baths |
+US20070169561A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Mechanism arrangement for orthopedic simulator |
+US20070172394A1 (en) * | 2006-01-20 | 2007-07-26 | Schulz Bradley D | Specimen containment module for orthopedic simulator |
+US20070169566A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Integrated central manifold for orthopedic simulator |
+US20070260373A1 (en) * | 2006-05-08 | 2007-11-08 | Langer William J | Dynamic vehicle durability testing and simulation |
+CN100350583C (en) * | 2003-12-02 | 2007-11-21 | 四川南山之桥微电子有限公司 | Method for check identifying code exclusive logic |
+US20070275355A1 (en) * | 2006-05-08 | 2007-11-29 | Langer William J | Integration and supervision for modeled and mechanical vehicle testing and simulation |
+US7383738B2 (en) | 2003-12-05 | 2008-06-10 | Mts Systems Corporation | Method to extend testing through integration of measured responses virtual models |
+US20080259998A1 (en) * | 2007-04-17 | 2008-10-23 | Cypress Semiconductor Corp. | Temperature sensor with digital bandgap |
+US20080271542A1 (en) * | 2003-12-05 | 2008-11-06 | Mts Systems Corporation | Method to extend testing through integration of measured responses with virtual models |
+US20080275681A1 (en) * | 2007-05-04 | 2008-11-06 | Langer William J | Method and system for vehicle damper system evaluation and tuning with loading system and vehicle model |
+US20080297388A1 (en) * | 2007-04-17 | 2008-12-04 | Cypress Semiconductor Corporation | Programmable sigma-delta analog-to-digital converter |
+US20090012763A1 (en) * | 2007-05-04 | 2009-01-08 | Mts Systems Corporation | Method and system for tire evaluation and tuning with loading system and vehicle model |
+US20090066427A1 (en) * | 2005-02-04 | 2009-03-12 | Aaron Brennan | Poly-phase frequency synthesis oscillator |
+US20090132853A1 (en) * | 2005-08-29 | 2009-05-21 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Hardware-error tolerant computing |
+US20090150713A1 (en) * | 2005-08-29 | 2009-06-11 | William Henry Mangione-Smith | Multi-voltage synchronous systems |
+US20100031231A1 (en) * | 2008-07-30 | 2010-02-04 | Kosta Ilic | Testing a Graphical Program Intended for a Programmable Hardware Element |
+US20100082315A1 (en) * | 2008-09-30 | 2010-04-01 | Hall Giles T | Interface between a verification environment and a hardware acceleration engine |
+US20100122116A1 (en) * | 2008-11-12 | 2010-05-13 | International Business Machines Corporation | Internally Controlling and Enhancing Advanced Test and Characterization in a Multiple Core Microprocessor |
+US20100153924A1 (en) * | 2008-12-16 | 2010-06-17 | Cadence Design Systems, Inc. | Method and System for Performing Software Verification |
+US7770446B2 (en) | 2006-01-13 | 2010-08-10 | Mts Systems Corporation | Orthopedic simulator with temperature controller arrangement for controlling temperature of specimen baths |
+US20100262879A1 (en) * | 2009-04-14 | 2010-10-14 | International Business Machines Corporation | Internally Controlling and Enhancing Logic Built-In Self Test in a Multiple Core Microprocessor |
+US7825688B1 (en) | 2000-10-26 | 2010-11-02 | Cypress Semiconductor Corporation | Programmable microcontroller architecture(mixed analog/digital) |
+US7844437B1 (en) | 2001-11-19 | 2010-11-30 | Cypress Semiconductor Corporation | System and method for performing next placements and pruning of disallowed placements for programming an integrated circuit |
+US7893724B2 (en) | 2004-03-25 | 2011-02-22 | Cypress Semiconductor Corporation | Method and circuit for rapid alignment of signals |
+US7913573B2 (en) | 2006-01-13 | 2011-03-29 | Mts Systems Corporation | Orthopedic simulator with a multi-axis slide table assembly |
+US20110153306A1 (en) * | 2009-12-23 | 2011-06-23 | International Business Machines Corporation | System, method and computer program product for processor verification using abstract test case |
+US8026739B2 (en) | 2007-04-17 | 2011-09-27 | Cypress Semiconductor Corporation | System level interconnect with programmable switching |
+US8049569B1 (en) | 2007-09-05 | 2011-11-01 | Cypress Semiconductor Corporation | Circuit and method for improving the accuracy of a crystal-less oscillator having dual-frequency modes |
+US8067948B2 (en) | 2006-03-27 | 2011-11-29 | Cypress Semiconductor Corporation | Input/output multiplexer bus |
+US8069428B1 (en) | 2001-10-24 | 2011-11-29 | Cypress Semiconductor Corporation | Techniques for generating microcontroller configuration information |
+US8078894B1 (en) | 2007-04-25 | 2011-12-13 | Cypress Semiconductor Corporation | Power management architecture, method and configuration system |
+US8078970B1 (en) | 2001-11-09 | 2011-12-13 | Cypress Semiconductor Corporation | Graphical user interface with user-selectable list-box |
+US8085067B1 (en) | 2005-12-21 | 2011-12-27 | Cypress Semiconductor Corporation | Differential-to-single ended signal converter circuit and method |
+US8103497B1 (en) | 2002-03-28 | 2012-01-24 | Cypress Semiconductor Corporation | External interface for event architecture |
+US8103496B1 (en) | 2000-10-26 | 2012-01-24 | Cypress Semicondutor Corporation | Breakpoint control in an in-circuit emulation system |
+US8120408B1 (en) | 2005-05-05 | 2012-02-21 | Cypress Semiconductor Corporation | Voltage controlled oscillator delay cell and method |
+US8130025B2 (en) | 2007-04-17 | 2012-03-06 | Cypress Semiconductor Corporation | Numerical band gap |
+US8135556B2 (en) | 2008-10-02 | 2012-03-13 | Mts Systems Corporation | Methods and systems for off-line control for simulation of coupled hybrid dynamic systems |
+US8149048B1 (en) | 2000-10-26 | 2012-04-03 | Cypress Semiconductor Corporation | Apparatus and method for programmable power management in a programmable analog circuit block |
+US8160864B1 (en) | 2000-10-26 | 2012-04-17 | Cypress Semiconductor Corporation | In-circuit emulator and pod synchronized boot |
+US8176296B2 (en) | 2000-10-26 | 2012-05-08 | Cypress Semiconductor Corporation | Programmable microcontroller architecture |
+US8402438B1 (en) | 2007-12-03 | 2013-03-19 | Cadence Design Systems, Inc. | Method and system for generating verification information and tests for software |
+US8402313B1 (en) | 2002-05-01 | 2013-03-19 | Cypress Semiconductor Corporation | Reconfigurable testing system and method |
+US20130097568A1 (en) * | 2011-10-14 | 2013-04-18 | William W. Yang | Global clock handler object for hdl environment |
+US8499270B1 (en) | 2007-04-25 | 2013-07-30 | Cypress Semiconductor Corporation | Configuration of programmable IC design elements |
+US8533647B1 (en) | 2012-10-05 | 2013-09-10 | Atrenta, Inc. | Method for generating an integrated and unified view of IP-cores for hierarchical analysis of a system on chip (SoC) design |
+US8533677B1 (en) | 2001-11-19 | 2013-09-10 | Cypress Semiconductor Corporation | Graphical user interface for dynamically reconfiguring a programmable device |
+US8868976B2 (en) | 2010-11-04 | 2014-10-21 | International Business Machines Corporation | System-level testcase generation |
+US9448964B2 (en) | 2009-05-04 | 2016-09-20 | Cypress Semiconductor Corporation | Autonomous control in a programmable system |
+US9477793B2 (en) | 2008-10-02 | 2016-10-25 | Mts Systems Corporation | Method and systems for off-line control for simulation of coupled hybrid dynamic systems |
+US9690888B2 (en) | 2015-04-20 | 2017-06-27 | Nxp Usa, Inc. | Method and apparatus for system design verification |
+US9720805B1 (en) | 2007-04-25 | 2017-08-01 | Cypress Semiconductor Corporation | System and method for controlling a target device |
+US10061278B2 (en) | 2013-09-09 | 2018-08-28 | Mts Systems Corporation | Method of off-line hybrid system assessment for test monitoring and modification |
+US10235483B2 (en) * | 2016-03-04 | 2019-03-19 | Synopsys, Inc. | Capturing time-slice of emulation data for offline embedded software debug |
+US10371601B2 (en) | 2013-09-09 | 2019-08-06 | Mts Systems Corporation | Methods and systems for testing coupled hybrid dynamic systems |
+US10698805B1 (en) * | 2017-01-25 | 2020-06-30 | Cadence Design Systems, Inc. | Method and system for profiling performance of a system on chip |
+US10698662B2 (en) | 2001-11-15 | 2020-06-30 | Cypress Semiconductor Corporation | System providing automatic source code generation for personalization and parameterization of user modules |
+CN112988324A (en) * | 2021-01-28 | 2021-06-18 | 中国科学院信息工程研究所 | Android simulator identification method and system based on CPU information |
+CN116149918A (en) * | 2023-04-20 | 2023-05-23 | 上海灵动微电子股份有限公司 | AHB bus matrix-based test method and system |
+CN117194388A (en) * | 2023-11-02 | 2023-12-08 | 摩尔线程智能科技(北京)有限责任公司 | Data management method, device, electronic equipment and storage medium |
+CN112988324B (en) * | 2021-01-28 | 2024-05-17 | 中国科学院信息工程研究所 | Android simulator identification method and system based on CPU information |
+Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5600579A (en) | 1994-07-08 | 1997-02-04 | Apple Computer, Inc. | Hardware simulation and design verification system and method |
+US5838948A (en) | 1995-12-01 | 1998-11-17 | Eagle Design Automation, Inc. | System and method for simulation of computer systems combining hardware and software interaction |
+US6052524A (en) * | 1998-05-14 | 2000-04-18 | Software Development Systems, Inc. | System and method for simulation of integrated hardware and software components |
+US6182258B1 (en) * | 1997-06-03 | 2001-01-30 | Verisity Ltd. | Method and apparatus for test generation during circuit design |
+US6240543B1 (en) * | 1998-12-01 | 2001-05-29 | Narpat Bhandari | Integration of manufacturing test of multiple system on a chip without substantial simulation |
+US6249893B1 (en) * | 1998-10-30 | 2001-06-19 | Advantest Corp. | Method and structure for testing embedded cores based system-on-a-chip |
+US6269467B1 (en) * | 1998-09-30 | 2001-07-31 | Cadence Design Systems, Inc. | Block based design methodology |
+-
+2000
+- 2000-01-31 US US09/494,565 patent/US6571373B1/en not_active Expired - Lifetime
+Patent Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5600579A (en) | 1994-07-08 | 1997-02-04 | Apple Computer, Inc. | Hardware simulation and design verification system and method |
+US5838948A (en) | 1995-12-01 | 1998-11-17 | Eagle Design Automation, Inc. | System and method for simulation of computer systems combining hardware and software interaction |
+US6182258B1 (en) * | 1997-06-03 | 2001-01-30 | Verisity Ltd. | Method and apparatus for test generation during circuit design |
+US6052524A (en) * | 1998-05-14 | 2000-04-18 | Software Development Systems, Inc. | System and method for simulation of integrated hardware and software components |
+US6269467B1 (en) * | 1998-09-30 | 2001-07-31 | Cadence Design Systems, Inc. | Block based design methodology |
+US6249893B1 (en) * | 1998-10-30 | 2001-06-19 | Advantest Corp. | Method and structure for testing embedded cores based system-on-a-chip |
+US6240543B1 (en) * | 1998-12-01 | 2001-05-29 | Narpat Bhandari | Integration of manufacturing test of multiple system on a chip without substantial simulation |
+Non-Patent Citations (7)
+Cited By (147)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020117749A1 (en) * | 1996-09-19 | 2002-08-29 | Farnworth Warren M. | Heat transfer material for an improved die edge contacting socket |
+US20030192032A1 (en) * | 1998-02-17 | 2003-10-09 | National Instruments Corporation | System and method for debugging a software program |
+US7024660B2 (en) * | 1998-02-17 | 2006-04-04 | National Instruments Corporation | Debugging a program intended to execute on a reconfigurable device using a test feed-through configuration |
+US8736303B2 (en) | 2000-10-26 | 2014-05-27 | Cypress Semiconductor Corporation | PSOC architecture |
+US8103496B1 (en) | 2000-10-26 | 2012-01-24 | Cypress Semicondutor Corporation | Breakpoint control in an in-circuit emulation system |
+US10261932B2 (en) | 2000-10-26 | 2019-04-16 | Cypress Semiconductor Corporation | Microcontroller programmable system on a chip |
+US8149048B1 (en) | 2000-10-26 | 2012-04-03 | Cypress Semiconductor Corporation | Apparatus and method for programmable power management in a programmable analog circuit block |
+US9843327B1 (en) | 2000-10-26 | 2017-12-12 | Cypress Semiconductor Corporation | PSOC architecture |
+US8160864B1 (en) | 2000-10-26 | 2012-04-17 | Cypress Semiconductor Corporation | In-circuit emulator and pod synchronized boot |
+US10248604B2 (en) | 2000-10-26 | 2019-04-02 | Cypress Semiconductor Corporation | Microcontroller programmable system on a chip |
+US8176296B2 (en) | 2000-10-26 | 2012-05-08 | Cypress Semiconductor Corporation | Programmable microcontroller architecture |
+US10725954B2 (en) | 2000-10-26 | 2020-07-28 | Monterey Research, Llc | Microcontroller programmable system on a chip |
+US8555032B2 (en) | 2000-10-26 | 2013-10-08 | Cypress Semiconductor Corporation | Microcontroller programmable system on a chip with programmable interconnect |
+US10020810B2 (en) | 2000-10-26 | 2018-07-10 | Cypress Semiconductor Corporation | PSoC architecture |
+US7825688B1 (en) | 2000-10-26 | 2010-11-02 | Cypress Semiconductor Corporation | Programmable microcontroller architecture(mixed analog/digital) |
+US8358150B1 (en) | 2000-10-26 | 2013-01-22 | Cypress Semiconductor Corporation | Programmable microcontroller architecture(mixed analog/digital) |
+US9766650B2 (en) | 2000-10-26 | 2017-09-19 | Cypress Semiconductor Corporation | Microcontroller programmable system on a chip with programmable interconnect |
+US7016826B2 (en) * | 2000-12-21 | 2006-03-21 | Intel Corporation | Apparatus and method of developing software for a multi-processor chip |
+US20020083112A1 (en) * | 2000-12-21 | 2002-06-27 | Wheeler William R. | Apparatus and method of developing software for a multi-processor chip |
+US6708317B2 (en) * | 2001-01-26 | 2004-03-16 | Arm Limited | Validating integrated circuits |
+US6964004B2 (en) * | 2001-10-24 | 2005-11-08 | Ardext Technologies, Inc. | Method and apparatus for testing a system-on-a-chip |
+US8793635B1 (en) | 2001-10-24 | 2014-07-29 | Cypress Semiconductor Corporation | Techniques for generating microcontroller configuration information |
+US20030158688A1 (en) * | 2001-10-24 | 2003-08-21 | Abhijit Chatterjee | Method and apparatus for testing a system-on-a-chip |
+US8069428B1 (en) | 2001-10-24 | 2011-11-29 | Cypress Semiconductor Corporation | Techniques for generating microcontroller configuration information |
+US10466980B2 (en) | 2001-10-24 | 2019-11-05 | Cypress Semiconductor Corporation | Techniques for generating microcontroller configuration information |
+US8078970B1 (en) | 2001-11-09 | 2011-12-13 | Cypress Semiconductor Corporation | Graphical user interface with user-selectable list-box |
+US10698662B2 (en) | 2001-11-15 | 2020-06-30 | Cypress Semiconductor Corporation | System providing automatic source code generation for personalization and parameterization of user modules |
+US8370791B2 (en) | 2001-11-19 | 2013-02-05 | Cypress Semiconductor Corporation | System and method for performing next placements and pruning of disallowed placements for programming an integrated circuit |
+US6966039B1 (en) | 2001-11-19 | 2005-11-15 | Cypress Semiconductor Corp. | Method for facilitating microcontroller programming |
+US7844437B1 (en) | 2001-11-19 | 2010-11-30 | Cypress Semiconductor Corporation | System and method for performing next placements and pruning of disallowed placements for programming an integrated circuit |
+US7010773B1 (en) * | 2001-11-19 | 2006-03-07 | Cypress Semiconductor Corp. | Method for designing a circuit for programmable microcontrollers |
+US8533677B1 (en) | 2001-11-19 | 2013-09-10 | Cypress Semiconductor Corporation | Graphical user interface for dynamically reconfiguring a programmable device |
+US20030145290A1 (en) * | 2002-01-30 | 2003-07-31 | International Business Machines Corporation | System for controlling external models used for verification of system on a chip (SOC) interfaces |
+US8103497B1 (en) | 2002-03-28 | 2012-01-24 | Cypress Semiconductor Corporation | External interface for event architecture |
+US8402313B1 (en) | 2002-05-01 | 2013-03-19 | Cypress Semiconductor Corporation | Reconfigurable testing system and method |
+US6842883B2 (en) * | 2002-06-24 | 2005-01-11 | Lsi Logic Corporation | Application of co-verification tools to the testing of IC designs |
+US20030237062A1 (en) * | 2002-06-24 | 2003-12-25 | Whitehill Clifford A. | Application of co-verification tools to the testing of IC designs |
+US20040010401A1 (en) * | 2002-07-11 | 2004-01-15 | International Business Machines Corporation | Unified simulation system and method for selectively including one or more cores in an integrated circuit simulation model |
+US7194705B1 (en) * | 2003-03-14 | 2007-03-20 | Xilinx, Inc. | Simulation of integrated circuitry within a high-level modeling system using hardware description language circuit descriptions |
+CN1304994C (en) * | 2003-08-27 | 2007-03-14 | 四川南山之桥微电子有限公司 | Exchanger and router chip drawn by running chip general stardards and core logic and method |
+CN100350583C (en) * | 2003-12-02 | 2007-11-21 | 四川南山之桥微电子有限公司 | Method for check identifying code exclusive logic |
+US7383738B2 (en) | 2003-12-05 | 2008-06-10 | Mts Systems Corporation | Method to extend testing through integration of measured responses virtual models |
+US20080271542A1 (en) * | 2003-12-05 | 2008-11-06 | Mts Systems Corporation | Method to extend testing through integration of measured responses with virtual models |
+US7893724B2 (en) | 2004-03-25 | 2011-02-22 | Cypress Semiconductor Corporation | Method and circuit for rapid alignment of signals |
+US20060075315A1 (en) * | 2004-09-29 | 2006-04-06 | Cruz R T | Method and process for manufacturing test generation |
+US7127691B2 (en) | 2004-09-29 | 2006-10-24 | International Business Machines Corporation | Method and apparatus for manufacturing test generation |
+US8219379B2 (en) * | 2004-11-29 | 2012-07-10 | Arm Limited | System, method and computer program product for testing software |
+US20060129765A1 (en) * | 2004-11-29 | 2006-06-15 | Arm Limited | System, method and computer program product for testing software |
+US8085100B2 (en) | 2005-02-04 | 2011-12-27 | Cypress Semiconductor Corporation | Poly-phase frequency synthesis oscillator |
+US20090066427A1 (en) * | 2005-02-04 | 2009-03-12 | Aaron Brennan | Poly-phase frequency synthesis oscillator |
+US8140314B2 (en) | 2005-04-08 | 2012-03-20 | International Business Machines Corporation | Optimal bus operation performance in a logic simulation environment |
+US20080312896A1 (en) * | 2005-04-08 | 2008-12-18 | Devins Robert J | Optimal bus operation performance in a logic simulation environment |
+US20060229858A1 (en) * | 2005-04-08 | 2006-10-12 | International Business Machines Corporation | System, method and program storage device for simulation |
+US7451070B2 (en) | 2005-04-08 | 2008-11-11 | International Business Machines | Optimal bus operation performance in a logic simulation environment |
+US8120408B1 (en) | 2005-05-05 | 2012-02-21 | Cypress Semiconductor Corporation | Voltage controlled oscillator delay cell and method |
+US7689400B2 (en) * | 2005-05-24 | 2010-03-30 | International Business Machines Corporation | Reconstruction of data from simulation models |
+US7742909B2 (en) * | 2005-05-24 | 2010-06-22 | International Business Machines Corporation | Reconstruction of data from simulation models |
+US20060271515A1 (en) * | 2005-05-24 | 2006-11-30 | Alley Charles L | Systems, methods, and media for reconstructing data from simulation models |
+US20090106009A1 (en) * | 2005-05-24 | 2009-04-23 | International Business Machines Corporation | Reconstruction of data from simulation models |
+US7526419B2 (en) * | 2005-05-24 | 2009-04-28 | International Business Machines Corporation | Methods for reconstructing data from simulation models |
+US20090112556A1 (en) * | 2005-05-24 | 2009-04-30 | International Business Machines Corporation | Reconstruction of data from simulation models |
+US20070016880A1 (en) * | 2005-07-14 | 2007-01-18 | Brinson Kenneth O | Apparatus and method for testing sub-systems of a system-on-a-chip using a configurable external system-on-a-chip |
+US20080313583A1 (en) * | 2005-07-14 | 2008-12-18 | International Business Machines Corporation | Apparatus and Method for Testing Sub-Systems of a System-on-a-Chip Using a Configurable External System-on-a-Chip |
+US7434182B2 (en) | 2005-07-14 | 2008-10-07 | International Business Machines Corporation | Method for testing sub-systems of a system-on-a-chip using a configurable external system-on-a-chip |
+US8024699B2 (en) | 2005-07-14 | 2011-09-20 | International Business Machines Corporation | Testing sub-systems of a system-on-a-chip using a configurable external system-on-a-chip |
+US8209524B2 (en) | 2005-08-29 | 2012-06-26 | The Invention Science Fund I, Llc | Cross-architecture optimization |
+US8181004B2 (en) | 2005-08-29 | 2012-05-15 | The Invention Science Fund I, Llc | Selecting a resource management policy for a resource available to a processor |
+US8214191B2 (en) * | 2005-08-29 | 2012-07-03 | The Invention Science Fund I, Llc | Cross-architecture execution optimization |
+US20090150713A1 (en) * | 2005-08-29 | 2009-06-11 | William Henry Mangione-Smith | Multi-voltage synchronous systems |
+US7877584B2 (en) | 2005-08-29 | 2011-01-25 | The Invention Science Fund I, Llc | Predictive processor resource management |
+US8516300B2 (en) | 2005-08-29 | 2013-08-20 | The Invention Science Fund I, Llc | Multi-votage synchronous systems |
+US20070050604A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Fetch rerouting in response to an execution-based optimization profile |
+US8375247B2 (en) | 2005-08-29 | 2013-02-12 | The Invention Science Fund I, Llc | Handling processor computational errors |
+US8255745B2 (en) | 2005-08-29 | 2012-08-28 | The Invention Science Fund I, Llc | Hardware-error tolerant computing |
+US8402257B2 (en) | 2005-08-29 | 2013-03-19 | The Invention Science Fund I, PLLC | Alteration of execution of a program in response to an execution-optimization information |
+US20090132853A1 (en) * | 2005-08-29 | 2009-05-21 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Hardware-error tolerant computing |
+US20070050660A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Handling processor computational errors |
+US20070050607A1 (en) * | 2005-08-29 | 2007-03-01 | Bran Ferren | Alteration of execution of a program in response to an execution-optimization information |
+US20070050609A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc | Cross-architecture execution optimization |
+US20070050608A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporatin Of The State Of Delaware | Hardware-generated and historically-based execution optimization |
+US20070050606A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Runtime-based optimization profile |
+US20070074173A1 (en) * | 2005-08-29 | 2007-03-29 | Bran Ferren | Cross-architecture optimization |
+US20070050776A1 (en) * | 2005-08-29 | 2007-03-01 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Predictive processor resource management |
+US20070055848A1 (en) * | 2005-08-29 | 2007-03-08 | Searete Llc, A Limited Liability Corporation Of The State Of Delaware | Processor resource management |
+US8085067B1 (en) | 2005-12-21 | 2011-12-27 | Cypress Semiconductor Corporation | Differential-to-single ended signal converter circuit and method |
+US7913573B2 (en) | 2006-01-13 | 2011-03-29 | Mts Systems Corporation | Orthopedic simulator with a multi-axis slide table assembly |
+US20070169562A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Orthopedic simulator with integral load actuators |
+US20070169573A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Orthopedic simulator with fluid concentration maintenance arrangement for controlling fluid concentration of specimen baths |
+US20070169561A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Mechanism arrangement for orthopedic simulator |
+US20070169566A1 (en) * | 2006-01-13 | 2007-07-26 | Mts Systems Corporation | Integrated central manifold for orthopedic simulator |
+US7770446B2 (en) | 2006-01-13 | 2010-08-10 | Mts Systems Corporation | Orthopedic simulator with temperature controller arrangement for controlling temperature of specimen baths |
+US8156824B2 (en) | 2006-01-13 | 2012-04-17 | Mts Systems Corporation | Mechanism arrangement for orthopedic simulator |
+US7779708B2 (en) | 2006-01-13 | 2010-08-24 | Mts Systems Corporation | Orthopedic simulator with fluid concentration maintenance arrangement for controlling fluid concentration of specimen baths |
+US7762147B2 (en) | 2006-01-13 | 2010-07-27 | Mts Systems Corporation | Orthopedic simulator with integral load actuators |
+US7824184B2 (en) | 2006-01-13 | 2010-11-02 | Mts Systems Corporation | Integrated central manifold for orthopedic simulator |
+US7654150B2 (en) | 2006-01-20 | 2010-02-02 | Mts Systems Corporation | Specimen containment module for orthopedic simulator |
+US20070172394A1 (en) * | 2006-01-20 | 2007-07-26 | Schulz Bradley D | Specimen containment module for orthopedic simulator |
+US8067948B2 (en) | 2006-03-27 | 2011-11-29 | Cypress Semiconductor Corporation | Input/output multiplexer bus |
+US8717042B1 (en) | 2006-03-27 | 2014-05-06 | Cypress Semiconductor Corporation | Input/output multiplexer bus |
+US20070275355A1 (en) * | 2006-05-08 | 2007-11-29 | Langer William J | Integration and supervision for modeled and mechanical vehicle testing and simulation |
+US20070260373A1 (en) * | 2006-05-08 | 2007-11-08 | Langer William J | Dynamic vehicle durability testing and simulation |
+US20080297388A1 (en) * | 2007-04-17 | 2008-12-04 | Cypress Semiconductor Corporation | Programmable sigma-delta analog-to-digital converter |
+US8026739B2 (en) | 2007-04-17 | 2011-09-27 | Cypress Semiconductor Corporation | System level interconnect with programmable switching |
+US8040266B2 (en) | 2007-04-17 | 2011-10-18 | Cypress Semiconductor Corporation | Programmable sigma-delta analog-to-digital converter |
+US20080259998A1 (en) * | 2007-04-17 | 2008-10-23 | Cypress Semiconductor Corp. | Temperature sensor with digital bandgap |
+US8130025B2 (en) | 2007-04-17 | 2012-03-06 | Cypress Semiconductor Corporation | Numerical band gap |
+US8476928B1 (en) | 2007-04-17 | 2013-07-02 | Cypress Semiconductor Corporation | System level interconnect with programmable switching |
+US8092083B2 (en) | 2007-04-17 | 2012-01-10 | Cypress Semiconductor Corporation | Temperature sensor with digital bandgap |
+US9720805B1 (en) | 2007-04-25 | 2017-08-01 | Cypress Semiconductor Corporation | System and method for controlling a target device |
+US8499270B1 (en) | 2007-04-25 | 2013-07-30 | Cypress Semiconductor Corporation | Configuration of programmable IC design elements |
+US8078894B1 (en) | 2007-04-25 | 2011-12-13 | Cypress Semiconductor Corporation | Power management architecture, method and configuration system |
+US8909960B1 (en) | 2007-04-25 | 2014-12-09 | Cypress Semiconductor Corporation | Power management architecture, method and configuration system |
+US20080275681A1 (en) * | 2007-05-04 | 2008-11-06 | Langer William J | Method and system for vehicle damper system evaluation and tuning with loading system and vehicle model |
+US20090012763A1 (en) * | 2007-05-04 | 2009-01-08 | Mts Systems Corporation | Method and system for tire evaluation and tuning with loading system and vehicle model |
+US8049569B1 (en) | 2007-09-05 | 2011-11-01 | Cypress Semiconductor Corporation | Circuit and method for improving the accuracy of a crystal-less oscillator having dual-frequency modes |
+US8924937B1 (en) | 2007-12-03 | 2014-12-30 | Cadence Design Systems, Inc. | Method and system for generating verification information and tests for software |
+US8402438B1 (en) | 2007-12-03 | 2013-03-19 | Cadence Design Systems, Inc. | Method and system for generating verification information and tests for software |
+US8291390B2 (en) | 2008-07-30 | 2012-10-16 | National Instruments Corporation | Testing a graphical program intended for a programmable hardware element |
+US20100031231A1 (en) * | 2008-07-30 | 2010-02-04 | Kosta Ilic | Testing a Graphical Program Intended for a Programmable Hardware Element |
+US20100082315A1 (en) * | 2008-09-30 | 2010-04-01 | Hall Giles T | Interface between a verification environment and a hardware acceleration engine |
+US8504344B2 (en) | 2008-09-30 | 2013-08-06 | Cadence Design Systems, Inc. | Interface between a verification environment and a hardware acceleration engine |
+US10339265B2 (en) | 2008-10-02 | 2019-07-02 | Mts Systems Corporation | Method and systems for off-line control for simulation of coupled hybrid dynamic systems |
+US8135556B2 (en) | 2008-10-02 | 2012-03-13 | Mts Systems Corporation | Methods and systems for off-line control for simulation of coupled hybrid dynamic systems |
+US9477793B2 (en) | 2008-10-02 | 2016-10-25 | Mts Systems Corporation | Method and systems for off-line control for simulation of coupled hybrid dynamic systems |
+US8140902B2 (en) | 2008-11-12 | 2012-03-20 | International Business Machines Corporation | Internally controlling and enhancing advanced test and characterization in a multiple core microprocessor |
+US20100122116A1 (en) * | 2008-11-12 | 2010-05-13 | International Business Machines Corporation | Internally Controlling and Enhancing Advanced Test and Characterization in a Multiple Core Microprocessor |
+US8930912B2 (en) | 2008-12-16 | 2015-01-06 | Cadence Design Systems, Inc. | Method and system for performing software verification |
+US20100153924A1 (en) * | 2008-12-16 | 2010-06-17 | Cadence Design Systems, Inc. | Method and System for Performing Software Verification |
+US8122312B2 (en) | 2009-04-14 | 2012-02-21 | International Business Machines Corporation | Internally controlling and enhancing logic built-in self test in a multiple core microprocessor |
+US20100262879A1 (en) * | 2009-04-14 | 2010-10-14 | International Business Machines Corporation | Internally Controlling and Enhancing Logic Built-In Self Test in a Multiple Core Microprocessor |
+US9448964B2 (en) | 2009-05-04 | 2016-09-20 | Cypress Semiconductor Corporation | Autonomous control in a programmable system |
+US20110153306A1 (en) * | 2009-12-23 | 2011-06-23 | International Business Machines Corporation | System, method and computer program product for processor verification using abstract test case |
+US8868976B2 (en) | 2010-11-04 | 2014-10-21 | International Business Machines Corporation | System-level testcase generation |
+US20130097568A1 (en) * | 2011-10-14 | 2013-04-18 | William W. Yang | Global clock handler object for hdl environment |
+US8533647B1 (en) | 2012-10-05 | 2013-09-10 | Atrenta, Inc. | Method for generating an integrated and unified view of IP-cores for hierarchical analysis of a system on chip (SoC) design |
+US8788993B2 (en) | 2012-10-05 | 2014-07-22 | Atrenta, Inc. | Computer system for generating an integrated and unified view of IP-cores for hierarchical analysis of a system on chip (SoC) design |
+US10371601B2 (en) | 2013-09-09 | 2019-08-06 | Mts Systems Corporation | Methods and systems for testing coupled hybrid dynamic systems |
+US10061278B2 (en) | 2013-09-09 | 2018-08-28 | Mts Systems Corporation | Method of off-line hybrid system assessment for test monitoring and modification |
+US10876930B2 (en) | 2013-09-09 | 2020-12-29 | Mts Systems Corporation | Methods and systems for testing coupled hybrid dynamic systems |
+US9690888B2 (en) | 2015-04-20 | 2017-06-27 | Nxp Usa, Inc. | Method and apparatus for system design verification |
+US10235483B2 (en) * | 2016-03-04 | 2019-03-19 | Synopsys, Inc. | Capturing time-slice of emulation data for offline embedded software debug |
+US10698805B1 (en) * | 2017-01-25 | 2020-06-30 | Cadence Design Systems, Inc. | Method and system for profiling performance of a system on chip |
+CN112988324A (en) * | 2021-01-28 | 2021-06-18 | 中国科学院信息工程研究所 | Android simulator identification method and system based on CPU information |
+CN112988324B (en) * | 2021-01-28 | 2024-05-17 | 中国科学院信息工程研究所 | Android simulator identification method and system based on CPU information |
+CN116149918A (en) * | 2023-04-20 | 2023-05-23 | 上海灵动微电子股份有限公司 | AHB bus matrix-based test method and system |
+CN117194388A (en) * | 2023-11-02 | 2023-12-08 | 摩尔线程智能科技(北京)有限责任公司 | Data management method, device, electronic equipment and storage medium |
+CN117194388B (en) * | 2023-11-02 | 2024-02-06 | 摩尔线程智能科技(北京)有限责任公司 | Data management method, device, electronic equipment and storage medium |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6571373B1 (en) | Simulator-independent system-on-chip verification methodology | |
+US6615167B1 (en) | Processor-independent system-on-chip verification for embedded processor systems | |
+US6539522B1 (en) | Method of developing re-usable software for efficient verification of system-on-chip integrated circuit designs | |
+Mehta | ASIC/SoC functional design verification | |
+Spear | SystemVerilog for verification: a guide to learning the testbench language features | |
+US6427224B1 (en) | Method for efficient verification of system-on-chip integrated circuit designs including an embedded processor | |
+Salah | A UVM-based smart functional verification platform: Concepts, pros, cons, and opportunities | |
+US7434182B2 (en) | Method for testing sub-systems of a system-on-a-chip using a configurable external system-on-a-chip | |
+Palnitkar | Design Verification with e | |
+Lora et al. | Translation, abstraction and integration for effective smart system design | |
+Flake et al. | Verilog HDL and its ancestors and descendants | |
+WO2006078436A2 (en) | Methods and systems for modeling concurrent behavior | |
+Zarandi et al. | Fault injection into verilog models for dependability evaluation of digital systems | |
+Gao et al. | Software and hardware co-verification technology based on virtual prototyping of RF SOC | |
+US6868545B1 (en) | Method for re-using system-on-chip verification software in an operating system | |
+CN111460759A (en) | Python language-based EDA (electronic design automation) verification platform and use method thereof | |
+Cohen et al. | SystemVerilog Assertions Handbook:--for Formal and Dynamic Verification | |
+Yang et al. | Current status and challenges of soc verification for embedded systems market | |
+Misera et al. | A mixed language fault simulation of vhdl and systemc | |
+Kaith et al. | A technical road map from system verilog to UVM | |
+US7852117B1 (en) | Hierarchical interface for IC system | |
+Willems et al. | Virtual prototypes for software-dominated communication system designs | |
+Reid et al. | Implementing a graphical user interface for SystemC | |
+Mohsin | Verification of a Single Port RAM Using UVM Methodology | |
+Acken et al. | Part II: Logic circuit simulation |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:DEVINS, ROBERT J.;KATUZMAN, MARK E.;MAHLER, KENNETH A.;AND OTHERS;REEL/FRAME:010757/0734Effective date: 20000131 |
+|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: CORRECTIVE ASSIGNMENT TO CORRECT THE SECOND INVENTOR'S NAME, PREVIOUSLY RECORDED AT REEL 010757 FRAME 0734;ASSIGNORS:DEVINS, ROBERT J.;KAUTZMAN, MARK E.;MAHLER, KENNETH A.;AND OTHERS;REEL/FRAME:011124/0837Effective date: 20000131 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026664/0866Effective date: 20110503 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

@@ -1,0 +1,531 @@
+US7617226B1 - Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents - Google Patents
+Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents Download PDFInfo
+- Publication number
+- US7617226B1 US7617226B1 US11/352,025 US35202506A US7617226B1 US 7617226 B1 US7617226 B1 US 7617226B1 US 35202506 A US35202506 A US 35202506A US 7617226 B1 US7617226 B1 US 7617226B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- repository
+- documents
+- document
+- storage space
+- invalidated
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/10—File systems; File servers
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99941—Database schema or data structure
+- Y10S707/99942—Manipulating data structure, e.g. compression, compaction, compilation
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99941—Database schema or data structure
+- Y10S707/99943—Generating database or data structure, e.g. via user interface
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99951—File or database maintenance
+- Y10S707/99952—Coherency, e.g. same view to multiple users
+- Y10S707/99953—Recoverability
+Definitions
+- the disclosed embodiments relate generally to data processing systems and methods, and in particular to a document repository that supports low latencies from when a document is updated to when the document is available to queries, and that requires little synchronization between query threads and repository update threads.
+- Information retrieval systems such as search engines, run queries against an index of documents generated from a document corpus (e.g., the World Wide Web).
+- a typical inverted index includes the words in each document, together with pointers to their locations within the documents.
+- a document processing system prepares the inverted index by processing the contents of the documents, pages or sites retrieved from the document corpus using an automated or manual process.
+- the document processing system may also store the contents of the documents, or portions of the content, in a repository for use by a query processor when responding to a query.
+- freshness of the results is an important consideration.
+- One obstacle is the expense or overhead associated with rebuilding the document index each time the document repository is updated.
+- significant overhead is often associated with building small indexes from new and updated documents and periodically merging the small indexes with a main index, and furthermore such systems typically suffer long latencies between document updates and availability of those documents in the repository index.
+- a second obstacle is the difficulty of continuously processing queries against the document repository while updating the repository, without incurring large overhead.
+- This second obstacle is the need to synchronize both the threads that execute queries and the threads that update the document repository with key data structures in the data repository.
+- the need to synchronize the query threads and repository update threads can present a significant obstacle to efficient operation of the document repository if document updates are performed frequently, which in turn is a barrier to maintaining freshness of the document repository.
+- a method of processing documents includes storing a set of documents as a sequence of documents in a repository having a first end and a second end, invalidating a subset of the documents in the sequence, appending a copy of a document at the first end of the repository to the second end, and recovering storage space associated with the first end of the repository, including a first storage space associated with the document at the first end and, if any, a second storage space associated with a document of the invalidated subset that is adjacent to the document at the first end.
+- FIG. 1 is a block diagram illustrating an information retrieval system, in accordance with some embodiments.
+- FIG. 2 is a block diagram illustrating a data structure with a first end and a second end, in accordance with some embodiments.
+- FIG. 3 is a block diagram illustrating a lexicon data structure, in accordance with some embodiments.
+- FIGS. 4A and 4B are block diagrams illustrating a tokenspace inverted index data structure, in accordance with some embodiments.
+- FIG. 5 is a block diagram illustrating a tokenspace repository data structure, in accordance with some embodiments.
+- FIG. 6 is a block diagram illustrating a token attributes data structure, in accordance with some embodiments.
+- FIG. 7 is a block diagram illustrating a document boundaries data structure, in accordance with some embodiments.
+- FIG. 8A is a block diagram illustrating a data structure for mapping global document identifiers to local document identifiers, in accordance with some embodiments.
+- FIG. 8B is a block diagram illustrating a data structure for mapping local document identifiers to global document identifiers, in accordance with some embodiments.
+- FIG. 8C is a block diagram illustrating an alternative data structure for mapping global document identifiers to local document identifiers, in accordance with some embodiments.
+- FIG. 9 is a block diagram illustrating a garbage collection list data structure, in accordance with some embodiments.
+- FIGS. 10A and 10B are block diagrams illustrating an attachments data structure, in accordance with some embodiments.
+- FIGS. 11A and 11B are flow diagrams of a process for garbage collecting data, in accordance with some embodiments.
+- FIG. 12 is a flow diagram of a process for updating a document in a tokenspace repository, in accordance with some embodiments.
+- FIGS. 13A-13B are flow diagrams of a process for treadmilling a document in a tokenspace repository, in accordance with some embodiments.
+- FIGS. 14A-14E are block diagrams illustrating the states of a tokenspace repository throughout the treadmilling of a document, in accordance with some embodiments.
+- FIGS. 15A-15E are block diagrams illustrating the states of a tokenspace repository throughout the treadmilling of a document adjacent to an invalid document, in accordance with some embodiments.
+- FIG. 16 is a block diagram illustrating a document processing server, in accordance with some embodiments.
+- FIG. 17 is a flow diagram of a process for executing a search query, in accordance with some embodiments.
+- FIG. 1 is a block diagram illustrating an information retrieval system, in accordance with some embodiments.
+- the information retrieval system 100 includes one or more write processors or write threads (i.e., threads of execution in a processor or group of processors) 104 and one or more query processors or query threads 108 .
+- the write processor or thread 104 receives documents from a document repository 102 and populate a tokenspace repository 106 with the documents.
+- Documents in the document repository 102 may be documents, web pages, emails, application specific documents and data structures, instant messaging (IM) messages, audio files, video files, and any other data or applications that may reside on one or more computer systems.
+- the write processor or thread 104 also updates the tokenspace repository 106 whenever updates to the document repository 102 occur.
+- the tokenspace repository 106 stores the documents of the document repository 102 as a sequence of tokens.
+- a “token” can be any object typically found in a document, including but not limited to terms, phrases, punctuation, HTML tags and the like.
+- a set of documents is represented as a sequence of tokens.
+- each token in the sequence of tokens has a token position, which also represents the position of the token in the set of documents. For example, the first token in the set of documents may be assigned a position of 0, the second token in the set of documents may be assigned a position of 1, and so on.
+- the write processor or thread 104 may generate a lexicon of all unique tokens in the tokenspace repository 106 , further details of which are described below, in relation to FIG. 3 .
+- the tokenspace inverted index 110 indexes the tokens of the tokenspace repository 106 . More particularly, the tokenspace inverted index 110 maps tokens to their positions within the tokenspace repository 106 . Further details regarding the tokenspace inverted index 110 are described below, in relation to FIG. 4 .
+- the tokens in the repository are fixed-length tokens. For instance, every token may occupy exactly 32 bits (4 bytes). In other words, every term, symbol, tag and the like that has been mapped to a unique token is represented by a respective fixed-length token value in the document repository.
+- the inverted index 110 index specifies that a particular token is found in positions A, B and C (e.g., 1041, 12349 and 992345) in the document repository 102 , those positions in the repository can be accessed directly by treating the token positions as offsets from the start address of the document repository in memory, and then accessing the resulting memory locations.
+- the query processors or query threads (i.e., threads of execution in a processor or group of processors) 108 perform queries on the tokenspace repository 106 .
+- the query processors or threads 108 accept queries and return results of those queries.
+- the query processors or threads 108 parse a query into multiple query terms which are transformed by the query processor(s) 108 into a query expression (e.g., Boolean tree expression).
+- the query terms are used to retrieve from the tokenspace inverted index 110 token positions.
+- the query processor(s) 108 generate an ordered list of documents which are presented to the user via one or more modes of communication (e.g., display device, audio, etc.).
+- the information retrieval system 100 may be distributed over a plurality of computers, such as servers.
+- the document repository 102 may be divided into a plurality of portions and each portion may be stored in its own tokenspace repository 106 , with each tokenspace repository 106 residing on a separate server.
+- Each document of the document repository 102 (and of the tokenspace repository 106 ) may be globally identified within the information retrieval system by a global document identifier and, within a portion, by a local document identifier.
+- FIG. 2 is a block diagram illustrating a data structure with a first end and a second end, in accordance with some embodiments.
+- the information retrieval system 100 utilizes a data structure with a first end and a second end for at least some of its data storage.
+- This data structure 200 called a first-in-first out (FIFO) array, has a contiguous array 201 of first level of pointers 202 and a second level of data blocks 204 of uniform size.
+- the FIFO array 200 also has a “front” end and a “back” end.
+- Each pointer 202 points to a data block 204 .
+- Each data block 204 includes a number of “cells” 206 .
+- the pointers 202 are preferably stored in contiguous memory locations so as to enable simple indexed addressing into the array 201 of pointers 202 .
+- the number of cells in a data block is an integer power of 2 (i.e., 2, 4, 8, 16, etc.).
+- the cells 206 in the data blocks 204 form a sequence of cells.
+- the size of a data block may vary depending on the type of data for which the FIFO array is being utilized, but the data blocks in the FIFO array are all of uniform size.
+- a beginning value and an end value (not shown) specify the beginning and the end of the sequence of cells 206 .
+- the beginning value specifies the first cell of the FIFO array that contains valid data
+- the end value specifies the first available cell after the last occupied cell at the end of the FIFO array.
+- the beginning and end values define the valid (accessible) range of the FIFO array 200 .
+- a FIFO array 200 data is inserted into the FIFO array 200 only at the back end and deleted from the FIFO array 200 only from the front end. In other words, new data is inserted into the first available cell in the back end. Data is deleted from the front end of the FIFO array 200 ; data from the “middle” cells cannot be deleted until it is at the front end. Thus, the cells in the FIFO array that have data form a contiguous sequence of “filled” cells with no empty cells in between. Due to the contiguous sequence, the offsets of the cells are also a contiguous sequence.
+- the pointer array 201 for a particular data structure (e.g., the document repository, or an index record) is given a predefined initial number of pointers 202 to data blocks.
+- An unused pointer 202 (which may also be called a null pointer) is initially given a predefined value, such as zero (0) or minus one ( ⁇ 1), which is replaced with a pointer to a data blocks 204 when a corresponding data blocks is added to the FIFO array 200 .
+- a new pointer array 201 with additional space at the pointer level is created.
+- the pointer values from the old pointer array 201 are copied to the new pointer array and the pointer array is deleted.
+- the data blocks of the FIFO array 200 are retained during the pointer array 201 resizing operation.
+- the pointer array 201 is a contiguous array.
+- the size of the new pointer array 201 may have a predefined relationship to the size of the old pointer array. For instance, the new pointer array may be twice the size of the old pointer array 201 .
+- Unused pointers 202 in the new pointer array are indicated by storing a predefined value (e.g., 0 or ⁇ 1) in them.
+- a similar procedure is used to recover wasted space in the pointer array 201 when data is deleted from a FIFO array 200 .
+- a sufficient number of blocks at the front end of the FIFO array have been deleted, in accordance with predefined criteria, a new pointer array 201 is created, data from the old pointer array 201 is copied to the new pointer array, and the old pointer array is deleted.
+- the data blocks of the FIFO array are not affected by this operation.
+- unused or null pointers 202 at the front end of a FIFO array 200 are not recovered until the FIFO array 200 runs out of pointers 202 at the back end of the FIFO array 200 due to treadmilling (discussed below), growth of the amount of data in the FIFO array 200 , or a combination of treadmilling and growth.
+- the first valid pointer in the old pointer array is copied into the first pointer 202 of the new pointer array (e.g., pointers at locations n to m in the old pointer array are copied to locations 0 to m ⁇ n in the new pointer array) so as to eliminate wasted space at the front end of the pointer array.
+- FIG. 3 is a block diagram illustrating a lexicon data structure, in accordance with some embodiments.
+- the lexicon 300 maps unique tokens 302 (i.e., the text or sequence of symbols of each token) in the documents to a global token identifier 304 .
+- the write processor(s) 104 retrieves documents from the document repository 102 and generates the lexicon 300 by assigning unique global token identifiers (GTokenIDs) to each unique token contained in the documents.
+- GTokenIDs unique global token identifiers
+- the document repository 102 is logically or physically split into multiple portions, sometimes called partitions, and a separate lexicon 300 is generated for each partition.
+- a set of several billion documents is divided into several thousand partitions, each of which is processed to generate a lexicon 300 .
+- a typical lexicon 300 can include a few million unique tokens.
+- the lexicon 300 may be implemented as a hash table. That is, the GTokenID is the output of a hash function that has the token as the input.
+- FIGS. 4A and 4B are block diagrams illustrating a tokenspace inverted index data structure, in accordance with some embodiments.
+- the tokenspace inverted index 110 includes a mapping 402 of global token identifiers (GTokenIDs) to pointers (PtrIndexRecord) that point to their respective index records.
+- the PtrIndexRecord's 406 are stored in the cells of a FIFO array 404 . Each PtrIndexRecord 406 points to an index record 400 .
+- An index record 400 of a respective token includes the respective token 408 (or its corresponding GTokenID), a count 410 of the total number occurrences of the respective token in the tokenspace repository 106 , and a pointer 412 to a FIFO array 414 , where the token positions 416 of the respective token in the tokenspace repository 106 are stored.
+- the occurrence count 410 is 1, then instead of having a FIFO array 414 and a pointer 412 to such, the single token position of the corresponding token in the tokenspace repository 106 is stored in place of the pointer 412 .
+- each partition of a document repository may be considered to be a document repository.
+- FIG. 5 is a block diagram illustrating a tokenspace repository data structure, in accordance with some embodiments.
+- the tokenspace repository 106 stores a sequence of tokens (or more particularly, their respective GTokenIDs) 508 that represent a set of documents.
+- the sequence of tokens 508 is stored in a FIFO array 506 .
+- the tokenspace repository 106 is periodically treadmilled, so that memory space occupied by stale documents that are no longer valid can be recovered. Further details regarding treadmilling are described below.
+- the tokenspace repository also includes an initial token position value (TokenPos 0 ) 502 and a pointer 504 to the cell at the front end (the cell at offset 0) in the FIFO array 506 .
+- the initial token position value 502 may be, but is not always, 0.
+- the token position of a token in the sequence of tokens may be determined by adding the offset of the token in the FIFO array to the initial position value 502 .
+- the position of a token in the tokenspace repository 106 is TokenPos 0 plus the offset of the token in the FIFO array 506 .
+- the tokenspace repository has an “accessible range” 520 that defines the range of documents accessible to queries being run against the tokenspace repository.
+- the accessible range 520 is defined by a begin position 522 , BeginRepositoryPos, and an end position 524 , EndRepositoryPos.
+- the end position 524 is the offset from the beginning of the repository to the last valid token in the repository
+- the begin position is the offset from the beginning of the repository to the first valid token in the repository.
+- the accessible range 520 is a lock protected data structure, as described below, and thus has a synchronization lock data structure 526 associated with it.
+- the synchronization lock data structure 526 may be a kernel data structure or any other appropriate data structure for synchronizing access to the accessible range 520 .
+- the same synchronization lock data structure 526 is also used to synchronize access to the garbage collection list 900 , described below.
+- the tokenspace repository 106 may comprise a plurality of sectional repositories, each sectional repository storing particular sections of documents.
+- each sectional repository stores its content as a sequence of tokens.
+- the sectional repositories are synchronized; the ordering of the content all follow the same ordering of documents. Their updates and treadmilling are also synchronized. More details regarding synchronizing section repositories are provided below.
+- FIG. 6 is a block diagram illustrating a token attributes data structure, in accordance with some embodiments.
+- the token attributes data structure 600 stores attributes corresponding to tokens in the tokenspace repository 106 .
+- the token attributes may include things such as boldface, underlining, italics, font, font size, and so forth.
+- the token attribute information 606 is stored in a FIFO array 604 .
+- the token attributes data structure 600 also includes the initial token position value 502 and a pointer to 602 to the front end cell (the offset 0 cell) in the FIFO array 604 .
+- the token attribute information at position TokenPos 0 +(offset in the FIFO array 604 ) is the token attribute information for the corresponding token at position TokenPos 0 +(offset in FIFO array 506 ).
+- a respective instance of the token attribute information 606 may provide attribute information for K (e.g., 16, 32, 64 or 128) tokens, with bit arrays or other data structures being used to efficiently specify attributes for K tokens.
+- FIG. 7 is a block diagram illustrating a document boundaries data structure, in accordance with some embodiments.
+- the document boundaries data structure 700 store token positions that correspond to the boundaries of documents.
+- the document boundaries data structure 700 stores the token position of the last token in each document (the ending token position of each document).
+- the document boundaries data structure 700 stores the token position of the first token in each document (the starting token position of each document).
+- the document boundaries data structure 700 includes the initial local document identifier (LDocID) value 702 , a FIFO array 706 of token positions, and a pointer 704 to the offset 0 position in the FIFO array 706 .
+- the FIFO array 706 stores the token positions 708 in the tokenspace repository that correspond to document boundaries. Additional details regarding the local document identifier is described below, in relation to FIGS. 8A-8B .
+- FIG. 8A is a block diagram illustrating a data structure for mapping global document identifiers to local document identifiers, in accordance with some embodiments.
+- Each document in the document repository 102 is assigned a global document identifier (GDocID) that globally identifies the document within the information retrieval system 100 .
+- GDocID global document identifier
+- a document is assigned a GDocID by the write processor(s) when the write processor(s) processes the document for storage in the tokenspace repository 106 .
+- Each document may also have a local document identifier (LDocID) that identifies the document within a portion of the document repository 102 .
+- the global to local document mapping 800 maps the correspondences between the global document identifiers and the local document identifiers.
+- the mapping 800 may be implemented by a hash table.
+- the mapping includes a hash function 802 for which the input is a GDocID 804 and the result is a corresponding LDocID 806 .
+- the mapping 800 may be implemented by a look-up table.
+- FIG. 8B is a block diagram illustrating a data structure for mapping local document identifiers to global document identifiers, in accordance with some embodiments.
+- the local to global document mapping 820 maps a local document identifier to a global document identifier.
+- the mapping 820 includes the initial LDocID value 822 , a FIFO array 826 of GDocID values, and a pointer 824 to the offset 0 position in the FIFO array 826 .
+- the FIFO array 826 may, for some LDocID values, store a null value instead of the GDocID value. The null value indicates that the document identified by the LDocID has been invalidated.
+- a document may be invalidated if it has been deleted from the document repository 102 or if the document is an older, obsolete version of another document in the document repository 102 .
+- a document that is deleted from the document repository 103 or made obsolete by a new version is marked invalid to indicate that it should no longer be used by new queries and that it should be deleted from the tokenspace repository 106 .
+- the updated version takes on a new local document identifier and does not reuse the local document identifier of the old version (though the local document identifier of the old version may be reused in the future, as the pool of local document identifiers may be finite).
+- FIG. 8C is a block diagram illustrating an alternative data structure for mapping global document identifiers to local document identifiers, in accordance with some embodiments.
+- the alternative global to local document mapping 840 includes a GDocID to LDocID map 842 and a FIFO array 844 of LDocIDs 846 .
+- the mapping maps a GDocID to a corresponding LDocID in the FIFO array 844 .
+- FIG. 9 is a block diagram illustrating a garbage collection list data structure, in accordance with some embodiments.
+- the garbage collection list 900 includes one or more entries 902 .
+- Each entry includes an epoch indicator 904 , a thread count 906 , and a list 908 of data items to be deleted.
+- the current epoch is indicated by a current epoch value 910 .
+- Each entry 902 corresponds to a particular epoch, as indicated by the epoch 904 , and lists data items 908 to be deleted and a count of threads 906 in that particular epoch that are still running and using any of the data items 908 listed for that particular epoch.
+- the data items identified by the list 908 for an epoch are deleted when the threads count 906 for the epoch reaches a predefined value.
+- the garbage collection list 900 may have any number of entries 902 , each corresponding to a particular epoch. Further details regarding epochs and garbage collection are described below, in relation to FIGS. 11A and 11B .
+- FIGS. 10A and 10B are block diagrams illustrating an attachments data structure, in accordance with some embodiments.
+- Attachments are per-document data that are not searched by queries but may still be relevant. Attachments may include metadata such as document ranking, the language and encoding of a document (e.g., English, French, Japanese), the price of a product (if the document is a description of a product), etc.
+- the attachments data structure 100 includes a LDocID to attachment pointer mapping 1002 .
+- the mapping 1002 maps a local document identifier to a pointer 1006 , stored in a FIFO array 1004 , that points to the attachment 1020 corresponding to the respective local document identifier.
+- the local document identifier of the document may map to a null pointer 1008 .
+- the attachment 1020 includes a size 1022 of the attachment data and the attachment data 1024 .
+- the mapping 1002 may be implemented as an initial LDocID value plus offset scheme, similar to those described above.
+- FIGS. 11A and 11B are flow diagrams of a process for garbage collecting data, in accordance with some embodiments.
+- a document in the tokenspace repository 106 may be invalidated whenever it has been made obsolete by a new version or it has been deleted from the document repository 102 .
+- Invalidation of the document marks the document for eventual deletion.
+- that deletion includes de-allocation of the memory space in which is stored the document, i.e. recovery (reclamation) of that storage space in memory.
+- a plurality of documents is stored in a repository ( 1102 ).
+- the repository is a tokenspace repository 106 and the documents are stored in the repository as a sequence of tokens.
+- Index records for unique tokens in the plurality of documents are stored ( 1104 ).
+- the index records may be stored in a tokenspace inverted index 110 .
+- a first epoch execution of a first set of queries is initiated in a plurality of threads ( 1106 ). These threads of execution are sometimes called query threads. While the queries are being executed, a number of documents in the repository may be updated and the older versions of these documents are added to a list of documents to be deleted. These documents are said to be “scheduled for deletion.” However, active queries may still be referring to these documents. Thus, they are not deleted right away. Rather, they are marked for deletion, and actually deleted when they are no longer referenced by active threads.
+- Entries identifying portions of the repository (identified by token positions) that contain these documents to be deleted are added to a first list (hereinafter “list A” for convenience) ( 1108 ).
+- the portions of the repository may be identified by the token positions of the tokens of the documents to be deleted.
+- entries identifying attributes and attachments corresponding to the documents may be added to list A as well.
+- list A corresponds to the data items 908 in an entry 902 of the garbage collection list 900 ( FIG. 9 ) for the corresponding epoch.
+- a first count (hereinafter “count A” for convenience) of threads that potentially reference the portions of the repository that are identified in list A is maintained ( 1110 ).
+- the thread in which the query is run grabs a lock on the garbage collection list entry 902 for the current epoch. After the lock is obtained by the query thread, the count 906 is updated and the current accessible range of the tokenspace repository is identified. Then the lock on the garbage collection list entry 902 is released. The query then is run on the tokenspace repository, using the identified accessible range of the tokenspace repository.
+- an epoch ending condition is met ( 1112 ).
+- an epoch ending condition may be the elapsing of a predefined amount of time since the beginning of the first epoch.
+- an epoch ending condition corresponds to the number of documents which have been invalidated and scheduled for deletion. For example, an epoch ending condition may occur whenever the number of documents scheduled for deletion equals or exceeds D, where D is an integer greater than zero.
+- a current epoch may end and a new one may be started at any time, regardless of the state of the system.
+- epoch ending conditions such as the ones described above, may be specified and utilized to regulate the ending and beginning of epochs.
+- list B corresponds to the data items 908 of a respective entry 902 of the garbage collection list 900 ( FIG. 9 ), similar to list A.
+- count B A second count (hereinafter “count B” for convenience) of threads that potentially reference the portions of the repository that are identified in list B is maintained ( 1126 ).
+- execution of at least one of the first set of queries is completed ( 1114 ).
+- Some of the first set of queries may have completed in the first epoch. More generally, a query of the first set of queries may complete execution in the first epoch (when it began execution) or in a subsequent epoch. Regardless of whether the queries of the first set are completed in the first epoch or in a subsequent epoch, count A continues to be maintained until it reaches a predefined value ( 1116 ). In some embodiments, as queries of the first set of queries complete execution, count A is decremented for each completed query, and count A is maintained until it reaches 0.
+- deleting portions of the repository means reassigning the data blocks 204 for one or more invalidated documents to a list or heap of data blocks that are available for future use.
+- a data block 204 is removed from a FIFO array 200 , the corresponding pointer 202 is given (i.e., overwritten with) a predefined “unused-pointer value,” such as zero (0) or minus one ( ⁇ 1).
+- list A may also identify portions of index records that correspond to portions of the repository that have been deleted in past epochs.
+- these portions of the index records i.e., data blocks containing index entries for invalidated documents
+- Entries identifying index records portions corresponding to the portions of the repository that were identified in list A are added to list B for deletion at a later time ( 1120 ). More generally, when an invalidated document is garbage collected after the completion of a first epoch, the corresponding index items are garbage collected after the completion of the following epoch.
+- the deleted data blocks are reassigned, and the pointers to the deleted data blocks are overwritten with the predefined unused-pointer value.
+- An epoch ending condition is met ( 1128 ).
+- the second epoch ends, and a third epoch begins.
+- count B continues to be maintained until it reaches a predefined value ( 1130 ).
+- count B is decremented for each query of the second set of queries that completes execution.
+- count B reaches the predefined value, the portions of the repository that are identified in list B are deleted, provided that thread counts for all previous epochs have also reached the predefined value.
+- list B may identify index records for portions of the repository that have already been deleted ( 1132 ).
+- an epoch i begins with a zero thread count and an empty list of documents to be deleted.
+- the thread count for epoch i is incremented for each query that begins execution during epoch i.
+- the thread count for epoch is decremented for each of these queries (queries that began execution during epoch i) that complete execution, regardless of whether the query completes execution in epoch i or in a subsequent epoch.
+- Documents scheduled for deletion during epoch i are added to the delete list for epoch i.
+- the storage for the documents identified in the delete list for epoch i are reclaimed when the thread count for epoch i reaches the predefined value, provided that the thread counts of all previous epochs (i.e., i ⁇ 1, i ⁇ 2, . . . , 2, 1) also have reached the predefined value.
+- FIG. 12 is a flow diagram of a process for updating a document in a tokenspace repository, in accordance with some embodiments.
+- a first version of a document is stored in the accessible range of a repository ( 1202 ).
+- the repository is a tokenspace repository 106 , where documents are stored as a sequence of tokens.
+- Index records associated with tokens of the first version of the document are inserted into the tokenspace inverted index ( 1204 ).
+- the index record 400 ( FIG. 4B ) for a token includes a number of entries 416 that identify all repository locations (identified by token positions) at which the token may be found. If the index record for a token already exists, a second index record for the token need not be created; rather, the additional location(s) may be added to the preexisting index record.
+- a second version of the document is received ( 1206 ).
+- the second version of the document is stored in the tokenspace repository and index records in the tokenspace inverted index 400 that correspond to tokens of the second version are updated to include entries for token positions corresponding to the second version ( 1208 ).
+- the write processor(s) processing the update grabs a synchronization lock (e.g., lock 526 , FIG. 5 ) on the tokenspace repository. While holding the lock, the write processor(s) updates the accessible range 520 ( FIG. 5 ) of the tokenspace repository, such that both the first and second versions of the document are accessible by threads running queries ( 1210 ). The lock is then released.
+- a synchronization lock e.g., lock 526 , FIG. 5
+- the second version of the document when the second version of the document is initially stored in the tokenspace repository, it is stored at the end of the tokenspace repository, outside the accessible range of the tokenspace repository.
+- the second version is made accessible to newly initiated queries (by changing the end position 524 of the accessible range 520 to point to the last token (in the tokenspace repository) of the second version of the document, while the first version is kept accessible for queries that may still need it.
+- the first version of the document is invalidated ( 1212 ).
+- the document is invalidated by storing a predefined value (e.g., 0) in the local to global document identifier mapping 820 , as shown in FIG. 8B .
+- the invalidation marks the first version of the document for deletion, but does not actually delete it.
+- the token positions corresponding to the first version may be added to the garbage collection list 900 ( FIG. 9 ) in preparation for deletion.
+- an invalidated document is added to the garbage collection list 900 when it is treadmilled to the front end of the tokenspace repository, further details of which are described below.
+- new queries e.g., queries whose execution begins after the first version of the document is invalidated
+- queries against the repository are executed without interruption in a plurality of threads ( 1214 ).
+- queries that refer to the first version of the document, which has been invalidated are executed without interruption.
+- FIG. 17 is a flow diagram of the process 1700 performed by a query thread to execute a search query, in accordance with some embodiments.
+- the query thread receives a search query to execute 1702 .
+- the query thread performs some preliminary tasks that must be protected by a global lock (e.g., 526 , FIG. 5 ) used to protect key data structures in the tokenspace repository 106 .
+- a global lock e.g., 526 , FIG. 5
+- the query thread acquires the lock 1704 , acquires the accessible range 1520 of the tokenspace repository 1706 , increases the count (e.g., in the garbage collection list 900 ) of active query threads for the appropriate epoch 1708 , and then releases the lock 1710 .
+- Operations 1706 and 1708 are performed only while the query thread is in possession of the lock to ensure the integrity of these operations.
+- one or more additional operations are performed by the query thread while in possession of the global lock. Possession of the global lock by one query thread does not prevent any other query thread from continuing to execute a query, but does force other query threads to wait before beginning the execution of a next query. Also, the write processor thread 104 cannot modify the accessible range of the tokenspace repository 106 while any query thread is in possession of the global lock for the tokenspace repository 106 .
+- the query thread executes the query and returns the query results 1712 .
+- the query results may be returned to another thread, process or processor within the document processing server before the query results are sent to a client device or other server that initiated the search.
+- the query thread once again acquires the global lock 1714 , decrements the count of active query threads for the appropriate epoch 1716 , and then releases the lock 1718 .
+- operations 1714 - 1718 may be merged with operations 1704 - 1710 for a next search query, so as to reduce (by a factor of two) the number of lock acquisition operations performed by the query threads.
+- the current epoch may be changed by the writer thread while a query thread is executing a query, in which case the decrement count operation 1716 will be performed on the count that was previously incremented for this query, while the increment count operation 1708 for the newly started query will be on a different count: that of a new current epoch.
+- FIG. 13A is a flow diagram of a process for treadmilling a document in a tokenspace repository, in accordance with some embodiments.
+- the treadmilling process 1300 is performed periodically so as to treadmill a predefined number of documents per unit of time.
+- the tokenspace repository may be treadmilled to aid in the garbage collection of memory space occupied by invalid documents.
+- invalid documents include stale documents that have been replaced by more current versions of those documents.
+- a set of documents is stored in a repository with a first end and a second end ( 1302 ).
+- the tokenspace repository is stored in a FIFO array 200 with a front end and a back end. Entries corresponding to tokens in the stored set of documents are inserted into an index, such as the tokenspace inverted index 400 ( FIG. 4A ) ( 1304 ). The entries identify repository locations (identified by token positions) where corresponding tokens are stored.
+- a copy of the document at the front end is appended to the repository at the back end ( 1306 ).
+- a copy of the document that is at the front end (or more particularly, the sequence of tokens that make up the document) is appended to the back end of the tokenspace repository.
+- this copy operation is done only if the document at the front end is valid. If the document at the front end is invalid, the documents at the front end are inspected, in sequential order (which, in some embodiments is also in the same order as their local document identifiers) until a first valid document is found, and that valid document is copied and appended to the back end. Entries identifying repository locations corresponding to the appended copy of the document are inserted into the index ( 1308 ).
+- the invalidated document is added to the garbage collection list 900 for eventual deletion.
+- the treadmilled document and any preceding invalid documents at the front end of the repository are added to the garbage collection list 900 for eventual deletion ( 1312 ).
+- that document and any immediately following invalid documents i.e., documents stored in a contiguous tokenspace range without any intervening valid documents
+- the treadmilled document and an expandable window of neighboring invalid documents, occupying a contiguous tokenspace range without any intervening valid documents, are added to the garbage collection list 900 for eventual deletion.
+- index entries identifying repository locations corresponding to the invalidated document may also be added to a garbage collection list ( 1314 ). See the above discussion (and FIG. 11B , operations 1118 and 1120 ) concerning garbage collection of index entries.
+- Storage at the front end of the tokenspace repository is recovered ( 1328 , FIG. 13B ) only after an epoch ending condition is detected.
+- the recovery may be performed when the corresponding thread count 906 and thread counts for all previous epochs reach the predefined value.
+- storage recovery is performed periodically on the tokenspace repository, recovering storage space from invalidated documents that have been treadmilled to the front end, added to the garbage collection list 900 , and for which the corresponding thread counts 906 have reached the predefined value.
+- the recovered storage includes the storage space of the document at the front end that was invalidated at block 1310 , as well as the storage space of any previously invalidated documents located prior to the treadmilled document at the front end of the repository.
+- the recovered storage corresponds to a contiguous set of pointers 202 in the pointer array 201 of the tokenspace repository.
+- the write thread acquires the global lock 1320 so that it can perform two or more protected operations. In particular, it updates the accessible range 520 ( FIG. 5 ) of the tokenspace repository so as to exclude the portion of the tokenspace repository corresponding to the garbage collection list for the epoch that just ended ( 1322 ). It also updates the current epoch 910 ( FIG. 9 ), 1324 , for example by incrementing an epoch count value. After performing these operations, and optionally other operations that require global lock protection, the global lock is released 1326 . The order of operations 1322 and 1324 may be reversed in other embodiments. While garbage collection operation 1328 is described here as occurring after the global lock is released, in other embodiments, the garbage collection operation 1328 is performed while write thread is still in possession of the global lock.
+- the “treadmilling” of documents may occur over two repositories rather than within one. That is, the tokenspace repository may comprise two repositories, hereinafter called repositories J and K for convenience.
+- repository J is the primary repository, which means that all the documents in the repository are stored at repository J. New documents are also added to repository J.
+- repository K is the primary repository, and the storage space in repository J is reclaimed.
+- repository K takes on the role of storage for valid documents and the location to which new documents are added.
+- valid documents in repository K are copied to repository J.
+- the storage space in repository K is reclaimed, and the repositories J and K switch roles.
+- the token position space is reset. That is, token positions are reassigned from position 0, rather than from the last used position. This has the benefit of delaying, and possibly preventing, depletion of the token position space.
+- a method of processing documents may include: storing a set of documents as a first sequence of documents in a first repository; invalidating a subset of the documents in the sequence; copying the valid (i.e., non-invalidated) subset of the first sequence of documents to a second repository as a second sequence of documents; and recovering storage space associated with the first repository.
+- the method may further include invalidating a subset of the second sequence of documents; copying the non-invalidated subset of the second sequence of documents to the first repository as a third sequence of documents; and recovering storage space associated with the second repository.
+- FIGS. 14A-14E are block diagrams illustrating the states of a tokenspace repository throughout the treadmilling of a document, in accordance with some embodiments.
+- FIG. 14A shows a tokenspace repository at some instant.
+- the repository has Doc 1 , Doc 2 , . . . , DocN stored within.
+- the repository also has an accessible range, which includes the locations of the repository that queries may refer to and access.
+- the tokenspace repository is a FIFO array.
+- the left end of the repository is the front end and the right end is the back end.
+- Doc 1 is located in the front end
+- DocN is located in the back end.
+- Doc 1 is treadmilled to the back end.
+- a copy of Doc 1 is appended to the back end, after DocN.
+- the copy, DocN+1 has the same content as Doc 1 but has a different local document identifier.
+- that local document identifier is the next local document identifier in the sequence of local document identifiers, after that of DocN.
+- Doc 1 is invalidated.
+- the accessible range of the repository includes both Doc 1 and DocN+1.
+- Doc 1 is still in the accessible range because some queries may still be referring to it.
+- the token positions of Doc 1 are added to the garbage collection list 900 for eventual deletion.
+- storage space for the invalid Doc 1 is recovered.
+- the accessible range is updated to no longer include Doc 1 .
+- the repository takes the form shown in FIG. 14E .
+- Doc 2 is at the front end and DocN+1, which has the contents of Doc 1 , is at the back end.
+- FIGS. 15A-15E are block diagrams illustrating the states of a tokenspace repository throughout the treadmilling of a document adjacent to an invalid document, in accordance with some embodiments.
+- the left end is the front end and the right end is the back end.
+- FIG. 15A shows the tokenspace repository at some instant.
+- Doc 1 is the document at the front end.
+- An invalid Doc 2 follows Doc 1 .
+- DocN is located in the back end of the repository.
+- Doc 1 is treadmilled to the back end.
+- a copy of Doc 1 is appended to the back end, after DocN.
+- the copy, DocN+1 has the same content as Doc 1 but has a different local document identifier.
+- that local document identifier is the next local document identifier in the sequence of local document identifiers, after that of DocN.
+- Doc 1 is invalidated, as shown in FIG. 15C .
+- the accessible range of the repository still includes the invalidated Doc 1 and the invalidated Doc 2 .
+- the token positions of Doc 1 are added to the garbage collection list 900 for eventual deletion.
+- the storage space for the invalidated Doc 1 and Doc 2 are recovered, as shown in FIG. 15D .
+- the accessible range of the repository is also updated. After the storage space recovery and the updating of the accessible range, the repository takes the form shown in FIG. 14E .
+- Doc 3 is at the front end and DocN+1, which has the contents of Doc 1 , is at the back end.
+- the tokenspace repository 106 may include a plurality of sectional repositories.
+- a tokenspace repository that stores webpages may have sectional repositories for the bodies of webpages, anchor texts, and URLs. Whenever a section of a document is updated but the other parts are unchanged, all of the sectional repositories are “updated”; the sectional repositories are synchronized. For example, if the body of a webpage has been updated but the anchor text and URL remains the same, then the sectional repository for webpage bodies is updated with the new content by appending the new content to the back end of the sectional repository and the old content is invalidated.
+- the anchor text sectional repository is “updated” by appended the unchanged anchor text to the back end and invalidating the older version of the same anchor text.
+- the same URL is appended to the back end and the older version of the same URL is invalidated.
+- the sectional repositories are also synchronized in their treadmilling: when a document is treadmilled, the information for the sections of the document is appended to the back end in their respective repositories and their older versions are invalidated.
+- FIG. 16 is a block diagram illustrating a document processing server in accordance with some embodiments.
+- the document processing server 1600 typically includes one or more processing units (CPU's) 1602 , one or more network or other communications interfaces 1604 , memory 1606 , and one or more communication buses 1608 for coupling these components.
+- the document processing server 1600 optionally may include a user interface comprising a display device and a keyboard/mouse (not shown).
+- the memory 1606 includes random access memory, such as DRAM, SRAM, DDR RAM or other random access solid state memory devices; and may include non-volatile memory, such as one or more magnetic disk storage devices, optical disk storage devices, flash memory devices, or other non-volatile solid state storage devices.
+- the communication buses 1608 may include circuitry (sometimes called a chipset) that interconnects and controls communications between system components.
+- Memory 1606 may optionally include one or more storage devices remotely located from the CPU(s) 1602 . In some embodiments, memory 1606 stores the following programs, modules and data structures, or a subset thereof:
+- the document records 1622 include document boundaries 700 and document identifier mappings 1626 .
+- the document identifier mappings 1626 include the global to local document identifier mapping 800 (or 840 ) and the local to global document identifier mapping 820 .
+- the write processors or thread 104 includes a lexicon generator 1634 , for generating the lexicon from a set of documents, a garbage collector 1636 for garbage collecting (recovering) storage space from deleted documents, an epoch manager 1638 for managing the starting and ending of epochs and maintaining counts of running processes and items to be deleted in each epoch, a new/updated document processing module 1640 for adding new or updated documents to the tokenspace repository 106 and updating the tokenspace inverted index 110 , and a treadmilling module 1642 for treadmilling data in the tokenspace repository 106 and in other data structures.
+- a lexicon generator 1634 for generating the lexicon from a set of documents
+- a garbage collector 1636 for garbage collecting (recovering) storage space from deleted documents
+- an epoch manager 1638 for managing the starting and ending of epochs and maintaining counts of running processes and items to be deleted in each epoch
+- a new/updated document processing module 1640 for adding new or updated documents to
+- the query processors or threads 108 include query execution module 1646 for executing queries in the threads.
+- Each of the above identified elements may be stored in one or more of the previously mentioned memory devices, and corresponds to a set of instructions for performing a function described above.
+- the above identified modules or programs i.e., sets of instructions
+- memory 1606 may store a subset of the modules and data structures identified above.
+- memory 1606 may store additional modules and data structures not described above.
+- FIG. 16 shows a “document processing server,” FIG. 16 is intended more as functional description of the various features which may be present in a set of servers than as a structural schematic of the embodiments described herein.
+- items shown separately could be combined and some items could be separated.
+- some items shown separately in FIG. 16 could be implemented on single servers and single items could be implemented by one or more servers.
+- the actual number of servers used to implement a document processing server and how features are allocated among them will vary from one implementation to another.
+Abstract
+Description
+-
+- an
+operating system 1610 that includes procedures for handling various basic system services and for performing hardware dependent tasks; - a
+network communication module 1612 that is used for connecting thedocument processing server 1600 to other computers via the one or more communication network interfaces 1604 (wired or wireless), and one or more communication networks, such as the Internet, other wide area networks, local area networks, metropolitan area networks, and so on; - a
+tokenspace repository 106; - a tokenspace inverted
+index 110; - attribute records 600;
+- a
+lexicon 300; -
+document records 1622; -
+attachment records 1000; -
+garbage collection list 900; - write processor(s) or thread(s) 104;
+- query processor(s) or thread(s) 108; and
+- a
+queue 1648 of new or updated documents awaiting processing, for holding new or updated versions of documents that are awaiting processing by the write processor(s) 104.
+- an
+Claims (8)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/352,025 US7617226B1 (en) | 2006-02-10 | 2006-02-10 | Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/352,025 US7617226B1 (en) | 2006-02-10 | 2006-02-10 | Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US7617226B1 true US7617226B1 (en) | 2009-11-10 |
+Family
+ID=41261619
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US11/352,025 Active 2026-11-19 US7617226B1 (en) | 2006-02-10 | 2006-02-10 | Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7617226B1 (en) |
+Cited By (8)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20130124193A1 (en) * | 2011-11-15 | 2013-05-16 | Business Objects Software Limited | System and Method Implementing a Text Analysis Service |
+US20140095456A1 (en) * | 2012-10-01 | 2014-04-03 | Open Text S.A. | System and method for document version curation with reduced storage requirements |
+US20140172804A1 (en) * | 2012-12-19 | 2014-06-19 | Martin Kaufmann | Timeline Index for Managing Temporal Data |
+US20140214882A1 (en) * | 2013-01-28 | 2014-07-31 | International Business Machines Corporation | Segmenting documents within a full text index |
+US20140222939A1 (en) * | 2008-09-30 | 2014-08-07 | Pivot Solutions, Inc. | System and Method for Processing Instant Messages |
+US9069825B1 (en) * | 2013-03-15 | 2015-06-30 | Google Inc. | Search dialogue user interface |
+CN105243150A (en) * | 2015-10-23 | 2016-01-13 | 中国舰船研究设计中心 | Byte position based reverse index method for network message data |
+WO2021041880A1 (en) * | 2019-08-29 | 2021-03-04 | Shelterzoom Corp. | Document, drive and process management for contract of things and document of things |
+Citations (19)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6266739B1 (en) * | 1998-02-12 | 2001-07-24 | International Business Machines Corporation | Method and apparatus for ultra high-speed formatting of a disk drive volume |
+US20020055942A1 (en) * | 2000-10-26 | 2002-05-09 | Reynolds Mark L. | Creating, verifying, managing, and using original digital files |
+US20020073110A1 (en) * | 2000-12-12 | 2002-06-13 | Edouard Duvillier | Version collection technique implemented on an intrinsic versioning information storage and retrieval system |
+US6449625B1 (en) * | 1999-04-20 | 2002-09-10 | Lucent Technologies Inc. | Use of a two-way stack approach to optimize flash memory management for embedded database systems |
+US6584476B1 (en) * | 2000-04-22 | 2003-06-24 | Oracle Corp. | System and method for enforcing referential constraints between versioned database tables |
+US6615225B1 (en) * | 2000-04-27 | 2003-09-02 | International Business Machines Corporation | System and method for relating files in a distributed data storage environment |
+US6658435B1 (en) * | 1999-08-24 | 2003-12-02 | International Business Machines Corporation | Disk image backup/restore with data preparation phase |
+US20040122873A1 (en) * | 2002-12-20 | 2004-06-24 | International Business Machines Corporation | Free space management |
+US6766334B1 (en) * | 2000-11-21 | 2004-07-20 | Microsoft Corporation | Project-based configuration management method and apparatus |
+US6795834B2 (en) * | 2000-06-26 | 2004-09-21 | Fujitsu Limited | Apparatus, method, and storage medium for file management |
+US6970893B2 (en) * | 2000-10-27 | 2005-11-29 | Bea Systems, Inc. | System and method for regeneration of methods and garbage collection of unused methods |
+US20050273476A1 (en) * | 2004-05-18 | 2005-12-08 | Oracle International Corporation | Automated disk-oriented backups |
+US20060085456A1 (en) * | 2004-05-07 | 2006-04-20 | Paul Pickering | Temporal relational databases |
+US20060136511A1 (en) * | 2004-12-21 | 2006-06-22 | Nextpage, Inc. | Storage-and transport-independent collaborative document-management system |
+US20060200502A1 (en) * | 2003-01-31 | 2006-09-07 | Matsushita Electric Industrial Co., Ltd. | Differential data creating device and method, updated data recovery device and method, and program |
+US20070043789A1 (en) * | 2005-08-17 | 2007-02-22 | International Business Machines Corporation | Maintaining active-only copy storage pools |
+US7200624B2 (en) * | 2004-03-29 | 2007-04-03 | Microsoft Corporation | Systems and methods for versioning based triggers |
+US7293150B2 (en) * | 2002-06-28 | 2007-11-06 | Microsoft Corporation | Method and system for creating and restoring an image file |
+US7363331B2 (en) * | 1999-08-31 | 2008-04-22 | Fujitsu Limited | File device and file access method |
+-
+2006
+- 2006-02-10 US US11/352,025 patent/US7617226B1/en active Active
+Patent Citations (19)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6266739B1 (en) * | 1998-02-12 | 2001-07-24 | International Business Machines Corporation | Method and apparatus for ultra high-speed formatting of a disk drive volume |
+US6449625B1 (en) * | 1999-04-20 | 2002-09-10 | Lucent Technologies Inc. | Use of a two-way stack approach to optimize flash memory management for embedded database systems |
+US6658435B1 (en) * | 1999-08-24 | 2003-12-02 | International Business Machines Corporation | Disk image backup/restore with data preparation phase |
+US7363331B2 (en) * | 1999-08-31 | 2008-04-22 | Fujitsu Limited | File device and file access method |
+US6584476B1 (en) * | 2000-04-22 | 2003-06-24 | Oracle Corp. | System and method for enforcing referential constraints between versioned database tables |
+US6615225B1 (en) * | 2000-04-27 | 2003-09-02 | International Business Machines Corporation | System and method for relating files in a distributed data storage environment |
+US6795834B2 (en) * | 2000-06-26 | 2004-09-21 | Fujitsu Limited | Apparatus, method, and storage medium for file management |
+US20020055942A1 (en) * | 2000-10-26 | 2002-05-09 | Reynolds Mark L. | Creating, verifying, managing, and using original digital files |
+US6970893B2 (en) * | 2000-10-27 | 2005-11-29 | Bea Systems, Inc. | System and method for regeneration of methods and garbage collection of unused methods |
+US6766334B1 (en) * | 2000-11-21 | 2004-07-20 | Microsoft Corporation | Project-based configuration management method and apparatus |
+US20020073110A1 (en) * | 2000-12-12 | 2002-06-13 | Edouard Duvillier | Version collection technique implemented on an intrinsic versioning information storage and retrieval system |
+US7293150B2 (en) * | 2002-06-28 | 2007-11-06 | Microsoft Corporation | Method and system for creating and restoring an image file |
+US20040122873A1 (en) * | 2002-12-20 | 2004-06-24 | International Business Machines Corporation | Free space management |
+US20060200502A1 (en) * | 2003-01-31 | 2006-09-07 | Matsushita Electric Industrial Co., Ltd. | Differential data creating device and method, updated data recovery device and method, and program |
+US7200624B2 (en) * | 2004-03-29 | 2007-04-03 | Microsoft Corporation | Systems and methods for versioning based triggers |
+US20060085456A1 (en) * | 2004-05-07 | 2006-04-20 | Paul Pickering | Temporal relational databases |
+US20050273476A1 (en) * | 2004-05-18 | 2005-12-08 | Oracle International Corporation | Automated disk-oriented backups |
+US20060136511A1 (en) * | 2004-12-21 | 2006-06-22 | Nextpage, Inc. | Storage-and transport-independent collaborative document-management system |
+US20070043789A1 (en) * | 2005-08-17 | 2007-02-22 | International Business Machines Corporation | Maintaining active-only copy storage pools |
+Cited By (17)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20140222939A1 (en) * | 2008-09-30 | 2014-08-07 | Pivot Solutions, Inc. | System and Method for Processing Instant Messages |
+US10560403B2 (en) | 2008-09-30 | 2020-02-11 | Pivot Solutions, Inc. | System and method for processing instant messages |
+US9807039B2 (en) * | 2008-09-30 | 2017-10-31 | Chicago Mercantile Exchange Inc. | System and method for processing instant messages |
+US20130124193A1 (en) * | 2011-11-15 | 2013-05-16 | Business Objects Software Limited | System and Method Implementing a Text Analysis Service |
+US20140095456A1 (en) * | 2012-10-01 | 2014-04-03 | Open Text S.A. | System and method for document version curation with reduced storage requirements |
+US10402369B2 (en) * | 2012-10-01 | 2019-09-03 | Open Text Sa Ulc | System and method for document version curation with reduced storage requirements |
+US9355131B2 (en) * | 2012-10-01 | 2016-05-31 | Open Text S.A. | System and method for document version curation with reduced storage requirements |
+US20140172804A1 (en) * | 2012-12-19 | 2014-06-19 | Martin Kaufmann | Timeline Index for Managing Temporal Data |
+US9747313B2 (en) * | 2012-12-19 | 2017-08-29 | Sap Se | Timeline index for managing temporal data |
+US20140214882A1 (en) * | 2013-01-28 | 2014-07-31 | International Business Machines Corporation | Segmenting documents within a full text index |
+US9087055B2 (en) * | 2013-01-28 | 2015-07-21 | International Business Machines Corporation | Segmenting documents within a full text index |
+US9135254B2 (en) | 2013-01-28 | 2015-09-15 | International Business Machines Corporation | Segmenting documents within a full text index |
+US9767200B1 (en) | 2013-03-15 | 2017-09-19 | Google Inc. | Search dialogue user interface |
+US9483536B1 (en) | 2013-03-15 | 2016-11-01 | Google Inc. | Search dialogue user interface |
+US9069825B1 (en) * | 2013-03-15 | 2015-06-30 | Google Inc. | Search dialogue user interface |
+CN105243150A (en) * | 2015-10-23 | 2016-01-13 | 中国舰船研究设计中心 | Byte position based reverse index method for network message data |
+WO2021041880A1 (en) * | 2019-08-29 | 2021-03-04 | Shelterzoom Corp. | Document, drive and process management for contract of things and document of things |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7769792B1 (en) | Low overhead thread synchronization system and method for garbage collecting stale data in a document repository without interrupting concurrent querying | |
+US7634517B1 (en) | System and method for dynamically updating a document repository without interrupting concurrent querying | |
+EP3170106B1 (en) | High throughput data modifications using blind update operations | |
+CN105630409B (en) | Dual data storage using in-memory array and on-disk page structure | |
+US7617226B1 (en) | Document treadmilling system and method for updating documents in a document repository and recovering storage space from invalidated documents | |
+US5261088A (en) | Managing locality in space reuse in a shadow written B-tree via interior node free space list | |
+US7987217B2 (en) | Transaction-aware caching for document metadata | |
+US7421541B2 (en) | Version management of cached permissions metadata | |
+US7376674B2 (en) | Storage of multiple pre-modification short duration copies of database information in short term memory | |
+US7203709B2 (en) | Transaction-aware caching for access control metadata | |
+EP2304609B1 (en) | Paging hierarchical data | |
+US9471622B2 (en) | SCM-conscious transactional key-value store | |
+US11347711B2 (en) | Sparse infrastructure for tracking ad-hoc operation timestamps | |
+CN109690522B (en) | Data updating method and device based on B+ tree index and storage device | |
+US9558248B2 (en) | Unified searchable storage for resource-constrained and other devices | |
+EP2420945A1 (en) | Foldering by stable query | |
+CN103177026A (en) | Data management method and data management system | |
+CN111444179B (en) | Data processing method, device, storage medium and server | |
+JP2007156844A (en) | Data registration/retrieval system and data registration/retrieval method | |
+CN112631741A (en) | Transaction processing method, device and storage medium |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:BURROWS, MICHAEL;DEAN, JEFFREY A.;REEL/FRAME:017318/0584Effective date: 20060209 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044101/0610Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 12 |

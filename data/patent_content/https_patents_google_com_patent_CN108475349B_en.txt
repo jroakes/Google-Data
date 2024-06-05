@@ -1,0 +1,428 @@
+CN108475349B - System and method for robust large-scale machine learning - Google Patents
+System and method for robust large-scale machine learning Download PDFInfo
+- Publication number
+- CN108475349B CN108475349B CN201780005404.1A CN201780005404A CN108475349B CN 108475349 B CN108475349 B CN 108475349B CN 201780005404 A CN201780005404 A CN 201780005404A CN 108475349 B CN108475349 B CN 108475349B
+- Authority
+- CN
+- China
+- Prior art keywords
+- worker
+- blocks
+- features
+- variables
+- sufficient statistics
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N20/00—Machine learning
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0628—Interfaces specially adapted for storage systems making use of a particular technique
+- G06F3/0638—Organizing or formatting or addressing of data
+- G06F3/0644—Management of space entities, e.g. partitions, extents, pools
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0628—Interfaces specially adapted for storage systems making use of a particular technique
+- G06F3/0655—Vertical data movement, i.e. input-output transfer; data movement between one or more hosts and one or more storage devices
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F3/00—Input arrangements for transferring data to be processed into a form capable of being handled by the computer; Output arrangements for transferring data from processing unit to output unit, e.g. interface arrangements
+- G06F3/06—Digital input from, or digital output to, record carriers, e.g. RAID, emulated record carriers or networked record carriers
+- G06F3/0601—Interfaces specially adapted for storage systems
+- G06F3/0668—Interfaces specially adapted for storage systems adopting a particular infrastructure
+- G06F3/067—Distributed or networked storage systems, e.g. storage area networks [SAN], network attached storage [NAS]
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/52—Program synchronisation; Mutual exclusion, e.g. by means of semaphores
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N7/00—Computing arrangements based on specific mathematical models
+Abstract
+The present disclosure provides a new Scalable Coordinate Descent (SCD) algorithm and associated system for a generalized linear model whose convergence behavior is always the same regardless of how much the SCD is laterally extended and regardless of the computing environment. This makes the SCD highly robust and enables it to scale to large scale datasets on low cost commercial servers. According to one aspect, by using natural partitioning of parameters into blocks, updates can be performed in parallel, one block at a time, without compromising convergence. Experimental results on the actual advertisement data set were used to demonstrate the cost-effectiveness and scalability of SCD.
+Description
+Technical Field
+The present disclosure relates generally to novel, highly scalable, and robust machine learning systems and techniques, and more particularly to systems and methods for robust large-scale machine learning in a distributed computing environment.
+Background
+Although distributed Machine Learning (ML) algorithms have been extensively studied, scaling to large numbers of machines can still be challenging. The fastest converging single machine algorithms update model parameters at a very high rate that makes them difficult to distribute without compromise. As one example, a single machine Stochastic Gradient Descent (SGD) technique updates the model parameters after processing each training sample. As another example, a Coordinate Descent (CD) technique updates model parameters after processing a single feature.
+The general approach to distributing SGDs or CDs breaks the elementary stream of a single machine algorithm by letting the update occur with some delay or by batch processing. However, this changes the convergence behavior of the algorithm, making it sensitive to the number of machines and the computing environment. As a result, the scaling may become non-linear and the benefits due to the added machine may be less early.
+Because of these scaling issues, some authors have argued that it would be better to scale out the ML algorithm using only a few "fat" servers with many memories, network cards, and GPUs. While this is an attractive approach to some problems, it has significant scaling limitations in terms of I/O bandwidth. It is also generally more expensive than the horizontal extension using a low cost commercial server (comfort server). GPUs do not always have a cost-effective solution, particularly for sparse data sets.
+Disclosure of Invention
+Various aspects and advantages of embodiments of the disclosure will be set forth in part in the description which follows, or may be learned by practice of the embodiments.
+One exemplary aspect of the present disclosure relates to a computer-implemented method. The method includes obtaining, by one or more computing machines, a training data set for machine learning a plurality of model parameters. The training data set includes a plurality of examples. Each sample includes entries for a plurality of features. The plurality of features respectively correspond to the plurality of model parameters. The method also includes partitioning, by the one or more computing machines, the plurality of features into a plurality of blocks. At least one of the plurality of blocks includes at least two features.
+Another exemplary aspect of the present disclosure relates to a distributed computing system that performs large-scale machine learning. The system includes a host computer including at least one processing device. The system includes a plurality of worker computing machines under the control of the main computer device. Each worker computing machine includes at least one processing device. The system is configured to partition a plurality of features of a training data set into a plurality of blocks. The training data set includes a plurality of examples. Each sample includes entries for a plurality of features. At least one of the plurality of blocks includes at least two features. The system is further configured to perform a plurality of iterations of a machine learning technique to learn a plurality of parameters of a model from the plurality of blocks. The plurality of parameters respectively correspond to the plurality of features. The system is configured to process only one of the plurality of blocks per iteration.
+Another exemplary aspect of the present disclosure relates to a structured numerical representation that represents at least a plurality of parameters of a linear model. The structured numerical representation is generated by a process. The process includes obtaining, by a distributed computing system, a training data set. The training data set includes a plurality of examples. Each sample includes entries for a plurality of features. The plurality of features respectively correspond to a plurality of parameters of the linear model. The process also includes partitioning, by the distributed computing system, the plurality of features into a plurality of blocks. At least one of the plurality of blocks includes at least two features. The process also includes performing, by the distributed computing system, a plurality of iterations of a machine learning technique to learn values of a plurality of parameters of the linear model from the plurality of blocks. Performing a plurality of iterations includes processing only one of the plurality of blocks per iteration through the distributed computing system.
+Other aspects of the present disclosure relate to systems, methods, devices, and tangible, non-transitory computer-readable media for implementing one or more aspects described herein.
+These and other features, aspects, and advantages of various embodiments will become better understood with reference to the following description and appended claims. The accompanying drawings, which are incorporated in and constitute a part of this specification, illustrate embodiments of the disclosure and together with the description, serve to explain the relevant principles.
+Drawings
+FIG. 1 depicts a graphical representation of model parameters for a labeled training data set in accordance with an exemplary embodiment of the present disclosure.
+Fig. 2 depicts a graphical representation of an exemplary sparse data set, according to an exemplary embodiment of the present disclosure.
+FIG. 3 depicts a graphical representation of a feature partitioned into blocks according to an example embodiment of the present disclosure.
+FIG. 4 depicts an exemplary distributed computing system according to an exemplary embodiment of the present disclosure.
+Fig. 5 depicts a graphical representation of sharded (sharded) data in both the feature and sample dimensions, according to an example embodiment of the present disclosure.
+Fig. 6 depicts a graphical representation of a sample tile provided to a worker machine (worker machine) according to an example embodiment of the present disclosure.
+Fig. 7 depicts a flowchart of one iteration of a scalable coordinate descent algorithm according to an exemplary embodiment of the present disclosure.
+FIG. 8 depicts a graphical diagram of the aggregation of sufficient statistics by an exemplary distributed computing system according to an exemplary embodiment of the present disclosure.
+Fig. 9 depicts a graph showing exemplary experimental results of lateral expansion behavior of a scalable coordinate descent algorithm according to an exemplary embodiment of the present disclosure.
+Fig. 10 depicts a graph illustrating exemplary experimental results of acceleration behavior of a scalable coordinate descent algorithm according to an exemplary embodiment of the present disclosure.
+Fig. 11 depicts a chart showing example experimental results of learning time/cost tradeoffs for models with different numbers of workers according to an example embodiment of the present disclosure.
+Detailed Description
+Summary of the disclosure
+In general, the present disclosure provides systems and methods for robust large-scale machine learning. In particular, the present disclosure provides a new Scalable Coordinate Descent (SCD) algorithm for a generalized linear model that overcomes the scaling problems outlined in the background section above. The SCD algorithm described herein is highly robust, having the same converging behavior regardless of how much it is laterally extended (scale out) and regardless of the computing environment. This allows SCDs to scale to thousands of cores and makes them well-suited for running in distributed computing environments (such as, for example, cloud environments with low-cost commodity servers).
+In particular, by using natural partitioning of parameters into blocks, updates can be performed in parallel, one block at a time, without compromising convergence. In fact, SCD has the same convergence behavior as the popular single machine coordinate descent algorithm for many real-world problems. Thus, the present disclosure provides a new Scalable Coordinate Descent (SCD) algorithm whose convergence behavior is always the same, regardless of how much the SCD is laterally expanded and regardless of the computing environment.
+In addition to the SCD algorithm, the present disclosure also provides a distributed computing system that addresses the particular challenges of scaling SCDs in a cloud computing environment. For example, slow machine (straggler) processing is a significant challenge to achieving linear scaling with SCD, and specific exemplary techniques for slow machine processing are provided herein. As such, the present disclosure also provides a distributed system for SCD that is capable of providing approximately linear scaling using thousands of cores.
+Finally, to demonstrate the cost-effectiveness and scalability of SCD, the present disclosure also provides an overview of experimental results obtained by using the actual advertisement dataset. In particular, experimental results are provided from a cloud computing system using low-cost preemptive virtual machines to show that SCDs can solve a large-scale ML problem with one trillion training examples.
+Exemplary machine learning Environment
+In some implementations of the present disclosure, the systems and methods described herein may be applied to generalized linear models with large sparse data sets. Linear models are commonly used in the industry for large-scale prediction tasks due to their high prediction quality and interpretability. For example, fig. 1 depicts a graphical representation of model parameters θ for a training data set X having a label Y according to an exemplary embodiment of the present disclosure.
+In particular, suppose
+Using a link function (link function), the linear model can be Generalized (GLM) to predictive tasks such as logistic regression (binary classification), poisson regression (counting data), etc. It is noted that even though the linear model assumes a linear correlation in x, in some implementations of the disclosure, non-linearity may be introduced by preprocessing x (e.g., using polynomial expansion or logarithmic transformation). The pre-processing allows the linear model to be very expressive and highly non-linear in the original space. The remainder of this disclosure assumes that appropriate pre-processing has been completed if needed, and x is the feature vector after transformation.
+As an illustrative example of an optimization task, the ML algorithm is able to learn the values of the model parameters θ given a set S of labeled training examples (x, y). In the case of a matrix symbol,
+where l is a loss function that depends on the optimization task. In an illustrative example, a square penalty may be used
+In accordance with another aspect of the present disclosure, the systems and methods described herein may be applied to data sets that may have trillions of training examples, that is,
+In general, a training data set with a large number of features will also have a large amount of sparsity. There may be hundreds of millions of features, but only a small number (e.g., hundreds) of non-zero features per sample. For example, fig. 2 depicts a graphical representation of an exemplary sparse data set in accordance with an exemplary embodiment of the present disclosure. In fig. 2, non-zero features are indicated by shaded cells, while zero-valued features are shown as unshaded.
+The reason for high sparsity is usually due to the classification variables of one-hot (one-hot) coding. For example, a portion of the feature vector x may include country variables represented by binary vectors, with as many entries as countries. But each binary vector will include only one non-zero entry, corresponding to the selected country. For country like variables there may be only a few hundred entries, while for video ID or user ID like variables there may be hundreds of millions of entries, resulting in very high sparsity. However, the methods provided herein are not limited to categorical variables, but rather support any kind of real-valued feature vector
+For example, assume Nz(x) Is the number of non-zeros in the feature vector X or design matrix X. ML algorithms may exploit sparsity and typically have Nz(x) Rather than a runtime of level (order) of | S | × p.
+Exemplary computing Environment
+According to another aspect of the present disclosure, the systems and methods described herein may be implemented in the context of a cloud computing environment. For many applications (especially for batch applications that need to scale with their data size) cloud computing has become a cost-effective solution.
+Thus, while the systems and methods described herein may be applied to any large-scale distributed computing environment, the exemplary embodiments discussed in this disclosure focus on cloud computing environments with the following characteristics: a shared machine; a distributed file system; preemptive VM; and machine failure, as described below.
+Sharing a machine: to increase utilization, each physical machine may be shared by multiple Virtual Machines (VMs).
+Distributed file system: fault tolerant Distributed File System (DFS), such as Google File System (Google File System)TM) May be used to store data. In addition to training data, DFS may be used to preserve any application state required for fault tolerance.
+Preemptive VM: the cloud scheduler can freely preempt the VM with low priority and support the VM with higher priority. When preempted, all state of the VM is lost. However, a notification is sent to the VM before it is preempted. This includes a grace period long enough for an application to save its state to DFS for fault tolerance, if needed.
+Machine failure: the physical machine may fail without any notification. It is assumed that failures are rare, but do occur. Therefore, long-running (long-running) jobs need to have their state logged as a checkpoint to the DFS for fault tolerance.
+In addition to the preemptive VM, the features outlined above are quite standard characteristics of most modern cloud computing environments. Cloud Platform (Cloud Platform) with preemptive VM in GoogleTM(GCP)) and as a Web service from Amazon Web Services (Amazon Web Services)TM(AWS)) is available as a "spot instance". Preemptive VMs are an attractive way to reduce the cost for running a batch job for a long period of time. For example, a preemptive VM is currently 70% cheaper than a standard VM on GCP.
+In terms of cost, cloud computing systems having the above characteristics are particularly attractive for running distributed ML jobs. However, scaling distributed ML algorithms on such clouds becomes more challenging. This is because there can be large variations in machine performance due to contention for physical resources such as CPUs and networking or contention for software resources such as access to DFS. Preemption also creates a troublesome situation. All of these things negatively impact convergence behavior.
+The disclosed systems and methods are discussed with reference to implementation in a cloud computing environment by way of example and not by way of limitation. The systems and methods of the present disclosure are not limited to implementation in a cloud computing environment, but are generally applicable to distributed machine learning, whether it occurs in the cloud or in another set of computers.
+Exemplary goals for distributed learning
+Some of the main objectives of the present disclosure, in terms of learning algorithms and their distributed system design, are as follows:
+1. robust distribution: the convergence behavior of the algorithm should always be the same regardless of how much it is laterally extended and regardless of the computing environment.
+2. Linear lateral expansion: if the number of training examples | S | and the number of computational resources increase by a factor of M, the time to solve the learning problem should remain constant. This is also referred to as "weak scaling".
+3. Linear acceleration: if the number of computational resources grows by a factor of M, the same learning problem should be solved M times faster at real time (wall time). This is also referred to as "strong scaling".
+The learning algorithm and distributed system of the present disclosure meet all three goals for a wide range of problem sizes and scaling factors.
+Overview and analysis of coordinate descent algorithms
+In this section, an overview is provided of the popular Coordinate Descent (CD) algorithm, which is inherently limited to a single machine. The CD algorithm considers a single model parameter or coordinate θ at a timejLet us assume other model parameters θ \ θjThe value of (c) is known and fixed. Under this assumption, for θjHas the following closed-form solution:
+for linear regression, the sufficient statistic TjAnd T'jThe following were used:
+to simplify the discussion, linear regression is used in all algorithmic descriptions, but other loss functions such as logistic regression using second-order taylor expansions can be similarly processed. For sparse data, the data may be passed only at sample x (where x isjNot equal to 0) to accelerate the pair TjAnd T'jAnd (4) calculating.
+From this analysis, algorithm 1 shown below is performed. As shown, CD is at one model parameter θ at a timejAnd (6) performing upper iteration. At each iteration, the sufficient statistic T is summed (aggregate)jAnd T'j(lines 8-11), and calculates a locally optimal solution
+pre-computed predictions for each sample
+CD is known as a fast convergence algorithm for single machine mounted problems. Variations to algorithm 1 include cyclic coordinate descent and random coordinate descent.
+Recall that CDs are processed one parameter at a time. CD iteration may be defined as an update of one parameter and round (epoch) as a pass on all parameters. The calculated amount of each iteration is averaged to
+Just in time, total sufficient statistic TjAnd T'jThereafter, a distributed version of algorithm 1 in scratch would require a system-wide synchronization barrier (lines 8-11). Generally, distributed work only receives an effect if the overhead is small compared to the amount of parallel work in terms of communication and barriers. However, high sparsity (N) at large number p of parameters and each feature vector xz(x) < p), there is relatively little work to be done in iterations of CD. Thus, the distributed version of algorithm 1, straight white, will neither expand laterally nor accelerate.
+Overview of scalable coordinate descent algorithm
+SCD increases the workload per iteration by carefully partitioning parameters into blocks and by iterating blocks of parameters one at a time. Scaling is achieved by computing sufficient statistics across the machines in parallel on the samples. Robustness is achieved by keeping the partitions fixed and independent of the number of machines. Fast convergence is achieved by smart partitioning of the parameters.
+One exemplary implementation of the SCD algorithm assuming partitioning has been given will be discussed herein and is shown below as algorithm 2. Later, this disclosure will discuss how to select a good partition.
+Suppose thatparameter index 1, …, p for the feature.
+For example, FIG. 3 depicts a partition into example blocks B1, B in accordance with an example embodiment of the present disclosure2And B3A graphical representation of the feature of (a). As shown in fig. 3, each of the blocks B may include one or more features. For example, block B1 contains a single feature; block B2Comprises three characteristics; and block B3Four features are included. Thus, according to one aspect of the present disclosure, one or more of the plurality of blocks may contain two or more features. Having multiple features per block helps overcome the scaling problems outlined above in the background section. However, the systems and methods of the present disclosure do not require that the block have more than one feature. For example, in at least one implementation, features/parameters may be partitioned into partitions, one block per feature.
+According to another aspect of the present disclosure, SCD iterates over block B of parameters once, as compared to CD iterating over one model parameter at a time (see algorithm 2, line 7). In each iteration, the partial sum of the sufficient statistics T and T' is computed in parallel (lines 8-13). These are aggregated across machines (see Algorithm 2, line 14), calculating the new value for each parameter in Balgorithm 2, lines 15-17).
+The independent assumption of the CD update step (equation 3) is violated because sufficient statistics for several features have been computed in parallel. To ensure convergence, a commonly used line-search (line-search) method is used to find the step size α ∈ [0, 1] and update each parameter as follows:
+obviously, the smaller the step size α, the slower the convergence compared to CD. In the further discussion contained below, it is shown that SCD can generally take an optimal step by using smart partitions, in which case α ═ 1. After the new values have been calculated, the predictions pre-calculated for each sample are updatedalgorithm 2, lines 18-22). Finally, each model parameter in B is updated with its new value (see rows 2, 23-25 of the algorithm).
+In algorithm 2, it is important to note that parallel execution is done on the samples. Such parallel execution on the sample may be achieved, for example, by slicing the sample into multiple slices (shards). This means that each machine is responsible for all parameters θ in the selected block BBPartial sufficient statistics T and T' are computed, but only for a subset of the samples.
+Thus, the more machines, the faster the sufficient statistics are computed. The SCD scales with more machines as long as the workload for the block is large enough. In addition, the SCD is robust because partitions are fixed and the number of nonrandom machines changes.
+Exemplary optimal update with pure blocks
+Robustness and scalability have been discussed so far. This section focuses on the convergence speed. One key idea of the present disclosure is to partition the model parameters into independent parameters, which may be referred to as pure blocks. The following discussion demonstrates that parallel updates within pure blocks are equivalent to sequentially processing updates, and thus, the full update step α may be taken as 1.
+Definition 1: (PURE Block). The eigenvector x of each sample (x, y) e S if and only ifBBlock B is pure with at most one non-zero entry:
+And (3) proving that: the known closed form solution of the regularized least squares problem is θ ═ X (X)tX+λI)-1Xy, suppose
+One key point of lemma 1 (upshot) is that within a pure block, processing parameter updates in parallel is equivalent to processing the updates sequentially. In other words, SCD on pure partitions is equivalent to CD, while also allowing scaling.
+It is noted that purity and robustness are two different concepts. The SCD is robust whether pure or impure partitions are selected. Pure partitioning is preferred because an optimal step size can be used.
+For example, block B shown in FIG. 31、B2And B3Are pure blocks. In particular, at block B1、B2And B3Each respective sample's feature sub-vector in one of (a) contains at most one non-zero entry.
+Exemplary techniques to generate partitions
+This section describes exemplary techniques for constructing partitions for the training set S ═ X, y. In some implementations, good partitions have two characteristics: (1) pure blocks for convergence speed; and (2) a large amount of work per block for system speed.
+At first sight, it seems challenging to achieve both properties simultaneously. However, most real-world datasets have natural partitions with good characteristics. As described above, the input feature vector is typically generated from several variables.
+According to one aspect of the disclosure, features may be partitioned by variables. More particularly, for each variable v, a block corresponding to the feature generated from v may be constructed. The characteristics of such partitions are: (1) for many variable types, the resulting block is pure. This includes categorical variables, cross products of categorical variables, bucket differentiated numerical variables, secret numerical variables, and the like. (2) For these variables, each generated block has equal computational complexity, where Nz(XB)＝|S|。
+In short, a native partition that passes through a base variable (pruning variable) typically has all of the desired properties. Many real-world datasets are composed of these variable types.
+Some data sets contain variable types that are less than optimally specific. One example is a set-valued variable, such as the genre of a movie, where several genres may be assigned to a movie. In this case, an impure block will be produced by splitting of the variable.
+According to another aspect of the present disclosure, to accommodate the above-described scenario in which splitting by a variable would result in one or more impure blocks, the characteristics of such variable v may be split into Nz(Xv) /| S | blocks. Splitting the features in this way means that on average there will be one valid feature per block. However, training examples with more than one valid feature may also exist. This means that a block of a set of variables may be impure and a step size a < 1 may be used.
+Exemplary analysis of the SCD Algorithm
+In some implementations, the SCD iterates one block B of processing model parameters at a time. The computational complexity of the iteration is
+Although not shown in algorithm 2, a small number of synchronization barriers are required in each SCD iteration. This will be further explained below when describing an exemplary system for implementing SCD. As a result, the number of barriers per SCD round is
+SCD compares the number of barriers to CD
+The SCD algorithm meets the three goals described in the exemplary goals section of distributed learning above. First, SCD is robust in the sense that it performs exactly the same update calculation regardless of how many machines are used. In addition, the result of each SCD update step is deterministic and not affected by the computing environment. Second, the increase in work per iteration allows for linear scaling of the SCD theory. In fact, various overhead and slow machines become limiting factors, as will be described further below.
+Exemplary distributed SCD systems and methods
+In this section, a distributed system is provided that addresses the particular challenges of scaling SCDs in a cloud computing environment. In particular, fig. 4 depicts an exemplary distributed computing system 400 according to an exemplary embodiment of the present disclosure. The architecture of the exemplary system 400 includes a single host computer 402 (hereinafter "host") and a plurality of worker computing machines (e.g., worker computing machines 404, 406, and 408 (hereinafter "workers")). Although only three workers 404 and 408 are illustrated, the system 400 may include any number of workers, including, for example, hundreds of workers having thousands of cores.
+Each of the host computer 402 and the worker computing machines 404 and 408 may include one or more processing devices and non-transitory computer-readable storage media. The processing device may be a processor, a microprocessor, or a component thereof (e.g., one or more cores of a processor). In some implementations, each of the main computer device 402 and the worker computing machines 404 and 408 may have multiple processing devices. For example, a single worker computing machine may utilize or include multiple cores of one or more processors.
+The non-transitory computer-readable storage medium may include any form of computer storage, including RAM (e.g., DRAM), ROM (e.g., EEPROM), optical storage, magnetic storage, flash memory storage, solid state storage, hard disk drives, and the like. The storage medium may store one or more sets of instructions that, when executed by a corresponding computing machine, cause the corresponding computing machine to perform operations consistent with the present disclosure. The storage medium may also store a cache of data (e.g., previously observed or calculated data), as will be described further below.
+The host computer 402 and the worker computing machines 404 and 408, respectively, may communicate with each other over a network. The network may include a local area network, a wide area network, or some combination thereof. The network may include any number of wired or wireless connections. Communication across the network may be conducted using any number of protocols.
+In some implementations, two or more of the host computer 402 and the worker computing machines 404 and 408 can be implemented using a single physical device. For example, two or more of the host computer machine 402 and the worker computing machines 404 and 408 may be virtual machines that share or are implemented by a single physical machine (e.g., a single server computing device).
+In one exemplary implementation, each of the host computer 402 and the worker computing machines 404 and 408 is a component of a computing device (e.g., a server computing device) included in the cloud computing environment/system. In particular, computing system 400 may be implemented using a Cloud computing system conforming to the characteristics described in the exemplary computing environment section above, such as, for example, Google's Cloud Platform (Cloud Platform)TM(GCP)) and Amazon Web Services (Amazon Web Services)TM(AWS))。
+According to one aspect of the disclosure, the host 402 may act as a coordinator (or coordinator) and may be responsible for distributing work, while the worker 404 and 408 may execute a computationally expensive portion of the SCD algorithm. To distribute work, host 402 can distribute work items to workers 404 and 408. Each work item may correspond to a small unit that performs work that typically takes only a few hundred milliseconds. Both the host 402 and the worker 404 and 408 may be multithreaded to take advantage of multi-core parallelism.
+A single host may at some point become a scaling bottleneck. But as shown in the performance experiments discussed below, even a single host can scale to hundreds of workers with thousands of cores.
+According to another aspect of the present disclosure, as shown in fig. 5, the training data S for SCD may be sliced over both the feature and sample dimensions (X, y). Using block partitions
+In particular, sharding in the sample dimension enables workers to operate on sample shards in parallel and in a distributed manner, as will be described further below. For example, fig. 6 depicts graphical representations of sample tiles 601, 602, and 603 provided to respective worker machines (605 and 606) of chunk 604 according to an example embodiment of the disclosure. In particular, sample shard 601 is provided to worker machine 606, while sample shards 602 and 603 are provided to worker machine 605.
+Referring again to fig. 5, the remaining data is sliced in the following manner. In the feature dimension only (in
+Grid meshMay be stored in a separate file. The file may hold data for many instances of a block. For example, if there is a partition into
+Recall that the main loop of the SCD algorithm iterates over one block of parameters at a time (see algorithm 2, lines 4-26). In some implementations, as shown in fig. 7, one iteration of the loop may translate into the following steps:
+1. selecting a block: the host selects block B based on various heuristics that attempt to estimate which block will have the greatest impact on convergence.
+2. Calculating sufficient statistics: the worker calculates the partial sum of sufficient statistics T and T' on the line slice of block B. The partial sum is stored in the worker's memory.
+3. Total sufficient statistics: the worker's sufficient statistics are aggregated and sent back to the host.
+4. Searching step length: the host selects the step size according to the line search method described in the overview section of the scalable coordinate descent algorithm above.
+5. Updating model parameters: the host updates the model parameter θ for block B using the selected step size and the sufficient statistics.
+6. Updating and predicting: workers update their forecasts
+The steps in this flow are depicted in fig. 7. The host may perform the steps sequentially by performing the steps themselves (e.g., steps 1, 4, and 5) or by assigning work items to workers for computationally expensive steps (e.g., steps 2, 3, and 6). The latter may be distributed over workers and executed in parallel.
+The sequential execution of steps effectively creates a system level barrier for workers after steps 2, 3, and 6. Typically, the entire iteration of SCD takes less than one minute, which means that there is a system level barrier every few seconds. Handling slow, preemptive, and/or malfunctioning workers and executing system level barriers at this rate presents certain challenges. The steps assigned to the worker are now described in more detail.
+For computing sufficient statistics, the worker can compute the partial sum of the sufficient statistics over the selected line slices of the block (see algorithms 2, 8-13 lines; and FIG. 6). Each worker may be multi-threaded, and the threads may execute work items in parallel. In this case, each work item may refer to a row slice. Given a work item, a worker thread may obtain training data, label y, and predictions for a corresponding row tile
+Sufficient statistics can be stored in each worker's memory using thread local storage for the one hundred thousand most frequent features and worker-level storage (across all threads) for the remaining features. This two-level scheme improves hardware high-speed memory locality and also allows for lock-free updates of statistics. Update conflicts may occur in worker-level storage, but they have a very low probability of occurring because they are only used for infrequent features.
+After the partial sums of sufficient statistics are calculated by the worker, they can be aggregated across workers (see algorithm 2, line 14). If each worker sends its statistics back to the host, a scaling bottleneck will be created due to TCP multicast (Incast) problems. Rather, according to one aspect of the disclosure, statistics may be partitioned into ranges and aggregations may be distributed among workers. For example, fig. 8 depicts a graphical diagram of the aggregation of sufficient statistics by an exemplary distributed computing system according to an exemplary embodiment of the present disclosure.
+In this case, each work item may refer to a range of sufficient statistics. For load balancing, the size of each range may be set to about 128 KB. The worker thread assigned a particular work item may become an aggregator for the corresponding range of statistics. It may collect statistics for ranges from other workers, perform aggregation, and then send the aggregated ranges to the host. Multiple ranges may be aggregated in parallel across workers to utilize all available network bandwidth.
+For example, assume | W | is the number of workers and assume r > | B |/| W | is the number of aggregate ranges, where | B | is the number of features in a block. The size of each range is | B |/r. Each range being created for an aggregator
+After the host updates the model parameters, the predictions can be updatedalgorithm 2, lines 18-22). In this case, each work item may refer to a row slice. Given a work item, the worker thread may obtain training data and label y for the corresponding row slice in order to update the prediction. Again, these may be found in the cache of a worker, in the cache of another worker, or in the DFS.
+As mentioned above, slow-machine processing can be a significant challenge to achieving linear scaling. In particular, SCD scales perfectly in theory. In practice, however, various overheads and slowness become limiting factors. As many as about one thousand workers, slow machines have by far been the largest limiting factor. After this, the single host design becomes the limiting factor.
+Recall that there is a system level barrier to workers after steps 2, 3, 6 in the SCD system stream (see fig. 7). Thus, the time it takes to perform these steps is throttled by the slowest worker (i.e., the worst slowest machine). The more the system expands laterally, the greater the slowness effect becomes. Slow machines are particularly challenging in SCD because a barrier exists every few seconds. In addition, the more SCD is accelerated, the shorter the time between barriers.
+Slow machines are typically caused by changes in CPU, network or DFS performance. In some implementations of the present disclosure, dynamic load balancing is the primary mechanism for dealing with slow machines. Dynamic load balancing eliminates most slow machines caused by CPU and network performance. However, due to tail latency, load balancing alone may not be sufficient to handle some DFS slow machines in some implementations. Caches and prefetches may be added to account for these tail delays.
+With respect to dynamic load balancing, DFS enables any worker to work on any work item. Whenever a worker thread is idle, it asks the host for a new work item. This results in dynamic load balancing similar to that in a multi-threaded program, where faster workers are assigned more work items, and vice versa for slower workers. In some implementations, to facilitate load balancing, the system is configured such that there are at least four work items per worker thread.
+In some implementations, the systems and methods of the present disclosure also utilize caching and prefetching to provide improved performance. More particularly, in cloud computing environments with shared access to DFS, tail latency can be as severe as a few seconds. The best way to mitigate these tail delays is to use a cache to try to avoid DFS. Thus, for training data, labels y andprediction
+In some implementations, to improve caching, the host attempts to allocate the same line shards to a given worker in each iteration of its main loop. If a line shard is eventually "stolen" by a different worker due to load balancing, the new worker may avoid accessing the DFS by requesting the line shard's files from the old worker's cache. When this occurs, hedge-requests may be used to avoid slow responding workers. The request may be sent to both the old worker and the DFS. The first request to complete becomes the "winner" and the "loser" is cancelled.
+Using compression, even for tag y and prediction
+In some implementations, the systems and methods of the present disclosure may also include techniques to handle VM preemption. In particular, it is remembered that notifications can be sent to a VM before it is preempted. This may include a grace period long enough for an application to save its state to DFS for fault tolerance, if desired. According to one aspect of the disclosure, this grace period may be used to drain (drain) workers to be preempted. For example, when a worker is notified that it is about to be preempted, it simply stops asking for a new work item. As a result, other workers will eventually steal the line shards and associated data of all preempted workers.
+In some implementations, the host is typically configured to use standard VMs to prevent preemption. However, even if the host is configured with a preemptive VM, there is only one host and many workers, so the chance of it being preempted is low. If the host is preempted, this may be treated as a machine failure.
+Machine failures are very rare, but do occur. In some implementations, the prediction for a row slice is performed when the prediction is performed for a row slice
+Of course, the host may also fail. Thus, at the end of each iteration, the host can record a checkpoint of its state to the DFS, which includes the current values of the model parameters θ. Thus, if a host fails and reboots, it can use the last checkpoint to restore its state and continue from where it left off.
+Exemplary Experimental data
+In this section, the performance of SCD on large-scale advertisement data sets is studied. The data set has 17 hundred million parameters (p 1.7 x 10)9) Which is provided with
+CD is considered the fastest solution algorithm for linear models and is a popular choice for single machine implementations (e.g., libline or glmnet). As indicated in the optimal update section above with exemplary pure blocks, on pure partitions, SCD produces the same model with the same convergent behavior as CD. Thus, the presently described experiments focus on runtime and scaling issues. In particular, the lateral expansion and acceleration of SCD was studied.
+All experiments used low priority preemptive VM in internal GoogleTMAnd running in the cloud. Each VM uses 8 cores and less than 30GB of memory. Google in GoogleTMThe equivalent preemptive VM in the outer cloud of (a) is n1-standard-8 (n1-standard-8), with a price of $0.12 per hour. The worker is over-threaded (overthreaded) to hide the I/O latency at a 2: 1 ratio.
+As defined in the exemplary objectives section of distributed learning above, the lateral expansion relates to system behavior as problems and the number of machines grow. The presently described experiment takes into account the scaling of the data set by M e {1, 2, 4, 8, 16, 32, 50} and the corresponding increase in the number of machines by the same factor M. For each of the M laterally extended variants, the SCD is run for one round, e.g., 194 iterations, and the average iteration time is reported. The baseline 1-fold experiment used 20 machines for 200 billion training examples, the 2-fold lateral spread used 40 machines for 400 billion training examples, and so on. Note that for 50-fold scaling, the dataset consists of 1 trillion exemplars, which is more "massive" than NetflixTMThe prize dataset (prize dataset) is 10000 times more data points. The compressed 50-fold data set occupies about 1 beat of bytes on the DFS, including standard replication.
+Fig. 9 illustrates the lateral expansion behavior of the SCD. Compared to perfect linear scaling, SCD shows less than 10% degradation for 16 times (1600%) lateral expansion and about 35% degradation for 50 times lateral expansion. One of the main causes of degradation is the slow mechanism caused by the very short barrier of SCD. The larger the dataset and, consequently, the more files, the higher the chance of hitting a severely slow machine. For example, in the update prediction phase, the system coordinates 1000 workers with 8000 cores and hundreds of thousands of work items in about 6 seconds. Thus, as a conclusion, SCD allows for approximately linear lateral expansion to extremely large data sets.
+The second gain from the distributed system is acceleration. That is, the number of machines is increased while the problem size remains the same. The acceleration of the system presented above was studied on 200 billion training examples, and the number of machines varied from 1 worker to 128 workers. Again, one round per variant of the system was run and the average iteration time was reported. Because SCD is robust, each configuration learns exactly to the same model.
+The graph of FIG. 10 shows the average iteration time versus the number of workers. It can be seen that SCD provides an approximation to the linear acceleration behavior. In fact, the performance of all configurations goes beyond the theoretical linear acceleration of a single worker. The reason for the super-linear acceleration is that the amount of data that can be cached increases with more workers. For example, if one worker has 1GB of memory for caching tag data and there is a 10GB tag file, with one worker, up to 10% of tag requests are cache hits, while with 32 workers, a total of 32GB tags may be cached, which results in a much higher cache hit rate.
+In fig. 10 and 11, the super linear acceleration has its best performance with 16 to 32 workers, and moves towards near linear acceleration with more workers. This is expected because more machines result in faster iterations, shorter barriers, and thus stronger slow machine effects. For example, a slow machine with 1 second may have no effect on the operation with 32 machines, since the barrier is every 3 seconds, whereas for 64 machines, where perfect acceleration means a 1.5 second barrier, the same slow machine has more effect. More aggressive prefetching (e.g., two iterations in advance) may solve this tail delay problem.
+Speeding up the system means getting the results faster when more resources are used. If the cost for the resource is constant as in a typical cloud environment, then theoretical linear acceleration means that the results are obtained faster with exactly the same cost. In practice, however, acceleration is not completely linear and additional costs may occur.
+In particular, the graph of fig. 11 illustrates a time versus cost tradeoff for speeding up the SCD algorithm. The number of resources varies from 1 worker to 128 workers, and the graph shows convergence time (e.g., five rounds of running SCD in this case) versus cost of the machine. For example, running an SCD five rounds with 128 machines takes about one hour, while the time for one worker is about 140 hours. The cost of running 128 workers for about 1 hour is about $16, while the cost of running one worker for 140 hours is about $ 17. Since SCD is robust, this means that SCD can get the same model 100 times faster with the same resource bill as a single machine.
+Considering the cost of the host, running an SCD with 128 workers is actually much cheaper. In particular, the same result is achieved 100 times faster with twice less cost. If cost minimization is needed alone, the optimal choice would be to use 16 workers, which costs less than $10 and takes about 5 hours. Spending $1 more and running 32 machines will give results after 2.5 hours.
+In addition to resource costs, the learning model is also associated with other costs, such as time or salary of the end user awaiting the results, the number of experiments that can be explored, and the like. This means that reducing runtime is generally much more valuable than computational cost. In view of such other costs, the systems and methods described herein provide significant acceleration at a small number of high computational costs.
+Finally, it is important to note that running very large data sets on a low priority cloud environment is very inexpensive. For example, a 200 billion sample version of an advertising data set is run to converge on Google, GoogleTMThe cloud will cost approximately $ 10. Given the values such a model provides when it is applied, the cost is many orders of magnitude smaller.
+Thus, the present disclosure provides a new Scalable Coordinate Descent (SCD) algorithm for a generalized linear model. SCD is highly robust, having the same converging behavior regardless of how much it is laterally extended and regardless of the computing environment. This allows SCD scaling to thousands of cores and makes it well suited for running in a cloud environment with low cost commercial servers. For many real-world problems, SCDs have the same convergent behavior as the popular single machine Coordinate Descent (CD) algorithm.
+In addition to the SCD algorithm, a distributed system is also provided that addresses the particular challenges of scaling SCDs in a cloud computing environment. Use GoogleTMShows that SCDs can provide approximately linear scaling for 1 trillion training samples over a beat of compressed data using thousands of cores.
+Additional disclosure
+The technology discussed herein relates to servers, databases, software applications, and other computer-based systems, as well as actions taken by and information sent to and from such systems. The inherent flexibility of computer-based systems allows for a wide variety of possible configurations, combinations, and divisions of tasks and functions between two components and multiple components. For example, the server processes discussed herein may be implemented using a single server or multiple servers operating in combination. Databases and applications may be implemented on a single system or distributed across multiple systems. The distributed components may operate sequentially or in parallel.
+While the presently disclosed subject matter has been described in detail with respect to various specific exemplary embodiments thereof, each exemplary embodiment is provided by way of illustration and not limitation of the present disclosure. Modifications, variations, and equivalents of such embodiments may readily occur to those skilled in the art, upon attaining an understanding of the foregoing. It will thus be apparent to those of ordinary skill in the art that the subject disclosure does not preclude inclusion of such modifications, variations and/or additions to the present subject matter. For example, features illustrated or described as part of one embodiment or implementation can be used with another embodiment or implementation to yield still a further embodiment. Accordingly, the present disclosure encompasses such modifications, variations and equivalents.
+Further, although fig. 7 depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particular illustrated order or arrangement. Various steps illustrated in fig. 7 may be omitted, rearranged, combined, and/or adapted in various ways without departing from the scope of the present disclosure.
+Claims (18)
+1. A computer-implemented method, comprising:
+obtaining, by one or more computing machines, a training data set comprising a plurality of examples, each example comprising entries for a plurality of features;
+partitioning, by the one or more computing machines, the plurality of features into a plurality of blocks, wherein at least one of the plurality of blocks contains at least two features, and wherein, for each block, a respective feature sub-vector for each sample has at most one non-zero entry;
+learning, by the one or more computing machines, a plurality of model parameters from the plurality of blocks, wherein learning the model parameters comprises performing a plurality of iterations by the one or more computing machines, and wherein performing the plurality of iterations comprises processing, by the one or more computing machines, only one of the plurality of blocks per iteration.
+2. The computer-implemented method of claim 1, wherein:
+each of the plurality of features corresponds to one of a plurality of variables; and is
+Partitioning, by the one or more computing machines, the plurality of features into the plurality of blocks comprises: partitioning, by the one or more computing machines, the plurality of features according to the plurality of variables, such that a number of blocks equals a number of variables, and such that each of the plurality of blocks includes a respective feature corresponding to a respective one of the plurality of variables.
+3. The computer-implemented method of claim 1, wherein:
+each of the plurality of features corresponds to one of a plurality of variables, the plurality of variables including one or more categorical variables and one or more collection-valued variables; and is
+Partitioning, by the one or more computing machines, the plurality of features into the plurality of blocks comprises:
+for each of the one or more classification variables, partitioning, by the one or more computing machines, features corresponding to the one or more classification variables in accordance with the one or more classification variables such that each generated block includes a respective feature corresponding to a respective one of the one or more classification variables; and
+for each of one or more collection-valued variables, partitioning, by the one or more computing machines, features corresponding to the one or more collection-valued variables into at least two blocks per collection-valued variable, such that each resulting block includes, on average, one valid feature per sample.
+4. The computer-implemented method of claim 1, wherein performing, by the one or more computing machines, the plurality of iterations comprises, at each iteration:
+processing, by at least one of a plurality of distributed worker computing machines, a selected one of the plurality of chunks at each iteration to determine sufficient statistics, wherein the selected chunk is selected by a host computer device;
+aggregating the determined sufficient statistics by at least one of the plurality of distributed worker computing machines;
+updating model parameters corresponding to the selected block based on the aggregated sufficient statistics; and
+the plurality of predictions are updated for the plurality of updated parameters, respectively.
+5. The computer-implemented method of claim 1, wherein learning, by the one or more computing machines, model parameters from the plurality of blocks further comprises:
+slicing, by the one or more computing machines, the plurality of examples into a plurality of example slices; and
+at each iteration, a plurality of sample tiles for one of the plurality of chunks are processed in parallel by a plurality of worker computing machines, respectively.
+6. A distributed computing system that performs large-scale machine learning, the system comprising:
+a main computer unit including at least one processing device; and
+a plurality of worker computing machines under the control of the main computer device, wherein each worker computing machine comprises at least one processing device;
+wherein the system is configured to:
+partitioning a plurality of features of a training data set into a plurality of blocks, wherein the training data set comprises a plurality of examples, wherein each example comprises an entry for the plurality of features, wherein at least one of the plurality of blocks comprises at least two features, and wherein, for each block, a respective feature sub-vector for each example has at most one non-zero entry; and
+performing a plurality of iterations of a machine learning technique to learn a plurality of parameters of a model from the plurality of blocks, and wherein the system is configured to process only one of the plurality of blocks per iteration.
+7. The distributed computing system of claim 6, wherein to perform each iteration, the system is configured to:
+selecting, by the host computer, one of the plurality of blocks;
+determining, by the worker computing machine, sufficient statistics for the selected block;
+aggregating the determined sufficient statistics;
+updating a parameter corresponding to the selected block based on the aggregated sufficient statistics; and
+a plurality of predictions for a plurality of updated parameters, respectively.
+8. The distributed computing system of claim 7, wherein at each iteration, the host computer device selects one of the plurality of blocks based on one or more heuristics that estimate which block will have the greatest effect on convergence.
+9. The distributed computing system of claim 7, wherein to perform each iteration, the system is further configured to:
+determining, by a host computer, a step size after aggregating the sufficient statistics and before updating parameters of the model.
+10. The distributed computing system of claim 7, wherein to determine sufficient statistics for the selected blocks, the plurality of worker computing machines are configured to:
+obtaining respective shards for a plurality of instances of the selected chunk; and
+sufficient statistics are determined for respective tiles in parallel.
+11. The distributed computing system of claim 10, wherein the host computer attempts to assign the same respective shard to each worker computing machine in each iteration in order to improve caching.
+12. The distributed computing system of claim 10, wherein each worker computing machine is further configured to prefetch the respective shard for the next iteration to reduce the effect of tail latency.
+13. The distributed computing system of claim 7, wherein to determine sufficient statistics for the selected block, at least one of the plurality of worker computing machines is configured to:
+at least one of the respective shard, one or more tags for the respective shard, and one or more of the plurality of predictions for the respective shard are obtained from at least one of a first cache maintained in a first memory of such worker computing machine and a second cache maintained in a second memory of at least one other worker computing machine.
+14. The distributed computing system of claim 7, wherein to aggregate the determined sufficient statistics, the system is configured to:
+partitioning the determined sufficient statistics into a plurality of ranges;
+assigning, by the host computer, the plurality of ranges to respective worker computing machines of the plurality of worker computing machines;
+obtaining, by each worker computing machine assigned one of the ranges, sufficient statistics for the corresponding range from the other worker computing machines;
+aggregating, by each worker assigned one of the ranges, sufficient statistics for the corresponding range; and
+sending, by each worker computing machine assigned one of the plurality of ranges, aggregated sufficient statistics for the corresponding range to the host computer machine.
+15. The distributed computing system of claim 7, wherein:
+each worker computing machine is configured to implement a plurality of worker threads that execute work items in parallel; and is
+Each worker computing machine is configured to:
+maintaining at least two levels of memory storage, including a single worker-level storage and a plurality of thread-level storages, respectively for a plurality of worker threads implemented by such worker computing machines;
+storing, at each thread-level storage, a first number of sufficient statistics corresponding to most frequently observed features; and is
+Storing, at a worker-level storage, a second number of sufficient statistics corresponding to infrequently observed features and not stored at a thread-level storage;
+wherein the two-level memory stores lockless updates that enable sufficient statistics.
+16. A computer-implemented structured numerical representation representing at least a plurality of parameters of a linear model, the structured numerical representation being generated by a process comprising:
+obtaining, by a distributed computing system, a training data set comprising a plurality of examples, each example comprising entries for a plurality of features, and wherein the plurality of features respectively correspond to the plurality of parameters of the linear model;
+partitioning, by the distributed computing system, the plurality of features into a plurality of blocks, wherein at least one of the plurality of blocks contains at least two features, and wherein, for each block, the respective feature subvector for each sample has at most one non-zero entry; and
+performing, by a distributed computing system, a plurality of iterations of a machine learning technique to learn values for a plurality of parameters of the linear model from the plurality of blocks;
+wherein performing the plurality of iterations includes processing only one of the plurality of blocks per iteration through the distributed computing system.
+17. The computer-implemented structured numerical representation of claim 16, wherein:
+each of the plurality of features corresponds to one of a plurality of variables; and is
+Partitioning, by the distributed computing system, the plurality of features into the plurality of blocks comprises: partitioning, by the distributed computing system, the plurality of features according to the plurality of variables, such that a number of blocks equals a number of variables, and such that each of the plurality of blocks includes a respective feature corresponding to a respective one of the plurality of variables.
+18. The computer-implemented structured numerical representation of claim 16, wherein performing, by the distributed computing system, a plurality of iterations of a machine learning technique comprises, for each iteration:
+selecting, by a host computer device of the distributed computing system, one of the plurality of blocks;
+obtaining, by a plurality of worker computing machines of the distributed computing system, respective shards for a plurality of instances of a selected chunk;
+determining, by the plurality of worker computing machines, sufficient statistics for respective shards in parallel, respectively;
+aggregating, by the distributed computing system, the determined sufficient statistics;
+updating, by the distributed computing system, parameters corresponding to the selected block based on the aggregated sufficient statistics; and
+updating, by the distributed computing system, a plurality of predictions for a plurality of updated parameters, respectively.
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US201662294683P | 2016-02-12 | 2016-02-12 | |
+US62/294,683 | 2016-02-12 | ||
+PCT/US2017/017310 WO2017139534A1 (en) | 2016-02-12 | 2017-02-10 | Systems and methods for robust large-scale machine learning |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+CN108475349A CN108475349A (en) | 2018-08-31 |
+CN108475349B true CN108475349B (en) | 2021-10-08 |
+Family
+ID=58159519
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+CN201780005404.1A Active CN108475349B (en) | 2016-02-12 | 2017-02-10 | System and method for robust large-scale machine learning |
+Country Status (4)
+Country | Link |
+---|---|
+US (1) | US10482392B2 (en) |
+EP (1) | EP3380993B1 (en) |
+CN (1) | CN108475349B (en) |
+WO (1) | WO2017139534A1 (en) |
+Families Citing this family (15)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+WO2018031958A1 (en) * | 2016-08-11 | 2018-02-15 | Twitter, Inc. | Aggregate features for machine learning |
+US11353868B2 (en) * | 2017-04-24 | 2022-06-07 | Intel Corporation | Barriers and synchronization for machine learning at autonomous machines |
+CN109388661B (en) * | 2017-08-02 | 2020-04-21 | 创新先进技术有限公司 | Model training method and device based on shared data |
+CN108521352B (en) * | 2018-03-26 | 2022-07-22 | 天津大学 | Online cloud service tail delay prediction method based on random return network |
+US11461694B2 (en) | 2018-09-27 | 2022-10-04 | International Business Machines Corporation | Machine learning implementation in processing systems |
+US20220108215A1 (en) * | 2019-01-16 | 2022-04-07 | Google Llc | Robust and Data-Efficient Blackbox Optimization |
+US11573803B2 (en) | 2019-05-07 | 2023-02-07 | International Business Machines Corporation | Parallel training of machine learning models |
+US11886960B2 (en) | 2019-05-07 | 2024-01-30 | International Business Machines Corporation | Elastic training of machine learning models via re-partitioning based on feedback from the training algorithm |
+CN112818291B (en) * | 2019-11-18 | 2023-09-01 | 百度在线网络技术（北京）有限公司 | Conversion rate prediction method, conversion rate prediction device, conversion rate prediction equipment and conversion rate prediction medium |
+CN110929884B (en) * | 2019-11-22 | 2023-05-16 | 北京大学 | Classification method and device for distributed machine learning optimization based on column division |
+US11562270B2 (en) | 2020-04-02 | 2023-01-24 | International Business Machines Corporation | Straggler mitigation for iterative machine learning via task preemption |
+US20210390483A1 (en) * | 2020-06-10 | 2021-12-16 | Tableau Software, LLC | Interactive forecast modeling based on visualizations |
+US20220050718A1 (en) * | 2020-08-12 | 2022-02-17 | Core Scientific, Inc. | Scalability advisor |
+CN113135480B (en) * | 2021-05-13 | 2022-08-16 | 上海梯之星信息科技有限公司 | Elevator fault early warning method based on local and overall characteristics |
+CN114143536B (en) * | 2021-12-07 | 2022-09-02 | 重庆邮电大学 | Video coding method of SHVC (scalable video coding) spatial scalable frame |
+Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6473080B1 (en) * | 1998-03-10 | 2002-10-29 | Baker & Taylor, Inc. | Statistical comparator interface |
+JP2010128762A (en) * | 2008-11-27 | 2010-06-10 | Alps Electric Co Ltd | Operation feel feedback input device |
+CN102141963A (en) * | 2010-01-28 | 2011-08-03 | 阿里巴巴集团控股有限公司 | Method and equipment for analyzing data |
+CN102227121A (en) * | 2011-06-21 | 2011-10-26 | 中国科学院软件研究所 | Distributed buffer memory strategy adaptive switching method based on machine learning and system thereof |
+CN104200222A (en) * | 2014-08-28 | 2014-12-10 | 中国人民解放军国防信息学院 | Picture object identifying method based on factor graph model |
+CN104636273A (en) * | 2015-02-28 | 2015-05-20 | 中国科学技术大学 | Storage method of sparse matrix on SIMD multi-core processor with multi-level cache |
+CN104915636A (en) * | 2015-04-15 | 2015-09-16 | 北京工业大学 | Remote sensing image road identification method based on multistage frame significant characteristics |
+Family Cites Families (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6807536B2 (en) * | 2000-11-16 | 2004-10-19 | Microsoft Corporation | Methods and systems for computing singular value decompositions of matrices and low rank approximations of matrices |
+SG126752A1 (en) * | 2004-03-05 | 2006-11-29 | Infineon Technologies Ag | Protocols for transmission of data, in particular over telephone lines |
+CN101639769B (en) * | 2008-07-30 | 2013-03-06 | 国际商业机器公司 | Method and device for splitting and sequencing dataset in multiprocessor system |
+US9536177B2 (en) | 2013-12-01 | 2017-01-03 | University Of Florida Research Foundation, Inc. | Distributive hierarchical model for object recognition in video |
+US10890589B2 (en) | 2014-05-27 | 2021-01-12 | Georgetown University | Metabolic biomarkers for memory loss |
+-
+2017
+- 2017-02-10 US US15/429,216 patent/US10482392B2/en active Active
+- 2017-02-10 WO PCT/US2017/017310 patent/WO2017139534A1/en active Application Filing
+- 2017-02-10 CN CN201780005404.1A patent/CN108475349B/en active Active
+- 2017-02-10 EP EP17707145.3A patent/EP3380993B1/en active Active
+Patent Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6473080B1 (en) * | 1998-03-10 | 2002-10-29 | Baker & Taylor, Inc. | Statistical comparator interface |
+JP2010128762A (en) * | 2008-11-27 | 2010-06-10 | Alps Electric Co Ltd | Operation feel feedback input device |
+CN102141963A (en) * | 2010-01-28 | 2011-08-03 | 阿里巴巴集团控股有限公司 | Method and equipment for analyzing data |
+CN102227121A (en) * | 2011-06-21 | 2011-10-26 | 中国科学院软件研究所 | Distributed buffer memory strategy adaptive switching method based on machine learning and system thereof |
+CN104200222A (en) * | 2014-08-28 | 2014-12-10 | 中国人民解放军国防信息学院 | Picture object identifying method based on factor graph model |
+CN104636273A (en) * | 2015-02-28 | 2015-05-20 | 中国科学技术大学 | Storage method of sparse matrix on SIMD multi-core processor with multi-level cache |
+CN104915636A (en) * | 2015-04-15 | 2015-09-16 | 北京工业大学 | Remote sensing image road identification method based on multistage frame significant characteristics |
+Non-Patent Citations (3)
+Title |
+---|
+Coordinate Descent Method for Large-scale L2-loss Linear Support Vector Machines;kai-wei chang;《Journal of Machine Learning Research》;20080601;第9卷;1369-1398 * |
+Data/Feature Distributed Stochastic Coordinate Descent for Logistic Regression;Dongyeop Kang 等;《 CIKM "14: Proceedings of the 23rd ACM International Conference on Conference on Information and Knowledge Management》;20141130;1269–1278 * |
+Scalable Coordinate Descent Approaches to Parallel Matrix Factorization for Recommender Systems;Hsiang-Fu Yu 等;《2012 IEEE 12th International Conference on Data Mining》;20121213;765-774 * |
+Also Published As
+Publication number | Publication date |
+---|---|
+WO2017139534A1 (en) | 2017-08-17 |
+US10482392B2 (en) | 2019-11-19 |
+CN108475349A (en) | 2018-08-31 |
+EP3380993B1 (en) | 2021-04-07 |
+EP3380993A1 (en) | 2018-10-03 |
+US20170236072A1 (en) | 2017-08-17 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+CN108475349B (en) | System and method for robust large-scale machine learning | |
+Yu et al. | Parallel matrix factorization for recommender systems | |
+US9940060B1 (en) | Memory use and eviction in a deduplication storage system | |
+Rendle et al. | Robust large-scale machine learning in the cloud | |
+US20190042304A1 (en) | [ice] architecture and mechanisms to accelerate tuple-space search with intergrated gpu | |
+US8229968B2 (en) | Data caching for distributed execution computing | |
+US9501419B2 (en) | Apparatus, systems, and methods for providing a memory efficient cache | |
+CN112835627B (en) | Near nearest neighbor search for single instruction multithreading or single instruction multiple data type processors | |
+US9268595B2 (en) | Scheduling thread execution based on thread affinity | |
+Sun et al. | Legion: Automatically Pushing the Envelope of {Multi-GPU} System for {Billion-Scale}{GNN} Training | |
+Song et al. | {HALP}: Heuristic aided learned preference eviction policy for {YouTube} content delivery network | |
+Wei et al. | A GPU-specialized inference parameter server for large-scale deep recommendation models | |
+US20180114132A1 (en) | Controlling remote memory accesses in a multiple processing node graph inference engine | |
+CN113132454A (en) | Intelligent network interface controller for caching distributed data | |
+Adiletta et al. | Characterizing the Scalability of Graph Convolutional Networks on Intel® PIUMA | |
+US20230004488A1 (en) | Memory reduction in a system by oversubscribing physical memory shared by compute entities supported by the system | |
+WO2016153779A1 (en) | Hierarchical cost based caching for online media | |
+Chen et al. | Scheduling-aware data prefetching for data processing services in cloud | |
+Antaris et al. | In-memory stream indexing of massive and fast incoming multimedia content | |
+TW202238368A (en) | On-chip interconnect for memory channel controllers | |
+US20240078260A1 (en) | Systems and methods for general-purpose out-of-core random walk graph computing | |
+KR101795848B1 (en) | Method for processing connected components graph interrogation based on disk | |
+US11086781B2 (en) | Methods and apparatus for monitoring prefetcher accuracy information using a prefetch flag independently accessible from prefetch tag information | |
+Chakroun et al. | Cache-efficient Gradient Descent Algorithm. | |
+US20240061780A1 (en) | Systems and methods for memory bandwidth allocation |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+PB01 | Publication | ||
+PB01 | Publication | ||
+SE01 | Entry into force of request for substantive examination | ||
+SE01 | Entry into force of request for substantive examination | ||
+GR01 | Patent grant | ||
+GR01 | Patent grant |

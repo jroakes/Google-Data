@@ -1,0 +1,412 @@
+JP7089124B2 - Reshape and broadcast optimizations to avoid unnecessary data movement - Google Patents
+Reshape and broadcast optimizations to avoid unnecessary data movement Download PDFInfo
+- Publication number
+- JP7089124B2 JP7089124B2 JP2021565088A JP2021565088A JP7089124B2 JP 7089124 B2 JP7089124 B2 JP 7089124B2 JP 2021565088 A JP2021565088 A JP 2021565088A JP 2021565088 A JP2021565088 A JP 2021565088A JP 7089124 B2 JP7089124 B2 JP 7089124B2
+- Authority
+- JP
+- Japan
+- Prior art keywords
+- tensor
+- original
+- reshape
+- operation pattern
+- final output
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F8/00—Arrangements for software engineering
+- G06F8/40—Transformation of program code
+- G06F8/41—Compilation
+- G06F8/44—Encoding
+- G06F8/443—Optimisation
+- G06F8/4434—Reducing the memory space required by the program code
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F8/00—Arrangements for software engineering
+- G06F8/40—Transformation of program code
+- G06F8/41—Compilation
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N20/00—Machine learning
+Description
+TensorFlowライブラリを使用して、機械学習モデル、例えば再帰ニューラルネットワーク(「RNN」)モデル、畳み込みニューラルネットワーク(「CNN」)モデル、フィードフォワードニューラルネットワークモデル、およびランダムフォレストモデルを作成することができる。(TensorFlowについては、Abadiら、TensorFlow: A system for Large-Scale Design and Implementation (OSDI '16)、265～283頁、2016年11月2～4日に記載されている。ソフトウェアは、https://tensorflow.orgから入手可能である。) You can use the TensorFlow library to create machine learning models, such as recurrent neural network (“RNN”) models, convolutional neural network (“CNN”) models, feedforward neural network models, and random forest models. (For TensorFlow, see Abadi et al., TensorFlow: A system for Large-Scale Design and Implementation (OSDI '16), pp. 265-283, November 2-4, 2016. Software is https: / Available from /tensorflow.org.)
+TensorFlowライブラリを使用して、機械学習モデルをTensorFlowグラフとして表すことができる。TensorFlowグラフ内の各ノードは、オペレーションを表す。TensorFlowグラフ内の各エッジは有向であり、エッジが接続されているノードに入るまたはそのノードから出るデータのフローを表す。データは、0以上の次元のテンソルの形式をとり、テンソルにおいて、各要素は同じデータタイプ、例えば32ビット整数、二倍長浮動小数点、または文字列を有する。テンソルは、外見上、角括弧対「[]」内のベクトルによって表される。例えば、3つの要素からなる、ベクトルとも呼ばれる1次元(1D)テンソルであれば、[1, 2, 3]と表される。0次元テンソルはスカラーである。2次元(2D)テンソルであれば、[[1, 2, 3], [4, 5, 6]]と表される。このテンソルの階数、すなわちテンソルの各要素を一意に選択するために必要な次元数またはインデックス数は、2である。このテンソルの形状は[2, 3]である。2は、第0次元内の要素数、すなわち2つのベクトル(1Dテンソル)[1, 2, 3]および[4, 5, 6]のことであり、3は、第1次元内の要素数であり、すなわちベクトル[1, 2, 3]および[4, 5, 6]はそれぞれ3つの要素を有するということである。テンソルの形状は、それ自体が1Dテンソルである。多くのプログラミングの文脈において慣例であるように、次元のナンバリングは0から開始する。 Machine learning models can be represented as TensorFlow graphs using the TensorFlow library. Each node in the TensorFlow graph represents an operation. Each edge in a TensorFlow graph is directed and represents the flow of data that enters or exits the node to which the edge is connected. The data is in the form of a tensor with zero or more dimensions, in which each element has the same data type, such as a 32-bit integer, a double-length floating point number, or a string. The tensor is apparently represented by a vector in square brackets vs. "[]". For example, a one-dimensional (1D) tensor, also known as a vector, consisting of three elements is represented as [1, 2, 3]. The 0-dimensional tensor is a scalar. If it is a two-dimensional (2D) tensor, it is expressed as [[1, 2, 3], [4, 5, 6]]. The rank of this tensor, that is, the number of dimensions or indexes required to uniquely select each element of the tensor, is 2. The shape of this tensor is [2, 3]. 2 is the number of elements in the 0th dimension, that is, two vectors (1D tensors) [1, 2, 3] and [4, 5, 6], and 3 is the number of elements in the first dimension. Yes, that is, the vectors [1, 2, 3] and [4, 5, 6] each have three elements. The shape of the tensor is itself a 1D tensor. As is customary in many programming contexts, dimension numbering starts at zero.
+本明細書では、例は、TensorFlowグラフを構築および実行するためのPython APIを使用して表現される。TensorFlowモジュールは、次のようにロードすることができる。
+import tensorflow as tf
+As used herein, examples are expressed using the Python API for building and running TensorFlow graphs. The TensorFlow module can be loaded as follows:
+import tensorflow as tf
+TensorFlowのオペレーションには、シェイプオペレーション、リシェイプオペレーション、ブロードキャストオペレーション、および縮約オペレーションが含まれる。これらについては下で、本明細書にとって重要ではないパラメータおよび態様を説明から割愛して、説明する。 TensorFlow operations include shape operations, reshape operations, broadcast operations, and contraction operations. These are described below, omitting parameters and embodiments that are not important to the present specification.
+シェイプオペレーションは、実行されると、入力テンソルの形状、すなわち次元を、1Dテンソルとして返す。以下の例
+X = tf.constant([[[1, 1, 1], [2, 2, 2]], [[3, 3, 3], [4, 4, 4]]])
+tf.shape(X)
+では、シェイプオペレーションは、テンソルXの次元を表すテンソル[2, 2, 3]を返す。
+When executed, the shape operation returns the shape, or dimension, of the input tensor as a 1D tensor. The following example
+X = tf.constant ([[[1, 1, 1], [2, 2, 2]], [[3, 3, 3], [4, 4, 4]]])
+tf.shape (X)
+Now, the shape operation returns a tensor [2, 2, 3] that represents the dimension of the tensor X.
+リシェイプオペレーションは、実行されると、入力テンソルと同じ要素値を有するテンソルを同じ順序で、ただし形状テンソル入力によって定義される形状で返す。以下の例
+X = tf.constant([[[1, 1], [2, 2]], [[3, 3], [4, 4]]])
+tf.reshape(X, [2, 4])
+では、リシェイプオペレーションは、入力パラメータとして、テンソルX、および所望の形状を表す1次元テンソル[2, 4]を受け取る。リシェイプオペレーションは、入力テンソルXと同じ要素を有し、かつ所望の形状、すなわち[2, 4]を有するテンソル[[1, 1, 2, 2], [3, 3, 4, 4]]を返す。リシェイプオペレーションへの所望の形状の入力は、入力テンソルが有するよりも多くの、またはそれよりも少ない次元を有することができる。
+When executed, the reshape operation returns tensors with the same element values as the input tensors, in the same order, but in the shape defined by the shape tensor input. The following example
+X = tf.constant ([[[1, 1], [2, 2]], [[3, 3], [4, 4]]])
+tf.reshape (X, [2, 4])
+Now, the reshape operation receives as input parameters a tensor X and a one-dimensional tensor [2, 4] representing the desired shape. The reshape operation is a tensor [[1, 1, 2, 2], [3, 3, 4, 4]] that has the same elements as the input tensor X and has the desired shape, ie [2, 4]. return. The input of the desired shape to the reshape operation can have more or less dimensions than the input tensor has.
+ブロードキャストオペレーションには、broadcast_toが含まれる。ブロードキャストは、算術オペレーションにとって互換性のある形状を有するアレイを作成するプロセスである。2つの形状は、それらの形状の対応する各次元対について、次元が等しいかまたはそれらのうちの一方が1である場合、互換性がある。テンソルが、ある形状にブロードキャストされるとき、オペレーションは末尾の次元から開始し、前方に進む。 Broadcast operations include broadcast_to. Broadcasting is the process of creating an array with shapes that are compatible with arithmetic operations. The two shapes are compatible for each corresponding dimensional pair of those shapes if the dimensions are equal or one of them is one. When the tensor is broadcast to a shape, the operation starts in the last dimension and moves forward.
+したがって、broadcast_toオペレーションは、実行されると、要求された指定の形状に達するまで入力テンソルが必要な回数だけ複製されたテンソルを返す。以下の例
+V = tf.constant([7, 8])
+tf.broadcast_to(V, [2, 3])
+では、broadcast_toオペレーションは、入力として、テンソルV、および所望の形状を指定するテンソル[2, 3]を受け取る。broadcast_toオペレーションは、所望の形状を有するテンソル[[7, 7, 7], [8, 8, 8]]を返す。
+Therefore, when performed, the broadcast_to operation returns a tensor that has been duplicated as many times as needed by the input tensor until it reaches the requested shape. The following example
+V = tf.constant ([7, 8])
+tf.broadcast_to (V, [2, 3])
+Now, the broadcast_to operation takes as input a tensor V and a tensor [2, 3] that specifies the desired shape. The broadcast_to operation returns a tensor [[7, 7, 7], [8, 8, 8]] with the desired shape.
+縮約オペレーションには、reduce_all、reduce_any、reduce_sum、およびreduce_meanが含まれる。縮約オペレーションは、一般に入力テンソルよりも小さな階数および入力テンソルよりも少数の要素を有する出力テンソルを返す。 Reduction operations include reduce_all, reduce_any, reduce_sum, and reduce_mean. The contraction operation generally returns an output tensor with a lower rank than the input tensor and fewer elements than the input tensor.
+縮約オペレーションは、入力テンソルおよび軸テンソルを受け取る。軸テンソルの要素は、入力テンソルの形状の次元を識別する。縮約オペレーションは、入力テンソルを、軸テンソルによって指定された次元に沿って縮約する。例えば、
+X = tf.constant([[1, 1, 1], [1, 1, 1]])
+において、Xの形状は[2, 3]であり、すなわちXは、2つの行および3つの列を有するテンソル
+1 1 1
+1 1 1
+である。
+The contraction operation receives an input tensor and an axis tensor. The elements of the axis tensor identify the dimensions of the shape of the input tensor. The contraction operation contracts the input tensor along the dimensions specified by the axis tensor. for example,
+X = tf.constant ([[1, 1, 1], [1, 1, 1]])
+In, the shape of X is [2, 3], i.e. X is a tensor with two rows and three columns.
+1 1 1
+1 1 1
+Is.
+特定の縮約オペレーションreduce_sumを一例として挙げると、軸テンソルがXの行、すなわち第0次元を識別する[0]である場合、オペレーション
+tf.reduce_sum(x, [0])
+は、実行されると、第0次元(行)に沿ってテンソルを縮約し、行同士を加算[1, 1, 1] + [1, 1, 1]して、[2, 2, 2]を返す。
+tf.reduce_sum(x, [1])
+が実行されると、縮約は第1次元(列)に沿い、列同士を加算[1, 1] + [1, 1] + [1, 1]して、[3, 3]を返す。
+tf.reduce_sum(x, [0, 1])
+が実行されると、縮約は両次元に沿い、加算して、スカラー(0Dテンソル)6を返す。
+Taking a specific reduction operation reduce_sum as an example, if the axis tensor is the row of X, that is, the operation that identifies the 0th dimension [0].
+tf.reduce_sum (x, [0])
+When executed, it contracts the tensor along the 0th dimension (rows), adds the rows together [1, 1, 1] + [1, 1, 1], and then [2, 2, 2]. ]return it.
+tf.reduce_sum (x, [1])
+When is executed, the contraction follows the first dimension (column), adds columns [1, 1] + [1, 1] + [1, 1], and returns [3, 3].
+tf.reduce_sum (x, [0, 1])
+When is executed, the contraction follows both dimensions, adds up, and returns a scalar (0D tensor) 6.
+縮約オペレーションによって返されるテンソルの形状は、入力テンソルの次元から軸テンソルによって指定されたインデックスを除いたものである。 The shape of the tensor returned by the contraction operation is the dimension of the input tensor minus the index specified by the axis tensor.
+他の縮約オペレーションは、その要素の値が他のオペレーションによって計算されるテンソルを返す。例えば、reduce_allオペレーションは論理積を計算し、reduce_anyオペレーションは論理和を計算し、reduce_meanオペレーションは平均を計算し、以下同様である。 Other contraction operations return a tensor whose element's value is calculated by the other operation. For example, the reduce_all operation calculates the AND, the reduce_any operation calculates the OR, the reduce_mean operation calculates the mean, and so on.
+いくつかのシナリオでは、ユーザはコンパイラ、例えばJust-in-Time(「JIT」)コンパイラを使用して、TensorFlowグラフを、XLAコンパイラに入力するためのグラフにコンパイルする。(JITコンパイラについては、https://www.tensorflow.org/xla/jitに記載されている)。XLAへの入力言語は、「HLO IR」または単にHLO(High Level Optimizer)と呼ばれている。XLAコンパイラは、HLOで定義されたグラフ、すなわち計算を受け取り、それらをさまざまなアーキテクチャの機械語命令にコンパイルして、ターゲット依存の最適化を実施し、ターゲット依存のコードを生成する。 In some scenarios, the user uses a compiler, such as the Just-in-Time ("JIT") compiler, to compile a TensorFlow graph into a graph for input to the XLA compiler. (The JIT compiler can be found at https://www.tensorflow.org/xla/jit). The input language to XLA is called "HLO IR" or simply HLO (High Level Optimizer). The XLA compiler takes HLO-defined graphs, or computations, and compiles them into machine language instructions of various architectures to perform target-dependent optimizations and generate target-dependent code.
+HLOグラフ内のノードは、オペレーションを表す。グラフ内の各エッジは有向であり、エッジが接続されているノードに入るまたはそのノードから出るデータのフローを表す。このデータは、テンソルの形式をとる。HLOグラフ内に表されたオペレーションは、HLOグラフの生成元であるTensorFlowフローにおけるオペレーションに対応する。具体的には、HLOグラフは、リシェイプオペレーション、縮約オペレーション、およびブロードキャストオペレーションを含むことができる。 Nodes in the HLO graph represent operations. Each edge in the graph is directed and represents the flow of data entering or exiting the node to which the edge is connected. This data is in the form of a tensor. The operations represented in the HLO graph correspond to the operations in the TensorFlow flow from which the HLO graph was generated. Specifically, the HLO graph can include reshape operations, contraction operations, and broadcast operations.
+XLAコンパイラによって生成されたバイナリは、ハードウェア上にデプロイされ、そのハードウェアの特定のプロセッサによって実行される。一部のプロセッサは、ベクトルに作用する命令を実施する。プロセッサが、テンソルデータに作用するベクトル命令を実施するためには、テンソルは、ベクトル命令による作用を受けるテンソルのベクトルがそれぞれ、そのプロセッサについて指定されたベクトル境界上にアライメントされるように格納されなければならない。 Binaries generated by the XLA compiler are deployed on hardware and run by a particular processor in that hardware. Some processors carry out instructions that act on vectors. In order for a processor to execute a vector instruction acting on tensor data, the tensor must be stored so that each vector of the tensor affected by the vector instruction is aligned on the vector boundary specified for that processor. Must be.
+例えば、リシェイプオペレーションが、入力パラメータとして、テンソル[1, 2, 3, 4, 5, 6, 7, 8, 9]、および形状[3, 3]を指定するテンソルを受け取る場合、結果として得られるテンソル[[1, 2, 3], [4, 5, 6], [7, 8, 9]]には3つのベクトル[1, 2, 3]、[4, 5, 6]、および[7, 8, 9]があり、それらのベクトルが、ハードウェアの特定のプロセッサによって要求されるベクトル境界上にたまたまアライメントされていない場合、それらはベクトル境界上にアライメントされるように移動されなければならない。そのようなベクトル境界アライメント操作は、計算コストがかかることがある。 For example, if the reshape operation receives a tensor that specifies the tensor [1, 2, 3, 4, 5, 6, 7, 8, 9] and the shape [3, 3] as input parameters, the result is The tensor [[1, 2, 3], [4, 5, 6], [7, 8, 9]] has three vectors [1, 2, 3], [4, 5, 6], and [7]. , 8, 9] and if those vectors happen to be unaligned on the vector boundaries required by the particular processor of the hardware, they must be moved to be aligned on the vector boundaries. .. Such vector boundary alignment operations can be computationally expensive.
+本明細書では、XLAコンパイラにおいて実施されることの可能な、リシェイプオペレーションを含む特定のオペレーションシーケンスによるメモリの負担を低減させるための最適化技法について説明する。 This specification describes optimization techniques that can be performed in the XLA compiler to reduce the memory load due to a specific sequence of operations including reshape operations.
+これらの最適化は、グループ正規化(https://arxiv.org/pdf/1803.08494.pdf)およびゴーストバッチ正規化(https://arxiv.org/pdf/1705.08741.pdf)のような機械学習技法を実装したオペレーションシーケンスにおいて特に有用である。そのような機械学習技法の直接的な実装では、入力テンソルがより多数の次元にリシェイプされる。次いで、リシェイプによって変更されたいくつかの次元およびリシェイプによって変更されていない他の次元にわたって、縮約が実施される。縮約およびリシェイプの派生物がブロードキャストであり、それがオリジナルの形状にリシェイプし戻される。ブロードキャストは、リシェイプによって変更されたいくつかの次元およびリシェイプによって変更されていないいくつかの次元にも行われる。リシェイプオペレーションは、線形アドレス空間を有するプラットフォーム上のデータには何もしない。しかし、ベクトルメモリを有するプラットフォーム上では、リシェイプにより一般に、ベクトルメモリに対する形状アライメントが変わり、データの移動が必要になる。本明細書では、ベクトルメモリに対するアライメントを得るために移動させる必要のあるテンソルのサイズを低減させる最適化について説明する。この最適化は、リシェイプオペレーションの回数および/またはオペレーションシーケンス内の中間テンソルを表すために使用されるベクトルの数を低減させるように働き、それにより、プロセッサによって実施される必要のあるベクトル境界アライメント操作の回数を低減させることができる。 These optimizations are machine learning techniques such as group normalization (https://arxiv.org/pdf/1803.08494.pdf) and ghost batch normalization (https://arxiv.org/pdf/1705.08741.pdf). It is especially useful in operation sequences that implement. A direct implementation of such machine learning techniques reshapes the input tensor into more dimensions. Subtraction is then performed across some dimensions modified by the reshape and other dimensions not modified by the reshape. Derivatives of contraction and reshape are broadcasts, which are reshaped back to their original shape. Broadcasts also occur in some dimensions that have been modified by the reshape and some dimensions that have not been modified by the reshape. Reshape operations do nothing to data on platforms that have a linear address space. However, on platforms with vector memory, reshaping generally changes the shape alignment with respect to the vector memory, requiring data movement. This specification describes optimizations that reduce the size of tensors that need to be moved to obtain alignment with vector memory. This optimization works to reduce the number of reshape operations and / or the number of vectors used to represent intermediate tensors in the operation sequence, thereby vector boundary alignment operations that need to be performed by the processor. The number of times can be reduced.
+さまざまな図面中の同様の参照番号および名称は、同様の要素を示す。 Similar reference numbers and names in various drawings indicate similar elements.
+図1は、リシェイプオペレーションを含むオペレーションパターンであって、リシェイプオペレーションのサイズを最小限に抑えるように変換されることの可能なオペレーションパターンを検出するコンパイラ変換を実施する、例示的プロセス100を示すフローチャートである。コンパイラ変換については、XLAコンパイラに即して、また計算グラフ内のリシェイプオペレーション、縮約オペレーション、およびブロードキャストオペレーションのパターンに即して説明する。コンパイラおよびプロセスは、1つまたは複数の位置にある1つまたは複数のコンピュータからなるシステム上に実装することができ、そのシステムによって実施されることが可能である。 FIG. 1 is a flow chart illustrating an exemplary process 100 that performs a compiler transformation to detect operational patterns that include reshape operations and that can be transformed to minimize the size of the reshape operations. Is. Compiler transformations will be described in line with the XLA compiler and in line with the patterns of reshape operations, reduction operations, and broadcast operations in computational graphs. Compilers and processes can be implemented on, and implemented by, a system of one or more computers in one or more locations.
+プロセスは、リシェイプオペレーションを含むオペレーションパターンであって、変換されることの可能なオペレーションパターンを検出する(102)。このパターンは、XLAグラフ内のオペレーションパターンとすることができる。1つのそのようなパターンが、リシェイプにおいて変更されない1つまたは複数の次元が縮約されるときのreduce(reshape(X))である。このパターンでは、リシェイプオペレーションが、入力テンソルXに対して実施され、縮約オペレーションへの入力となるテンソルを返す。 A process discovers an operation pattern that includes a reshape operation that can be transformed (102). This pattern can be an operation pattern in an XLA graph. One such pattern is reduce (reshape (X)) when one or more dimensions that do not change in the reshape are reduced. In this pattern, the reshape operation is performed on the input tensor X and returns the tensor that is the input to the contraction operation.
+プロセスは、これらのオペレーションを、より小さなサイズのリシェイプを有するオペレーションパターンに変換する(104)。例えば、上述のreduce(reshape(X))パターンに当てはまるオペレーションが、reduce(reshape(reduce(X)))オペレーションパターンに変換される。この変換はさらなる縮約を追加することにより計算量を増大させるが、この変換にはリシェイプの合計サイズを低減させるという重要な利点があり、というのも、どちらの計算にも1つのリシェイプがあり、後者のリシェイプは、次元が縮約されており、その結果として、オリジナルよりも要素の数が真に少ないためである。プロセスは、さらなるパターンが検出されなくなるまで検出および変換をし続け、さらなるパターンが検出されなくなった時点で、コンパイラが、ターゲットハードウェアに専用の、変換されたパターンを含む計算を実装した、コードを生成する(106)。次いで、コンパイラまたはTensorFlowインフラストラクチャの他の要素は、生成されたコードを、実行できるようにターゲットハードウェアにデプロイする(108)。 The process transforms these operations into operation patterns with smaller sized reshapes (104). For example, an operation that applies to the reduce (reshape (X)) pattern described above is converted into a reduce (reshape (reduce (X))) operation pattern. This transformation increases the complexity by adding further contractions, but this transformation has the important advantage of reducing the total size of the reshapes, because both calculations have one reshape. The latter reshape is because the dimensions are contracted and, as a result, there are truly fewer elements than the original. The process continues to detect and transform until no more patterns are detected, at which point the compiler implements a calculation containing the transformed pattern specifically for the target hardware. Generate (106). The compiler or other element of the TensorFlow infrastructure then deploys the generated code to the target hardware for execution (108).
+最適化することの可能な、例示的なブロードキャストバージョンの別のパターンが、テンソルXの入力形状が最も外側のリシェイプによって返されるテンソルの出力形状と同じであるときのreshape(add(reshape(X), broadcast(Y))である。このオペレーションパターンは、add(X, broadcast( reshape( broadcast(Y))))に変換され、こちらのほうが、合計のリシェイプが少なく、かつリシェイプのサイズが小さく、というのも、リシェイプの出力が、余分な次元をそれが有しているので、より大きな形状にブロードキャストされるためである。このようにして、オペレーション全体を実施するのに必要なベクトル境界アライメント操作の回数が低減される。 Another pattern of exemplary broadcast versions that can be optimized is reshape (add (reshape (X)) when the input shape of the tensor X is the same as the output shape of the tensor returned by the outermost reshape. , broadcast (Y)). This operation pattern is converted to add (X, broadcast (reshape (broadcast (Y)))), which has less total reshape and smaller reshape size. This is because the output of the reshape is broadcast to a larger shape because it has extra dimensions. In this way, the vector boundary alignment operation required to perform the entire operation. The number of times is reduced.
+この変換は、任意の部分計算(subcomputation)に適用することができ、この部分計算は、以下のパターン
+reshape(
+f(
+g(reshape(G)),
+h(reshape(H)),..,
+a(broadcast(A)),
+b(broadcast(B)
+)
+),
+に一致するものであり、このパターンは最適化によって、
+f(
+g(G),
+h(H),...,
+a( broadcast( reshape(broadcast(A))),
+b( broadcast( reshape(broadcast(B)))
+)
+に変換される。小文字f、g、h、a、およびbは、グラフ内の数学的オペレーションである。彼の変換のパターンは、深さ優先のグラフ探索法を使用して見いだすことができる。いくつかの実装形態では、話を簡単にするために、探索は後行順、すなわちプロデューサがコンシューマより前にあるトポロジカルソートであり、グラフをその場で変換する。探索によって一致する部分木が見いだされると、その部分木が複製され、オリジナルの部分木ルートのユーザが新たな部分木ルートと置き換えられる。他のコンパイラパスが、複製されたコードおよびデッドコードを解決する。計算グラフ内のパターンを求めてグラフを探索する他の方法を使用することもできる。
+This transformation can be applied to any subcomputation, which has the following pattern:
+reshape (
+f (
+g (reshape (G)),
+h (reshape (H)), ..,
+a (broadcast (A)),
+b (broadcast (B)
+)
+),,
+This pattern is by optimization,
+f (
+g (G),
+h (H), ...,
+a (broadcast (reshape (broadcast (A)))),
+b (broadcast (reshape (broadcast (B))))
+)
+Is converted to. The lowercase letters f, g, h, a, and b are mathematical operations in the graph. The pattern of his transformation can be found using a depth-first graph search method. In some implementations, for the sake of simplicity, the search is a trailing order, a topological sort in which the producer precedes the consumer, transforming the graph on the fly. If the search finds a matching subtree, the subtree is duplicated and the user of the original subtree root is replaced with the new subtree route. Other compiler paths resolve duplicated and dead code. Other methods of searching the graph for patterns in the calculated graph can also be used.
+reduce(reshape(X))およびreshape(f(reshape(X),broadcast(Y))という形式からの、これら2つのパターン変換を用いて、グループ正規化および仮想バッチ正規化ならびにそれらの派生物を、より小さなリシェイプおよび結果として生じるより少ない所要メモリ量で行うことができる。 Group normalization and virtual batch normalization and their derivatives can be used with these two pattern transformations from the formats reduce (reshape (X)) and reshape (f (reshape (X), broadcast (Y))). It can be done with smaller reshapes and the resulting smaller memory requirements.
+例えば、グループ正規化の一実装形態は、必然的に
+reduce(reshape(画像,[B,H,W,C/G,G]),[1,2,3])
+と表現される。上記の画像入力の形状は、入力内の画像バッチのバッチサイズ、画像の高さ、画像の幅、および画像のチャネルの各次元を有する[B,H,W,C]である。グループの数はGグループである。この表現がこの形式で実行される場合、ある特定のハードウェアプラットフォーム上の大きな中間テンソル、および低速のリシェイプがこの表現により生じる。上記の変換はこの計算を、以下の形式
+reduce(reshape(reduce(画像,[1,2]),[B,C/G,G]),[1])
+に変換することにより改善する。変換プロセスについて説明する目的でこれを
+Y = reshape(X, [B, H, W, C/G, G])
+Z = reduce(Y, [1, 2, 3])
+と表す。
+For example, one implementation of group normalization is inevitably
+reduce (reshape (image, [B, H, W, C / G, G]), [1,2,3])
+It is expressed as. The shape of the image input described above is [B, H, W, C] having each dimension of the batch size of the image batch in the input, the height of the image, the width of the image, and the channel of the image. The number of groups is G group. When this representation is performed in this format, it results in a large intermediate tensor on a particular hardware platform, and a slow reshape. The above conversion takes this calculation into the following format:
+reduce (reshape (reduce (image, [1,2]), [B, C / G, G]), [1])
+It is improved by converting to. This is for the purpose of explaining the conversion process
+Y = reshape (X, [B, H, W, C / G, G])
+Z = reduce (Y, [1, 2, 3])
+It is expressed as.
+縮約オペレーションは、[B, H, W, C/G, G]という形状のテンソルYを、軸テンソル[1, 2, 3]によって指定された次元上で縮約し、テンソルZを返す。軸テンソル[1, 2, 3]は、縮約オペレーションがそれに沿って縮約する、テンソルYの次元[H, W, C/G]を表す。縮約オペレーションは、形状[B, G]をもつテンソルZを返す。 The contraction operation contracts a tensor Y of the shape [B, H, W, C / G, G] on the dimension specified by the axis tensor [1, 2, 3] and returns a tensor Z. The axis tensor [1, 2, 3] represents the dimension [H, W, C / G] of the tensor Y that the contraction operation contracts along with it. The contraction operation returns a tensor Z with shape [B, G].
+オリジナルパターンのパラメータが、変換パターンへの適切な入力にどのようにマッピングされるかについて、下で説明する。 How the parameters of the original pattern are mapped to the appropriate inputs to the transformation pattern is described below.
+議論を目的として、reduce(reshape(reduce(X, [1, 2]), [B, C/G, G]), [1])変換を
+W = reduce(X, [1, 2])
+Y2 = reshape(W, [B, C/G, G])
+Z2 = reduce(Y2, [1])
+と表す。
+For the purpose of discussion, reduce (reshape (reshape (X, [1, 2]), [B, C / G, G]), [1]) transformation
+W = reduce (X, [1, 2])
+Y 2 = reshape (W, [B, C / G, G])
+Z 2 = reduce (Y 2 , [1])
+It is expressed as.
+図2は、変換の例示的プロセス200を示すフローチャートである。これについては、今しがた説明した例示的パターンに即して説明する。このプロセス200は、上で図1を参照して説明した変換(104)の一例示的実装形態である。
+FIG. 2 is a flowchart showing an
+プロセスは、オリジナルオペレーションパターンによって返されるテンソルの最終出力次元を決定する(202)。最終出力次元は、Xの形状を最終出力形状と比較することによって決定される。この例では、オリジナルパターン例は、[B, H, W, C]という形状のテンソルXを受け取り、[B, G]という形状のテンソルを返す。 The process determines the final output dimension of the tensor returned by the original operation pattern (202). The final output dimension is determined by comparing the shape of X with the final output shape. In this example, the original pattern example receives a tensor X of the shape [B, H, W, C] and returns a tensor of the shape [B, G].
+プロセスは、入力テンソルの、最終出力内になくオリジナルパターンのリシェイプオペレーションによるリシェイプに影響を及ぼしもしない次元に沿って縮約する(204)。この例では、オリジナルパターン
+Y = reshape(X, [B, H, W, C/G, G])
+Z = reduce(Y, [1, 2, 3])
+から、コンパイラは、テンソルXの第0および第3のインデックス、すなわちBおよびCがそれぞれ、最終出力内にあること、および最終出力に影響を及ぼすことを、リシェイプオペレーションへの軸テンソル入力から決定する。したがって、Xは、Xの第1次元および第2次元、すなわちH次元およびW次元に沿って縮約される。
+W = reduce(X, [1, 2])
+The process contracts along a dimension of the input tensor that is not in the final output and does not affect the reshape of the original pattern's reshape operation (204). In this example, the original pattern
+Y = reshape (X, [B, H, W, C / G, G])
+Z = reduce (Y, [1, 2, 3])
+From, the compiler determines from the axis tensor input to the reshape operation that the 0th and 3rd indexes of tensor X, B and C, respectively, are in the final output and affect the final output. .. Therefore, X is contracted along the first and second dimensions of X, namely the H and W dimensions.
+W = reduce (X, [1, 2])
+プロセスは、縮約オペレーションの出力テンソルをリシェイプする(206)。縮約オペレーション、この例ではWの出力テンソルは、オリジナルパターンではあるが最終出力内にないかまたは変換されない次元を除いた形状に、リシェイプされる。オリジナルパターンにおいて、第3次元、すなわちCは、Gで除算され、第4次元、すなわちGは追加されている。第0次元、すなわちBは、最終出力内にある。したがって、この変換におけるリシェイプオペレーションは、縮約後のテンソルを[B, C/G, G]にリシェイプする。
+Y2 = reshape(W, [B, C/G, G])
+The process reshapes the output tensor of the contraction operation (206). The contraction operation, the output tensor of W in this example, is reshaped to the original pattern but excluding dimensions that are not in the final output or are not transformed. In the original pattern, the third dimension, C, is divided by G, and the fourth dimension, G, is added. The 0th dimension, or B, is in the final output. Therefore, the reshape operation in this transformation reshapes the contracted tensor to [B, C / G, G].
+Y 2 = reshape (W, [B, C / G, G])
+プロセスは、リシェイプオペレーションの出力テンソルを、オリジナルパターンの出力テンソル内にない任意の次元に沿って縮約する(208)。この例では、オリジナルパターンは、[B, G]という形状のテンソルを出力する。したがって、この変換におけるリシェイプオペレーションの出力の第1のインデックスが縮約され、縮約オペレーションは、[B, G]という形状のテンソルを返す。
+Z2 = reduce(Y2, [1])
+The process contracts the output tensor of the reshape operation along any dimension that is not in the output tensor of the original pattern (208). In this example, the original pattern outputs a tensor with the shape [B, G]. Therefore, the first index of the output of the reshape operation in this transformation is contracted, and the contracted operation returns a tensor of the shape [B, G].
+Z 2 = reduce (Y 2 , [1])
+同じルールが、reshape(演算子( reshape(X), broadcast(Y)))という形式のオリジナルパターンの、演算子(X, broadcast( reshape( broadcast(Y))))という形式への変換にも適用される。 The same rule applies to the conversion of the original pattern of the form reshape (operator (reshape (X), broadcast (Y))) to the form of operator (X, broadcast (reshape (broadcast (Y)))). Applies.
+本明細書において説明した本主題ならびにアクションおよび動作の実施形態は、デジタル電子回路として、有形に具現化されたコンピュータソフトウェアもしくはコンピュータファームウェアとして、本明細書において開示した構造およびそれらの構造的等価物を含むコンピュータハードウェアとして、またはそれらのうちの1つもしくは複数のものの組合せとして、実装することができる。本明細書において説明した本主題の実施形態は、データ処理装置によって実行するかまたはデータ処理装置の動作を制御するためにコンピュータプログラムキャリア上に符号化された、1つまたは複数のコンピュータプログラム、例えばコンピュータプログラム命令の1つまたは複数のモジュールとして、実装することができる。キャリアは、有形の非一時的コンピュータ記憶媒体とすることができる。その代わりにまたはそれに加えて、キャリアは、情報をデータ処理装置によって実行する目的で適切なレシーバ装置に送信できるように符号化するために生成される、人工的に生成された伝搬信号、例えば機械により生成された電気信号、光信号、または電磁信号とすることもできる。コンピュータ記憶媒体は、機械可読記憶デバイス、機械可読記憶基板、ランダムアクセスもしくはシリアルアクセスのメモリデバイス、またはそれらのうちの1つもしくは複数のものの組合せとすることもでき、あるいはその一部とすることもできる。コンピュータ記憶媒体は、伝搬信号ではない。 The subject matter and the embodiments of actions and actions described herein describe the structures disclosed herein and their structural equivalents as tangibly embodied computer software or computer firmware as digital electronic circuits. It can be implemented as computer hardware, including, or as a combination of one or more of them. The embodiments of the subject described herein are one or more computer programs, eg, encoded on a computer program carrier to be executed by a data processor or to control the operation of the data processor. It can be implemented as one or more modules of computer program instructions. The carrier can be a tangible non-temporary computer storage medium. Alternatively or additionally, the carrier is an artificially generated propagating signal, eg, a machine, that is generated to encode the information so that it can be transmitted to the appropriate receiver device for the purpose of performing it by the data processing device. It can also be an electrical signal, an optical signal, or an electromagnetic signal generated by. The computer storage medium can be a machine-readable storage device, a machine-readable storage board, a random access or serial access memory device, or a combination of one or more of them, or a part thereof. can. The computer storage medium is not a propagating signal.
+「データ処理装置」という用語は、例として1つのプログラマブルプロセッサ、1つのコンピュータ、または複数のプロセッサもしくはコンピュータを含む、データを処理するためのあらゆる種類の装置、デバイス、および機械を包含するものである。データ処理装置は、専用論理回路、例えばFPGA(フィールドプログラマブルゲートアレイ)、ASIC(特定用途向け集積回路)、またはGPU(グラフィック処理装置)を含むことができる。装置は、ハードウェアに加えて、コンピュータプログラムのための実行環境を作り出すコード、例えばプロセッサファームウェア、プロトコルスタック、データベース管理システム、オペレーティングシステム、またはそれらのうちの1つもしくは複数のものの組合せを構成するコードを含むこともできる。 The term "data processor" includes all types of devices, devices, and machines for processing data, including, for example, one programmable processor, one computer, or multiple processors or computers. .. Data processing equipment can include dedicated logic circuits, such as FPGAs (field programmable gate arrays), ASICs (application specific integrated circuits), or GPUs (graphics processing equipment). In addition to hardware, the device is code that creates an execution environment for computer programs, such as processor firmware, protocol stacks, database management systems, operating systems, or a combination of one or more of them. Can also be included.
+プログラム、ソフトウェア、ソフトウェアアプリケーション、アプリ、モジュール、ソフトウェアモジュール、エンジン、スクリプト、またはコードとも呼ばれるかまたは記載されることのあるコンピュータプログラムは、コンパイル型言語もしくはインタープリタ型言語、または宣言型言語もしくは手続き型言語を含む、任意の形態のプログラミング言語で記述することができ、またそれは、スタンドアロンプログラムとして、あるいはモジュール、コンポーネント、エンジン、サブルーチン、またはデータ通信ネットワークによって相互接続された1つもしくは複数の位置にある1つもしくは複数のコンピュータを含んでよいコンピューティング環境において実行するのに適した他のユニットとして、を含む、任意の形態でデプロイすることができる。 Computer programs that may also be referred to or described as programs, software, software applications, apps, modules, software modules, engines, scripts, or code are compiled or interpreted languages, or declarative or procedural languages. It can be written in any form of programming language, including, and it can be in one or more locations interconnected by a module, component, engine, subroutine, or data communication network, either as a stand-alone program or by a module, component, engine, subroutine, or data communication network. It can be deployed in any form, including, as another unit suitable for running in a computing environment that may include one or more computers.
+コンピュータプログラムは、その必要はないが、ファイルシステム内のファイルに対応してよい。コンピュータプログラムは、他のプログラムもしくはデータを保持するファイルの一部分、例えばマークアップ言語ドキュメント内に格納された1つもしくは複数のスクリプト内に、当該のプログラムに専用の単一のファイル内に、または複数の連係されたファイル、例えばコードの1つもしくは複数のモジュール、サブプログラム、もしくは一部分を格納したファイル内に、格納することができる。 The computer program does not have to, but may correspond to the files in the file system. A computer program may be part of a file that holds other programs or data, such as in one or more scripts stored in a markup language document, in a single file dedicated to that program, or in multiples. Can be stored in a linked file, such as a file containing one or more modules, subprograms, or parts of code.
+本明細書において説明したプロセスおよび論理フローは、入力データに作用し出力を生成することによって動作を実施するための1つまたは複数のコンピュータプログラムを実行する、1つまたは複数のコンピュータによって実施されることが可能である。プロセスおよび論理フローは、専用論理回路、例えばFPGA、ASIC、もしくはGPUによって、または専用論理回路とプログラムされた1つもしくは複数のコンピュータとの組合せによって、実施されることも可能である。 The processes and logical flows described herein are carried out by one or more computers running one or more computer programs to act on the input data and produce output to perform the operation. It is possible. Processes and logic flows can also be carried out by dedicated logic circuits, such as FPGAs, ASICs, or GPUs, or by a combination of dedicated logic circuits and one or more programmed computers.
+コンピュータプログラムの実行に適したコンピュータは、汎用マイクロプロセッサもしくは専用マイクロプロセッサもしくはその両方、または他の任意の種類の中央処理装置に基づくことができる。一般に、中央処理装置は、読出し専用メモリまたはランダムアクセスメモリまたはその両方から、命令およびデータを受領する。コンピュータの不可欠な要素が、命令を実行するための中央処理装置、ならびに命令およびデータを格納するための1つまたは複数のメモリデバイスである。中央処理装置およびメモリは、専用論理回路によって補完されるかまたは専用論理回路に組み込むことが可能である。 A computer suitable for executing a computer program can be based on a general purpose microprocessor and / or a dedicated microprocessor, or any other type of central processing unit. Generally, the central processing unit receives instructions and data from read-only memory and / or random access memory. An integral part of a computer is a central processing unit for executing instructions, as well as one or more memory devices for storing instructions and data. The central processing unit and memory can be complemented by dedicated logic circuits or incorporated into dedicated logic circuits.
+一般に、コンピュータはまた、1つまたは複数の大容量記憶デバイスを含むか、またはそこからデータを受信するように、もしくはそこにデータを転送するように動作可能に結合される。大容量記憶デバイスは、例えば、磁気ディスク、光磁気ディスク、もしくは光ディスク、またはソリッドステートドライブとすることができる。しかし、コンピュータはそのようなデバイスを有している必要はない。さらに、コンピュータは別のデバイスに、例えばほんの数例を挙げると、モバイル電話、パーソナルデジタルアシスタント(PDA)、モバイルオーディオプレーヤもしくはモバイルビデオプレーヤ、ゲーム機、グローバルポジショニングシステム(GPS)レシーバ、またはポータブル記憶デバイス、例えばユニバーサルシリアルバス(USB)フラッシュドライブに、埋め込むことができる。 In general, computers also include one or more mass storage devices, or are operably coupled to receive data from or transfer data to it. The mass storage device can be, for example, a magnetic disk, a magneto-optical disk, or an optical disk, or a solid state drive. However, the computer does not have to have such a device. In addition, the computer may be another device, such as a mobile phone, personal digital assistant (PDA), mobile audio player or mobile video player, game console, Global Positioning System (GPS) receiver, or portable storage device, to name just a few. , For example, can be embedded in a universal serial bus (USB) flash drive.
+ユーザとの対話を可能にするために、本明細書において説明した本主題の実施形態は、ユーザに情報を表示するためのディスプレイデバイス、例えばLCD(液晶ディスプレイ)モニタと、ユーザがそれによってコンピュータに入力することのできる入力デバイス、例えばキーボードおよびポインティングデバイス、例えばマウス、トラックボール、またはタッチパッドとを有するコンピュータ上に実装するか、またはそのコンピュータと通信するように構成することができる。他の種類のデバイスを使用して、ユーザとの対話を可能にすることもでき、例えば、ユーザに提供されるフィードバックは、任意の形態の感覚フィードバック、例えば視覚フィードバック、聴覚フィードバック、または触覚フィードバックとすることができ、ユーザからの入力は、音響入力、音声入力、または触覚入力を含む、任意の形態で受領されることが可能である。加えて、コンピュータはユーザと、ユーザによって使用されているデバイスにドキュメントを送出し、そこからドキュメントを受信することによって、例えば、ユーザのデバイス上のウェブブラウザに、そのウェブブラウザから受信した要求に応答してウェブページを送出することによって、またはユーザデバイス、例えばスマートフォンもしくは電子タブレット上で実行されているアプリと対話することによって、対話することができる。また、コンピュータはユーザと、メッセージングアプリケーションを実行しているパーソナルデバイス、例えばスマートフォンに、テキストメッセージまたは他の形態のメッセージを送出し、ユーザから返信として応答メッセージを受信することによって、対話することができる。 To enable interaction with the user, embodiments of the subject described herein are display devices for displaying information to the user, such as an LCD (LCD) monitor, thereby the user to a computer. It can be mounted on or configured to communicate with a computer that has an input device capable of inputting, such as a keyboard and pointing device, such as a mouse, trackball, or touchpad. Other types of devices can also be used to enable interaction with the user, for example, the feedback provided to the user may be any form of sensory feedback, such as visual feedback, auditory feedback, or tactile feedback. The input from the user can be received in any form, including acoustic input, voice input, or tactile input. In addition, the computer sends documents to and from the user and the device used by the user, and by receiving the document, for example, to a web browser on the user's device, responds to requests received from that web browser. You can interact with it by launching a web page or by interacting with an app running on a user device, such as a smartphone or electronic tablet. The computer can also interact with the user by sending a text message or other form of message to a personal device running a messaging application, such as a smartphone, and receiving a response message as a reply from the user. ..
+本明細書では、システム、装置、およびコンピュータプログラムコンポーネントに関連して、「～ように構成される」という用語を使用している。1つまたは複数のコンピュータからなるシステムが、特定の動作またはアクションを実施するように構成されることは、システムが、動作の際にそのシステムにその動作またはアクションを実施させるソフトウェア、ファームウェア、ハードウェア、またはそれらの組合せを、システム上にインストールされる、ということを意味する。1つまたは複数のコンピュータプログラムが、特定の動作またはアクションを実施するように構成されることは、データ処理装置によって実行されるとその装置にその動作またはアクションを実施させる命令を、その1つまたは複数のプログラムが含む、ということを意味する。専用論理回路が、特定の動作またはアクションを実施するように構成されることは、その動作またはアクションを実施する電子論理回路を、その回路が有する、ということを意味する。 As used herein, the term "configured as" is used in the context of systems, appliances, and computer program components. When a system consisting of one or more computers is configured to perform a particular action or action, the system causes the system to perform that action or action when it operates, software, firmware, or hardware. , Or a combination thereof, is installed on the system. When one or more computer programs are configured to perform a particular action or action, one or more of the instructions that cause the device to perform that action or action when executed by the data processing device. It means that it contains multiple programs. The fact that a dedicated logic circuit is configured to perform a particular action or action means that the circuit has an electronic logic circuit that performs that action or action.
+本明細書は、実装形態の多くの具体的詳細を含んでいるが、これらは、特許請求の範囲自体によって定められる、特許請求されるものの範囲に対する限定と解釈するのではなく、特定の発明の特定の実施形態に特有であり得る特徴についての説明と解釈されたい。本明細書において別々の実施形態の文脈の中で説明されるある特定の特徴は、単一の実施形態において組み合わせて実装することもできる。反対に、単一の実施形態の文脈の中で説明されるさまざまな特徴は、複数の実施形態において別々に、または任意の適切な部分組合せで、実装することもできる。さらに、特徴については上で、ある特定の組合せで作用するものと説明されていることがあり、さらにはそのようなものとして最初に特許請求されていることすらあるが、特許請求された組合せからの1つまたは複数の特徴を、場合によっては、その組合せから削除することができ、請求項は、部分組合せまたは部分組合せの変形を対象としてよい。 The present specification contains many specific details of the embodiments, but these are not construed as limitations to the scope of what is claimed, as defined by the claims themselves, but rather of a particular invention. It should be interpreted as an explanation of features that may be specific to a particular embodiment. Certain features described herein within the context of separate embodiments may also be implemented in combination in a single embodiment. Conversely, the various features described in the context of a single embodiment can also be implemented separately in multiple embodiments or in any suitable subcombination. In addition, the features may be described above as acting in a particular combination, and even the first claimed as such, from the claimed combination. One or more of the features may be removed from the combination in some cases, and the claims may be directed to a partial combination or a variant of the partial combination.
+同様に、動作については、特定の順序で図面に描かれ特許請求の範囲に記載されているが、これは、望ましい結果を得るために、そのような動作が図示の特定の順序で、もしくは順番に実施されること、または図示の全ての動作が実施されることを要求するものと理解すべきではない。ある特定の状況下では、マルチタスキングおよび並列処理が有利となることがある。さらに、上述した実施形態におけるさまざまなシステムモジュールおよびシステムコンポーネントの分離は、全ての実施形態においてそのような分離を要求するものと理解すべきではなく、説明したプログラムコンポーネントとシステムは一般に、単一のソフトウェア製品に一緒に統合するか、または複数のソフトウェア製品にパッケージ化できることを理解されたい。 Similarly, the actions are drawn in the drawings in a particular order and described in the claims, but this is because such actions are in the particular order shown or in order to obtain the desired result. It should not be understood as requiring that it be performed or that all the actions shown in the figure be performed. Under certain circumstances, multitasking and parallelism can be advantageous. Moreover, the separation of the various system modules and system components in the embodiments described above should not be understood as requiring such separation in all embodiments, and the program components and systems described are generally single. It should be understood that it can be integrated into a software product together or packaged into multiple software products.
+以上、本主題の特定の実施形態について説明してきた。他の実施形態が、添付の特許請求の範囲に記載の範囲に含まれる。例えば、特許請求の範囲に記載されたアクションは、異なる順序で実施してもなお、望ましい結果を得ることができる。一例として、添付の図中に描かれたプロセスは、望ましい結果を得るために、図示の特定の順序、または順番を必ずしも必要とするとは限らない。場合によっては、マルチタスキングおよび並列処理が有利となることがある。 The specific embodiments of this subject have been described above. Other embodiments are included in the scope of the appended claims. For example, the actions described in the claims can still obtain the desired results even if they are performed in different orders. As an example, the processes depicted in the attached figures do not necessarily require the particular order, or order shown, to obtain the desired results. In some cases, multitasking and parallel processing can be advantageous.
+100 例示的プロセス
+200 例示的プロセス
+100 Illustrative process
+200 Illustrative process
+Claims (12)
+計算オペレーショングラフ内のテンソルに対するオリジナルオペレーションパターンを検出するステップであって、
+前記オリジナルオペレーションパターンが、最終出力テンソルを返し、入力として入力テンソルを受け取り、
+前記オリジナルオペレーションパターンが、オリジナルリシェイプオペレーションを含み、前記オリジナルリシェイプオペレーションが、(i)オリジナルテンソルを返し、(ii)より少ないメモリを使用するように変換されることが可能である、ステップと、
+前記オリジナルオペレーションパターンを、前記オリジナルテンソルよりも小さなテンソルを返す1つまたは複数のリシェイプオペレーションを有する新たなオペレーションパターンに変換するステップと、
+ターゲットハードウェアプラットフォームに専用の、前記新たなオペレーションパターンによって表される計算を実装した、実行可能コードを生成するステップと
+を含む、方法。 A method performed by one or more computers,
+A step to detect the original operation pattern for a tensor in a computational operation graph.
+The original operation pattern returns the final output tensor and receives the input tensor as input.
+The step and the step, wherein the original operation pattern includes an original reshape operation, and the original reshape operation can be transformed to (i) return an original tensor and (ii) use less memory.
+A step of transforming the original operation pattern into a new operation pattern with one or more reshape operations that return a tensor smaller than the original tensor.
+A method comprising the steps of generating executable code that implements the computations represented by the new operation pattern specifically for the target hardware platform.
+をさらに含む、請求項1に記載の方法。 The method of claim 1, further comprising deploying the generated code to the target hardware platform for execution.
+請求項1または2に記載の方法。 The original reshape operation requires the movement of data to satisfy the vector instruction or vector memory alignment requirements on the target hardware platform.
+The method according to claim 1 or 2.
+前記オリジナルオペレーションパターンによって返される前記最終出力テンソルの最終出力次元を決定するステップと、
+前記入力テンソルの、前記最終出力テンソル内になく前記オリジナルリシェイプオペレーションによるリシェイプに影響を及ぼしもしない次元に沿って縮約して、第1の中間結果テンソルを返すステップと、
+前記第1の中間結果テンソルをリシェイプして、第2の中間結果テンソルを返すステップと、
+前記第2の中間結果テンソルを、前記オリジナルオペレーションパターンからの前記最終出力テンソルの次元内にない任意の次元に沿って縮約するステップと
+を含む、請求項1から3のいずれか一項に記載の方法。 The step of converting the original operation pattern is
+The step of determining the final output dimension of the final output tensor returned by the original operation pattern,
+A step of reducing the input tensor along a dimension that is not in the final output tensor and does not affect the reshape by the original reshape operation, and returns a first intermediate result tensor.
+The step of reshaping the first intermediate result tensor and returning the second intermediate result tensor,
+13. the method of.
+計算オペレーショングラフ内のテンソルに対するオリジナルオペレーションパターンを検出することであって、
+前記オリジナルオペレーションパターンが、最終出力テンソルを返し、入力として入力テンソルを受け取り、
+前記オリジナルオペレーションパターンが、オリジナルリシェイプオペレーションを含み、前記オリジナルリシェイプオペレーションが、(i)オリジナルテンソルを返し、(ii)より少ないメモリを使用するように変換されることが可能である、検出することと、
+前記オリジナルオペレーションパターンを、前記オリジナルテンソルよりも小さなテンソルを返す1つまたは複数のリシェイプオペレーションを有する新たなオペレーションパターンに変換することと、
+ターゲットハードウェアプラットフォームに専用の、前記新たなオペレーションパターンによって表される計算を実装した、実行可能コードを生成することと
+を含むアクションを実施させる、1つまたは複数の非一時的コンピュータ可読記憶媒体。 One or more non-temporary computer-readable storage media in which an instruction is encoded, and when the instruction is executed by one or more computers, the one or more computers.
+To detect the original operation pattern for a tensor in a computational operation graph,
+The original operation pattern returns the final output tensor and receives the input tensor as input.
+The original operation pattern includes the original reshape operation, which can be transformed to (i) return an original tensor and (ii) use less memory. ,
+Converting the original operation pattern into a new operation pattern with one or more reshape operations that return a tensor smaller than the original tensor.
+One or more non-temporary computer-readable storage media that implements actions, including generating executable code, that implement the computations represented by the new operation patterns specifically for the target hardware platform.
+前記生成されたコードを、実行のため前記ターゲットハードウェアプラットフォームにデプロイすること
+をさらに含む、請求項5に記載の非一時的コンピュータ可読記憶媒体。 The action is
+The non-temporary computer-readable storage medium of claim 5, further comprising deploying the generated code to the target hardware platform for execution.
+請求項5または6に記載の非一時的コンピュータ可読記憶媒体。 The original reshape operation requires the movement of data to satisfy the vector instruction or vector memory alignment requirements on the target hardware platform.
+The non-temporary computer-readable storage medium of claim 5 or 6.
+前記オリジナルオペレーションパターンによって返される前記最終出力テンソルの最終出力次元を決定することと、
+前記入力テンソルの、前記最終出力テンソル内になく前記オリジナルリシェイプオペレーションによるリシェイプに影響を及ぼしもしない次元に沿って縮約して、第1の中間結果テンソルを返すことと、
+前記第1の中間結果テンソルをリシェイプして、第2の中間結果テンソルを返すことと、
+前記第2の中間結果テンソルを、前記オリジナルオペレーションパターンからの前記最終出力テンソルの次元内にない任意の次元に沿って縮約することと
+を含む、請求項5から7のいずれか一項に記載の非一時的コンピュータ可読記憶媒体。 Converting the original operation pattern
+Determining the final output dimension of the final output tensor returned by the original operation pattern,
+Returning the first intermediate result tensor by contracting the input tensor along a dimension that is not in the final output tensor and does not affect the reshape by the original reshape operation.
+Reshaping the first intermediate result tensor and returning the second intermediate result tensor,
+The second intermediate result tensor is set forth in any one of claims 5 to 7, comprising reducing the second intermediate result tensor along any dimension not within the dimension of the final output tensor from the original operation pattern. Non-temporary computer-readable storage medium.
+1つまたは複数のコンピュータと、命令が格納された1つまたは複数の記憶デバイスと
+を備え、前記命令が、前記1つまたは複数のコンピュータによって実行されると、前記1つまたは複数のコンピュータに、
+計算オペレーショングラフ内のテンソルに対するオリジナルオペレーションパターンを検出することであって、
+前記オリジナルオペレーションパターンが、最終出力テンソルを返し、入力として入力テンソルを受け取り、
+前記オリジナルオペレーションパターンが、オリジナルリシェイプオペレーションを含み、前記オリジナルリシェイプオペレーションが、(i)オリジナルテンソルを返し、(ii)より少ないメモリを使用するように変換されることが可能である、検出することと、
+前記オリジナルオペレーションパターンを、前記オリジナルテンソルよりも小さなテンソルを返す1つまたは複数のリシェイプオペレーションを有する新たなオペレーションパターンに変換することと、
+ターゲットハードウェアプラットフォームに専用の、前記新たなオペレーションパターンによって表される計算を実装した、実行可能コードを生成することと
+を含むアクションを実施させるように動作可能である、システム。 It ’s a system,
+It comprises one or more computers and one or more storage devices in which the instructions are stored, and when the instructions are executed by the one or more computers, the one or more computers.
+To detect the original operation pattern for a tensor in a computational operation graph,
+The original operation pattern returns the final output tensor and receives the input tensor as input.
+The original operation pattern includes the original reshape operation, which can be transformed to (i) return an original tensor and (ii) use less memory. ,
+Converting the original operation pattern into a new operation pattern with one or more reshape operations that return a tensor smaller than the original tensor.
+A system capable of performing actions, including generating executable code, that implements the computations represented by the new operation pattern specifically for the target hardware platform.
+前記生成されたコードを、実行のため前記ターゲットハードウェアプラットフォームにデプロイすること
+さらに含む、請求項9に記載のシステム。 The action is
+9. The system of claim 9, further comprising deploying the generated code to the target hardware platform for execution.
+請求項9または10に記載のシステム。 The original reshape operation requires the movement of data to satisfy the vector instruction or vector memory alignment requirements on the target hardware platform.
+The system according to claim 9 or 10.
+前記オリジナルオペレーションパターンによって返される前記最終出力テンソルの最終出力次元を決定することと、
+前記入力テンソルの、前記最終出力テンソル内になく前記オリジナルリシェイプオペレーションによるリシェイプに影響を及ぼしもしない次元に沿って縮約して、第1の中間結果テンソルを返すことと、
+前記第1の中間結果テンソルをリシェイプして、第2の中間結果テンソルを返すことと、
+前記第2の中間結果テンソルを、前記オリジナルオペレーションパターンからの前記最終出力テンソルの次元内にない任意の次元に沿って縮約することと
+を含む、請求項9から11のいずれか一項に記載のシステム。 Converting the original operation pattern
+Determining the final output dimension of the final output tensor returned by the original operation pattern,
+Returning the first intermediate result tensor by contracting the input tensor along a dimension that is not in the final output tensor and does not affect the reshape by the original reshape operation.
+Reshaping the first intermediate result tensor and returning the second intermediate result tensor,
+The second intermediate result tensor is set forth in any one of claims 9 to 11, comprising reducing the second intermediate result tensor along any dimension not within the dimension of the final output tensor from the original operation pattern. System.
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US16/402,981 US11537939B2 (en) | 2019-05-03 | 2019-05-03 | Reshape and broadcast optimizations to avoid unnecessary data movement |
+US16/402,981 | 2019-05-03 | ||
+PCT/US2020/030752 WO2020227015A1 (en) | 2019-05-03 | 2020-04-30 | Reshape and broadcast optimizations to avoid unnecessary data movement |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+JP2022524659A JP2022524659A (en) | 2022-05-09 |
+JP7089124B2 true JP7089124B2 (en) | 2022-06-21 |
+Family
+ID=70918968
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+JP2021565088A Active JP7089124B2 (en) | 2019-05-03 | 2020-04-30 | Reshape and broadcast optimizations to avoid unnecessary data movement |
+Country Status (5)
+Country | Link |
+---|---|
+US (2) | US11537939B2 (en) |
+EP (1) | EP3942406B1 (en) |
+JP (1) | JP7089124B2 (en) |
+CN (1) | CN113767364A (en) |
+WO (1) | WO2020227015A1 (en) |
+Families Citing this family (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+CN112463160A (en) * | 2020-11-25 | 2021-03-09 | 安徽寒武纪信息科技有限公司 | Compiling method, compiling device, electronic equipment and storage medium |
+CN112597424B (en) * | 2020-12-22 | 2024-04-26 | 无锡灵汐类脑科技有限公司 | Tensor calculation method, device, chip and medium based on broadcast mechanism |
+CN113221126A (en) * | 2021-05-31 | 2021-08-06 | 北京中科天齐信息技术有限公司 | TensorFlow program vulnerability detection method and device and electronic equipment |
+Family Cites Families (12)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7133048B2 (en) * | 2004-06-30 | 2006-11-07 | Mitsubishi Electric Research Laboratories, Inc. | Variable multilinear models for facial synthesis |
+US11151446B2 (en) * | 2015-10-28 | 2021-10-19 | Google Llc | Stream-based accelerator processing of computational graphs |
+KR102433254B1 (en) * | 2015-10-28 | 2022-08-18 | 구글 엘엘씨 | Processing computational graphs |
+US10817802B2 (en) * | 2016-05-07 | 2020-10-27 | Intel Corporation | Apparatus for hardware accelerated machine learning |
+US10592213B2 (en) * | 2016-10-19 | 2020-03-17 | Intel Corporation | Preprocessing tensor operations for optimal compilation |
+US10896367B2 (en) * | 2017-03-07 | 2021-01-19 | Google Llc | Depth concatenation using a matrix computation unit |
+US11544545B2 (en) * | 2017-04-04 | 2023-01-03 | Hailo Technologies Ltd. | Structured activation based sparsity in an artificial neural network |
+US10331445B2 (en) * | 2017-05-24 | 2019-06-25 | Microsoft Technology Licensing, Llc | Multifunction vector processor circuits |
+CN110574050A (en) * | 2017-05-31 | 2019-12-13 | 英特尔公司 | Gradient-based training engine for quaternion-based machine learning system |
+US11645835B2 (en) * | 2017-08-30 | 2023-05-09 | Board Of Regents, The University Of Texas System | Hypercomplex deep learning methods, architectures, and apparatus for multimodal small, medium, and large-scale data representation, analysis, and applications |
+US10796225B2 (en) * | 2018-08-03 | 2020-10-06 | Google Llc | Distributing tensor computations across computing devices |
+US10771088B1 (en) * | 2019-02-28 | 2020-09-08 | International Business Machines Corporation | Optimal multi-dimensional data compression by tensor-tensor decompositions tensor |
+-
+2019
+- 2019-05-03 US US16/402,981 patent/US11537939B2/en active Active
+-
+2020
+- 2020-04-30 WO PCT/US2020/030752 patent/WO2020227015A1/en unknown
+- 2020-04-30 EP EP20729272.3A patent/EP3942406B1/en active Active
+- 2020-04-30 CN CN202080033009.6A patent/CN113767364A/en active Pending
+- 2020-04-30 JP JP2021565088A patent/JP7089124B2/en active Active
+-
+2022
+- 2022-12-23 US US18/088,229 patent/US20230206126A1/en active Pending
+Non-Patent Citations (2)
+Title |
+---|
+@Vengineer，最新テクノロジ・マニアの挑戦…ＡＩサクサク用ＴｅｎｓｏｒＦｌｏｗ ＸＬＡ ＡＯＴコンパイラ探訪 初めてのＧｏｏｇｌｅソースコード！ ＡＩ用コンパイラの可能性を探る，Ｉｎｔｅｒｆａｃｅ ２０１７年９月号，日本，ＣＱ出版株式会社，2017年，第43巻, 第9号，pp.138-147，ISSN 0387-9569 |
+LI Mingzhen et al.，The Deep Learning Compiler: A Comprehensive Survey，arXiv.org [online]，2020年02月06日，pp.1-36，[2022年4月26日検索], インターネット<URL : https://arxiv.org/abs/2002.03794v1> |
+Also Published As
+Publication number | Publication date |
+---|---|
+JP2022524659A (en) | 2022-05-09 |
+CN113767364A (en) | 2021-12-07 |
+US20200349465A1 (en) | 2020-11-05 |
+WO2020227015A1 (en) | 2020-11-12 |
+US20230206126A1 (en) | 2023-06-29 |
+EP3942406B1 (en) | 2023-01-18 |
+EP3942406A1 (en) | 2022-01-26 |
+US11537939B2 (en) | 2022-12-27 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+JP7089124B2 (en) | Reshape and broadcast optimizations to avoid unnecessary data movement | |
+Yang et al. | Synetgy: Algorithm-hardware co-design for convnet accelerators on embedded fpgas | |
+JP2018195314A (en) | Domain specific language for generation of recurrent neural network architectures | |
+Dongarra et al. | Accelerating numerical dense linear algebra calculations with GPUs | |
+Ye et al. | Inverted pyramid multi-task transformer for dense scene understanding | |
+US10901715B1 (en) | Lazy compilation and kernel fusion in dynamic computation graphs | |
+CN112148637A (en) | Apparatus, method, medium for tuning round robin ordering in a computer program | |
+US10713022B2 (en) | Systems and methods for stencil amplification | |
+CN103858099A (en) | Technique for compiling and running high-level programs on heterogeneous computers | |
+CN114897173B (en) | Method and device for determining PageRank based on variable component sub-line | |
+Li et al. | Efficient parallel implementations of sparse triangular solves for GPU architectures | |
+CN114461221A (en) | Compiling method, compiling device, electronic device, and storage medium | |
+Georganas et al. | Harnessing deep learning via a single building block | |
+Kronawitter et al. | Optimizations applied by the ExaStencils code generator | |
+US20200410330A1 (en) | Composable neural network kernels | |
+Stow et al. | Cain: Automatic code generation for simultaneous convolutional kernels on focal-plane sensor-processors | |
+Savin et al. | Vectorization of flat loops of arbitrary structure using instructions AVX-512 | |
+Ma et al. | Accelerating deep neural network filter pruning with mask-aware convolutional computations on modern CPUs | |
+US20140258206A1 (en) | Method and program structure for machine learning | |
+JP7297286B2 (en) | Optimization method, optimization program, reasoning method, and reasoning program | |
+CN114385180A (en) | Data processing method, device and equipment and computer storage medium | |
+Ozen et al. | Squeezing correlated neurons for resource-efficient deep neural networks | |
+US20170115973A1 (en) | Operating method of semiconductor device and semiconductor system | |
+US9367291B2 (en) | Apparatus and method for generating vector code | |
+JP2017111749A (en) | Calculation code generation device, method and program |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+A621 | Written request for application examination |
+Free format text: JAPANESE INTERMEDIATE CODE: A621Effective date: 20211221 |
+|
+A871 | Explanation of circumstances concerning accelerated examination |
+Free format text: JAPANESE INTERMEDIATE CODE: A871Effective date: 20211221 |
+|
+TRDD | Decision of grant or rejection written | ||
+A01 | Written decision to grant a patent or to grant a registration (utility model) |
+Free format text: JAPANESE INTERMEDIATE CODE: A01Effective date: 20220516 |
+|
+A61 | First payment of annual fees (during grant procedure) |
+Free format text: JAPANESE INTERMEDIATE CODE: A61Effective date: 20220609 |
+|
+R150 | Certificate of patent or registration of utility model |
+Ref document number: 7089124Country of ref document: JPFree format text: JAPANESE INTERMEDIATE CODE: R150 |

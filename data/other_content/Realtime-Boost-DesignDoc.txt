@@ -1,0 +1,359 @@
+                              Realtime Boost
+                                   (goto/realtime-boost)
+                                        Status:Final
+                               Authors: felipeg@google.com
+                                Last Updated: 2016-05-12
+
+
+Demo and Docs
+
+Objective
+
+Background
+
+Overview
+
+System Diagram Overview
+
+Hivemind tokens indexed
+       Unigrams (RTW)
+       Half Hours since epoch (TEHH)
+       KG Entities (RTKG)
+       S2 Cells (S2)
+       Freshbox Article Score (RTF)
+       Document NSR (RTN)
+       Geographical Dimensions
+       Other ideas
+
+Detecting Spikes
+
+Use Case Analysis
+   Query: California
+   Query [Weather Chicago]
+   Query: Facebook Stocks
+   Query: Dilma
+   Query: Bruce Springsteen
+   Query [John Lennon]
+
+Correlated Salient Terms
+
+Correlated NGrams
+   Query [Flood]
+   Query: Debate
+   Query Southwest Airlines
+   Query: Mia Airport
+
+How to use the signal
+
+Live Experiment and SxS with Freshbox
+
+
+
+
+Demo and Docs
+
+   ●   http://go/realtime-boost-demo
+
+   ●   Realtime Boost presentation: ​go/realtime-boost-preso
+
+   ●   To learn about how to use from SR: ​go/realtime-boost-howto
+
+   ●   How to use from QRewrite: ​go/realtime-boost-qrewrite
+
+   ●   Superroot Design Doc: ​go/realtime-boost-dd
+
+   ●   How to listen to the Pubsub
+
+   ●   The hivemind UI is here: ​go/realtime-boost-hm
+
+   ●   Brussels Attacks analysis made by Google Now (rubena@)
+
+   ●   What the spike means: ​go/realtime-boost-spike
+
+
+
+
+Objective
+Detect, under a minute, trending topics and real-world events in realtime. Use this signal to
+improve realtime results in google search (not only on twitter carousel results).
+
+The spike signal and the correlated entities/salient-terms is available in Superroot and in
+QRewrite for every query.
+
+
+
+Background
+It took google SERP page 14 minutes to start showing news documents about the San
+Bernardino shooting. The twitter carousel, which uses a system similar to this design doc, took 7
+minutes.
+
+In Search, ranking is traditionally based on signals that takes time to accumulate. For example,
+doc-anchors and navboost clicks takes time to happen and the millwheel joiner also takes time
+to aggregate it in docjoins. With recent improvements from the Freshness team, instant
+navboost clicks are available in komodo in 10 minutes and in DocJoins in 30m. Our goal is to
+improve even further that latency and help in cases where the new document didn’t have
+impressions and clicks yet.
+
+When a breaking-news event happen in the world, we need some signal to tell us that we need
+to promote newly created (fresh) documents to the top of the ranking even if those docs don't
+have anchors or clicks, so we can quickly cover the news with up-to-date information.
+
+Freshness team in Zurich currently tackles this problem by calculating the number of
+high-quality news documents that comes up from Muppet in Superroot. They have their own
+classifier to classify documents as news / high quality. The problem with this approach is that
+Superroot has access to only so many documents (mostly only the top-1000 docs). If the event
+is really recent, the new documents most likely won't gather enough signals to be ranked in the
+top-1000 and for some period of time this approach can miss the opportunity to detect the
+breaking news.
+
+
+
+Overview
+We take a different approach, by indexing fresh documents in hivemind and detecting spikes in
+number of documents published in real time that matches a given query.
+
+We listen to the freshdocs-instant-docs pubsub topic, which gives us the CDoc of all documents
+crawled from the instant pipeline. Those docs are mostly news websites and the majority is
+crawled very quickly (under 1 minute) after being published.
+
+
+
+Here is a histogram of the document ages that my ingestor receives from the
+freshdocs-instant-docs pubsub. (ranges are in seconds)
+The first bellcurve in the histogram is from the first-crawl of a new document.
+The rest is mostly coming from the re-crawls of older documents. These older documents won’t
+impact the speed of detecting trending queries, since they have already been crawled before
+when they were new. The documents are indexed using the firstseen date, and thus, the spike
+time is independent from when freshdocs decided to crawl the document. We could miss a new
+spike because freshdocs didn’t crawl fast enough. It can only affect the recall, but not the
+precision. The speed of crawling cannot generate a fake spike.
+
+The super-fast crawling of these high quality news websites allows us to detect when there is a
+sudden increase in documents published that mention the query.
+
+The first step after crawling, is indexing these docs into hivemind-instant in realtime.
+
+Side note:
+ The Crawl-to-index SLA for regular web-search-indexing is described in this ​page
+     ● Instant: 95% of documents we receive have a crawl-to-index latency of ≤ 80 seconds.
+     ● Daily/Instant: 99.9% of documents we receive have a crawl-to-index latency of ≤ 20 minutes
+ This is different from crawl-to-realtimehivemind as we describe in this document, but serves as a perspective.
+System Diagram Overview
+
+
+
+
+Hivemind tokens indexed
+Unigrams (RTW)
+For each document, we use its title, anchor texts and the first 400 chars from its centerpiece
+text. These are split into unigrams and added to the hivemind index. The centerpiece usually
+correctly contains the main content of the article excluding the boilerplate.
+
+Centerpiece text examples
+
+       http://www.eurosport.co.uk/football/matt-taylor-earns-the-plaudits-after-hat-trick-heroics_sto5011668/story.shtml
+       Centerpiece: Only a fantastic save from Wycombe goalkeeper Matt Ingram prevented Taylor scoring four times in the
+       space of 12 minutes as he turned a previously close game emphatically in Rovers' favour, sealing a 3-0 win. Manager
+       Clarke said: "I have always had faith in Matty, even when he was taking some unfair stick early in the season. "He is high
+       on confidence at the moment, but he is also a terrific
+
+       http://www.usatoday.com/story/travel/flights/todayinthesky/2015/12/01/jetblue-considers-new-approach-training-pilots/76600018/
+       Centerpiece: 9 Share This Story! Let friends in your social network know what you are reading about
+       FacebookEmailTwitterGoogle+LinkedInPinterest JetBlue considers a new approach to training pilots JetBlue wants to
+       recruit a few flight students with no flying experience and train them to become pilots. Loading… Post to Facebook
+       JetBlue considers a new approach to training pilots JetBlue wants to recruit a
+
+       http://www.edmontonsun.com/videos/4640483518001
+       Centerpiece: RAW: Suspect shot after three found dead in their home
+
+       http://www.thetubdoc.com/headphones-that-make-silence-beats-discount
+       Centerpiece: Headphones That Make Silence Headphones That Make Silence Headphones That Make Silence
+       Headphones That Make Silence Headphones That Make Silence Headphones That Make Silence Headphones That
+       Make Silence Headphones That Make Silence Headphones That Make Silence Headphones That Make Silence
+       Headphones That Make Silence Headphones That Make Silence Headphones That Make Silence Headphones That
+       Make
+
+       http://www.thehindu.com/news/cities/chennai/thoongavanam-to-release-online-legally/article7931531.ece
+       Centerpiece: The movie will be available on herotalkies.com on December 4. Actor Kamal Haasan's Deepavali release,
+       Thoongavanam , will be made available for fans living outside India through the movie streaming
+       websiteherotalkies.comon December 4. Despite getting good reviews, the film's box office performance was partially
+       affected by the unprecedented rains that lashed Tamil Nadu in the second week of
+
+
+Correlated unigrams that are returned for the query can be used to retrieve documents relevant
+to current news event. E.g. for query spike for query rtw=california returns following correlated
+unigrams: (san, ​bernardino, shooting, farook, sayd). There tokens can be added as context
+terms or as optional terms to Muppet squery.
+
+
+
+Half Hours since epoch (TEHH)
+The timestamp of the document publishing (or creation) time in number of Half Hours since
+epoch. We estimate that by assuming it is equal to firstseen-age (the time the crawler first seen
+the URL for this doc). This token-class is the centerpiece of the spike detection by counting how
+many documents were created in each half-hour bucket. The ​Hivemind Lift​ is used to detect
+spikes in the current unfinished half-hour bucket, so the resolution is not limited to half hour, we
+can detect spikes in less than 5 minutes resolution.
+
+KG Entities (RTKG)
+The entities with high topicality and high confidence, we index its kg mid into the RTKG
+token-class and also its human-readable name into the unigrams / rtw token-class.
+
+S2 Cells (S2)
+If the document contains a highly topical entity that contains a location related collection with
+high score, we index the S2Cell associated with the location. This way if the news article is
+talking about a shooting that happened in San Bernardino, we index the S2Cell for San
+Bernardino city.
+
+Freshbox Article Score (RTF)
+This is the score that the freshness-zrh-team classifier gave to this document. This signal tells
+us how likely this document is a high quality news article.
+We use this signal to detect how many high quality news article is present in the spike, so we
+can avoid spurious or spammy spikes, such as spikes caused by low quality sites publishing the
+same ngrams at the same time, trying to game the system.
+
+Document NSR (RTN)
+This is the NSR score of the document. Like Freshbox Article Score, we use this signal to
+calculate how many documents coming from high quality websites are present in the current
+spike and avoid spikes caused by spammy websites.
+
+
+
+Geographical Dimensions
+Allows us to detect spikes that are only relevant to one region, e.g. political events.
+    ● Country (RTC)
+    ● Language (RTL)
+    ● Domain (RTD)
+
+
+
+Other ideas
+   ●   Produce correlated queries by extracting n-grams, salient terms etc and indexing in
+       separate token class.
+   ●   Add correlated terms as optional terms into SQuery in QRewriter. Will allow to bring
+       more documents relevant to the current spike, increasing topicality.
+
+
+
+Detecting Spikes
+
+Similarly to realtime-team’s ​twitter design​, we detect spikes on the time series that hivemind
+returns.
+
+Given a rewritten squery from the query-rewriter in Superroot, we convert it to an mquery to be
+used in the hivemind RPC.
+Hivemind will respond with the counts of all documents that matches the query.
+Hivemind response contains the correlated (co-occuring) tokens of each token-class we ask for.
+In our case, we get back the counts of documents in the TEHH buckets that we use as a time
+series to detect spikes. Here is the basic idea:
+
+Using the doc count and lift as a time series we analyse if the past 4 hours contains a spike (on
+both count and lift) above the noise level (taken from the whole 3-day history):
+
+       If spike > median + 3*IQR
+The IQR threshold is similar to the Standard Deviation and it protect us from noisy or too
+frequent spikes.
+
+
+
+
+For queries that have no past history, i.e. a brand new event with no documents about it. In that
+case, we can’t calculate the IQR, so instead we require a minimum Lift and a minimum
+document count in the recent history.
+Use Case Analysis
+
+Query: California
+Right after the San Bernardino shooting event in 2015-12-02
+
+The spike in TEHH (time) is sharp and was created quickly after the event took place.
+
+
+
+
+The S2Cell (location) spiking was exactly the San Bernardino cell:
+The NSR (site rank score) and Freshdocs Article Score both shows that most documents were
+high quality news:
+Query [Weather Chicago]
+Realtime Boost can be faster than Twitter
+Huge snowstorm arrived in the middle of the night
+
+Realtime Boost Spike:
+Twitter Hivemind Spike (for comparison):
+
+
+
+
+Query: Facebook Stocks
+Right after Mark Zuckeberg announced he is giving away 99% if his stocks to charity.
+Query: Dilma
+Right after Brazil congress announced they will start the impeachment procedure against
+brazil’s president Dilma.
+The spike happened only minutes after the announcement was made.
+
+
+
+
+S2Cells for that query, of course, covers the whole Brazil:
+Query: Bruce Springsteen
+He announced his new tour, map shows most of the places where the tour is going to pass.
+Spike:
+He was announcing the tour for the Album called The River
+Query [John Lennon]
+His death anniversary
+Political figures took the opportunity to talk about gun law
+
+Realtime Boost spike:
+
+
+
+
+Twitter Hivemind spike (for comparison):
+Correlated Salient Terms
+From each article’s salient term annotation we extract 20 salient terms to index as token class
+RTST. Aggregated by query, the list of salient terms returned in RealtimeBoostResult
+represents the news that is trending.
+Correlated NGrams
+From the article centerpiece (text) I scan through every 2-to-5 gram window of ngrams and add
+it to the token class called RTNG.
+This way we get the correlated ngrams (up to 5-gram) of all the documents related to the query.
+Here are some examples.
+
+
+
+Query [Flood]
+Los angeles had a weather alert for storms .
+Query: Debate
+During the republican debate
+Query Southwest Airlines
+Forced landing of airplane rolls off taxiway.
+Spike:
+Happened in Nashvile Airport:
+Unigrams:
+Query: Mia Airport
+Bomb threat in airplane in MIA Airport. Bombsquad is called to search the airplane.
+Spike:
+How to use the signal
+We call hivemind from QRewrite servlets, to make this signal available in Rewritten query.
+Anyone in Superroot could consume the RealtimeBoostResponse that is based on the web
+search query.
+
+The signal is also available in Superroot. Clients can call with a query, and we will reply if that
+query is trending, and what else is related (entities, places, etc).
+
+Another option is to use our library to analyse Hivemind’s response, so you will only need to call
+hivemind and use the library to receive back a signal with a score of how likely this query is
+spiking / trending right now (or in the recent past), and the quality of the spike (based on NSR
+and Freshbox Article Score).
+
+
+
+
+Live Experiment and SxS with Freshbox
+Still under development.
+
+We push freshbox up to top3 positions for the queries that are trending according to this
+Realtime Boost signal.
+Preliminary ​SxS
+Other ideas: Add unigrams, ngrams and correlated kg entities to the SQuery as optional terms
+to help bringing recent documents related to the event that is spiking.
+

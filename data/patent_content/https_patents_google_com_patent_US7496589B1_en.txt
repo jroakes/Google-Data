@@ -1,0 +1,679 @@
+US7496589B1 - Highly compressed randomly accessed storage of large tables with arbitrary columns - Google Patents
+Highly compressed randomly accessed storage of large tables with arbitrary columns Download PDFInfo
+- Publication number
+- US7496589B1 US7496589B1 US11/178,655 US17865505A US7496589B1 US 7496589 B1 US7496589 B1 US 7496589B1 US 17865505 A US17865505 A US 17865505A US 7496589 B1 US7496589 B1 US 7496589B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- block
+- row
+- algorithm
+- compressed
+- column
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- H—ELECTRICITY
+- H03—ELECTRONIC CIRCUITRY
+- H03M—CODING; DECODING; CODE CONVERSION IN GENERAL
+- H03M7/00—Conversion of a code where information is represented by a given sequence or number of digits to a code where the same, similar or subset of information is represented by a different sequence or number of digits
+- H03M7/30—Compression; Expansion; Suppression of unnecessary data, e.g. redundancy reduction
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/22—Indexing; Data structures therefor; Storage structures
+- G06F16/221—Column-oriented storage; Management thereof
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99941—Database schema or data structure
+- Y10S707/99942—Manipulating data structure, e.g. compression, compaction, compilation
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99941—Database schema or data structure
+- Y10S707/99943—Generating database or data structure, e.g. via user interface
+Definitions
+- Embodiments relate to the field of data storage, data compression, and computer databases. Embodiments also relate to partitioning a database into blocks, optionally transposing the blocks, and compressing the blocks before storage.
+- Computer databases are collections of data that are stored in a computer memory and can be accessed through the computer. Many databases, such as the phone number list in a cell phone, are fairly small. Some databases, such as the stored tax records of every taxpayer in the United States, are exceptionally large. Exceptionally large databases are expensive to store and maintain. Accessing data in an exceptionally large database can be slow, expensive, or both because the desired data must be found and accessed in the midst of a great magnitude of other data.
+- Tables are made up of rows and the rows are made of columns of data.
+- the taxpayer database could have a row for every individual taxpayer. The columns in each row hold specific data.
+- the first column can be the taxpayer's identification number
+- the second column can be the taxpayer's surname
+- the third can be the taxpayers forename.
+- An index can be used to help find rows in a table.
+- the index associates index keys with table rows.
+- the taxpayer's identification number is a good index key for the taxpayer database because it is unique. It is unique because no two taxpayers are supposed to have the same taxpayer identification number.
+- a combination of the surname and the forename can also be used as an index key. Such an index key, however, can match multiple rows in the table. Multiple indexes can be used to map different index keys to table rows.
+- the index, or indices if more than one index is maintained, is usually updated when the table is changed.
+- a typical chain of events that occur when accessing a database starts with obtaining an index key.
+- An index is used to obtain a list of row identifiers matching the index key. If there are no matching row identifiers, then the list is empty.
+- Each row identifier obtained from the index can be any value or set of values that can be used to access a row in the table. Examples are a row index, which is the row number, or a row pointer, which is the row's location in the computer memory.
+- the row data is then accessed by transferring it from wherever it is stored to the where it can be used.
+- the rows of very large tables are often stored in large arrays of storage devices such as computer disk drives, computer tape libraries, read only memory (ROM) disk libraries, or a combination of different storage devices.
+- Compact Discs (CDs) and Digital Video Discs (DVDs) are examples of ROM disks.
+- the disks and tapes are also known as physical volumes. To access a row, the physical volume, or volumes, holding the row must be accessed.
+- Database owners trade access speed for expense. A row in a table can be accessed quickly if the physical volume can be accessed quickly. Some technologies, such as a computer's solid-state memory, can be accessed extremely quickly but is far more expensive than other types of memory. Other technologies, such as a computer's hard disk drive, are less expensive than solid-state memory and are slower. Computer tape is very inexpensive and very slow.
+- Some exceptionally large tables are stored in computer tape libraries.
+- An index key is used to find a row and a physical volume.
+- the physical volume, a computer tape is located and loaded into a computer tape drive.
+- the computer tape then streams through the computer tape drive until the desired row is reached.
+- the row data is then copied to a faster memory type such as a computer disk drive or solid-state memory.
+- this exceptionally large table is exceptionally slow to access.
+- Data compression is a technology for fitting data into a smaller amount of physical memory.
+- the key to data compression is that there is a difference between information and data.
+- a series of a billion zeros is a lot of data, but has little information. Based on formatting, a single page can carry 5,000 legible characters.
+- a series of a billion zeros can consume 200,000 pages.
+- the phrase “a series of a billion zeros” takes 6 words for a total of 22 characters. As such, 200,000 pages of data can be compressed into 22 characters of information.
+- Table rows can be compressed to consume less physical memory. Compressing all the rows in a table can result in fewer physical volumes storing the table. It can also result in a faster more expensive memory type becoming feasible for storing the table. Another advantage of compressed data is that it can be transferred faster.
+- Another aspect of the embodiments is to choose a block size, which is a number of rows, and to partition the table into blocks. Partitioning assigns every row in the table to a block. Most blocks contain the block size number of rows, some can contain less, but none can contain more.
+- Yet another aspect of the embodiments is to create a block index that indicates which block each row is assigned to and to compress some or all of the blocks before storing them on a storage device such as a computer disk drive.
+- a block can be compressed in a number of ways.
+- One solution is to simply compress the entire block of data at once. As such, only one compression algorithm is used on all the data in the block.
+- the block can be compressed column-wise or transposed and then compressed row-wise. Row-wise means the compression proceeds row by row. Column-wise means that the compression proceeds column by column. In row-wise compression, different compression algorithms can be used to compress each row. Similarly, in column-wise compression, different compression algorithms can be used to compress each column.
+- An algorithm identifier can be associated with a compressed block, compressed row, or compressed column such that it the correct decompression algorithm can be used later.
+- a further aspect of the embodiments is to obtain an index key and use the index key to obtain a row identifier from an index.
+- the row identifier is used to obtain a block identifier from a block index.
+- a compressed block, as specified by the block identifier, is then obtained from a storage device and then decompressed to produce a block.
+- the row identified by the row identifier is then obtained from the block.
+- blocks can be transposed before compression and they can be compressed in a row-wise or column-wise manner.
+- a block can be transposed after decompression and before the row is obtained.
+- Blocks can be decompressed in a row-wise or column-wise manner.
+- the decompression algorithm used to decompress compressed data can be specified by an algorithm identifier associated with that compressed data.
+- FIG. 1 illustrates a high level flow diagram illustrating partitioning and compressing a table in accordance with an embodiment
+- FIG. 2 illustrates a high level flow diagram of obtaining a row from a table that has been partitioned and compressed in accordance with an embodiment
+- FIG. 3 illustrates partitioning and compressing a table in accordance with an embodiment
+- FIG. 4 illustrates compressing a block in accordance with an embodiment
+- FIG. 5 illustrates decompressing a block in accordance with an embodiment.
+- a table such as a database table can be partitioned into blocks that are conveniently sized for storage and retrieval.
+- the amount of storage space required and the speed of storing and retrieving blocks is related to the size of the blocks. Compressing the blocks leads to less required space and more speed.
+- the columns in a table, and therefore the rows in a transposed block, tend to contain similar data. Compression algorithms can work more efficiently when sequential data items are similar. Therefore, transposing the blocks before compression or compressing them in a column-wise manner leads to better compression. Different compression algorithms can be used for each set of columnar data to yield even better compression.
+- FIG. 1 illustrates a high level flow diagram illustrating partitioning and compressing a table in accordance with an embodiment.
+- a table is obtained 102 .
+- the table can be in physical volumes such as computer disk drives, ROM disks, or computer tapes.
+- a block size which is the number of rows per block, is chosen 103 as an arbitrary number, as an educated guess for maximizing price or performance, as the result of detailed cost benefit analysis, or in some other manner.
+- the table is then partitioned into blocks 104 where the number of rows in each block is equal to or less than the block size. Based on how the table is partitioned, a block index that associates row identifiers to block identifiers is created 105 , although not yet populated.
+- a block identifier is a value or set of values that can be used to access a block.
+- a block number or a block pointer can be used as a block identifier.
+- a block pointer indicates the location of a block in memory.
+- the first block is obtained 106 , transposed 107 , compressed 108 , and stored 109 . After the block is stored, its block identifier is known. The rows that are in the block are also known. The block identifier and row identifiers are inserted in the block index 113 . If there are more blocks 110 , then the next block is obtained 112 and the process loops back to transposing the block 107 . Otherwise, the process is done 111 .
+- FIG. 1 The high level flow of FIG. 1 transposes each block before compression.
+- the transposition step and the subsequent row-wise operation is discussed in detail below.
+- An alternative embodiment does not transpose the block but obtains a similar result by operating on the block in a column-wise manner. Column-wise operation is also discussed below.
+- FIG. 2 illustrates a high level flow diagram of obtaining a row from a table that has been partitioned and compressed in accordance with an embodiment.
+- an index key is obtained 202 and a row identifier is obtained by using the key 203 .
+- an index can associate an index key with one or more row identifiers. If the index key is associated with more than one row, then each row can be obtained in turn via a process flow similar to that of FIG. 2 .
+- One skilled in the art of computer databases or computer programming is familiar with handling multiple rows returned by a single index key.
+- the row identifier is used to obtain a block identifier 204 .
+- the block index which associates row identifiers and block identifiers, can be used to obtain the block identifier.
+- the block identifier is used for obtaining the compressed block.
+- the compressed block is obtained 205 , it is decompressed 206 into a block that contains rows.
+- the row identifier can be used to obtain the desired row from the block 207 before the process is done 208 .
+- FIG. 3 illustrates partitioning and compressing a table in accordance with an embodiment.
+- a table 327 contains four rows 328 , 329 , 330 , 331 .
+- a table can contain millions of rows. Four rows, however, is adequate for illustrating aspects of the embodiments.
+- Each row is shown containing four columns.
+- Row 1 328 referred to as R 1 , contains columns R 1 :C 1 301 , R 1 :C 2 302 , R 1 :C 3 303 , and R 1 :C 4 304 .
+- Row 2 329 contains columns R 2 :C 1 305 , R 2 :C 2 306 , R 2 :C 3 307 , and R 2 :C 4 308 .
+- Row 3 330 referred to as R 3 , contains columns R 3 :C 1 309 , R 3 :C 2 310 , R 3 :C 3 311 , and R 3 :C 4 312 .
+- Row 4 331 referred to as R 4 , contains columns R 4 :C 1 313 , R 4 :C 2 314 , R 4 :C 3 315 , and R 4 :C 4 316 .
+- the table 327 can be submitted to a partitioner 317 that partitions it into blocks. A block size of 2 is selected. The table 327 is partitioned into block 1 321 containing R 1 328 and R 2 329 and block 2 322 containing R 3 330 and R 4 331 . The block index 318 indicates which rows are in which block in it's first entry 319 and in it's second entry 320 .
+- a compressor compresses block 1 321 into compressed block 1 324 and block 2 322 into compressed block 2 325 .
+- FIG. 4 illustrates compressing a block in accordance with an embodiment.
+- Block 1 321 is passed to the compressor 323 where it is transposed.
+- Block 1 's transposed form 411 is shown.
+- the rows are turned into columns and the columns into rows.
+- the first column of the first row, R 1 :C 1 301 remains the first column of the first row.
+- the first column of the second row, R 2 :C 1 305 however becomes the second column of the first row.
+- the columns usually hold a specific type of data, such as tax payer identifications in column 1 and surnames in column 2 .
+- R 1 :C 1 301 , R 2 :C 1 305 , R 3 :C 1 309 , and R 4 :C 1 313 would all hold tax payer identifications.
+- R 1 :C 2 302 , R 2 : C 2 306 , R 3 : C 2 310 , and R 4 : C 2 314 would all hold surnames.
+- row-wise means that each row is accessed in order. Without transposition, row-wise access proceeds from R 1 :C 1 , a number, to R 1 :C 2 302 , a name. After transposition, row-wise access proceeds from R 1 :C 1 301 , a number to R 2 :C 1 305 , another number. Later, access proceeds from R 1 :C 2 302 , a surname to R 2 : C 2 306 , another surname. Transposing a block that is accessed row-wise results in higher compression. Some computers can access a table or block in a column-wise order. If column-wise access can be used, transposition is not necessary.
+- the block 1 's first column consisting of R 1 :C 1 301 and R 2 :C 1 305 , is passed to compression algorithm 1 401 to become compressed column 1 407 .
+- Compression algorithm 1 is used because it compresses the first column's type of data well.
+- Compressed column 1 407 is paired with the algorithm 1 identifier 404 so that the correct algorithm can be used for subsequent decompression. Note that if compression algorithm 1 401 is always used on column 1 then the algorithm identifier is not needed.
+- Algorithm identifiers are used when different algorithms can be used and a record must be kept of which algorithm is actually used on each column. Algorithms can change because a person decides to use a different one, because the computer automatically selects the best algorithm, or some other reason.
+- a computer can automatically select the best algorithm for the blocks or the columns, or rows, being compressed. Ideally, the computer could exhaustively test every compression algorithm for every compressible piece of data. In reality, however, a few representative pieces of data can be tested.
+- the computer can randomly select blocks, select the first few blocks in the table, or select blocks in some other way. The computer can then test compression algorithms, either block-wise, column-wise, or row-wise, to choose the best algorithm.
+- the second column consisting of R 1 :C 2 302 and R 2 :C 2 306 , is passed to compression module 2 402 to become compressed column 2 408 paired with algorithm identifier 2 405 .
+- the third column consisting of R 1 :C 3 303 and R 2 :C 3 307 , is passed to compression module 3 403 to become compressed column 3 409 paired with algorithm identifier 3 406 .
+- the fourth column consisting of R 1 :C 4 304 and R 2 :C 4 308 , is passed to compression module 1 401 to become compressed column 4 410 paired with algorithm identifier 1 404 .
+- the compressed columns and algorithm identifiers become compressed block 1 324 .
+- FIG. 5 illustrates decompressing a block in accordance with an embodiment.
+- Compressed block 1 324 is passed to a decompressor 501 .
+- Compressed column 1 407 paired with the algorithm 1 identifier 404 , is passed to decompression algorithm 1 502 and becomes the first column of block 1 321 consisting of R 1 :C 1 301 and R 2 :C 1 305 .
+- the other compressed columns are decompressed similarly with decompression algorithms 503 and 504 .
+- the decompressor illustrated produces a transposed version of the block. As such, it must be transposed again to reproduce the original block 1 321 . As before, if column-wise access is used, transposition is not necessary.
+- Embodiments can be implemented in the context of modules.
+- a module e.g., a software module
+- a software module can be implemented as a collection of routines and data structures that perform particular tasks or implement a particular abstract data type. Modules generally can be composed of two parts. First, a software module may list the constants, data types, variables, routines and the like that can be accessed by other modules or routines. Second, a software module can be configured as an implementation, which can be private (i.e., accessible perhaps only to the module), and that contains the source code that actually implements the routines or subroutines upon which the module is based.
+- the term “module”, as utilized herein generally refers to software modules or implementations thereof. Such modules can be utilized separately or together to form a program product that can be implemented through signal-bearing media, including transmission media and recordable media.
+Abstract
+Description
+Claims (23)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/178,655 US7496589B1 (en) | 2005-07-09 | 2005-07-09 | Highly compressed randomly accessed storage of large tables with arbitrary columns |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/178,655 US7496589B1 (en) | 2005-07-09 | 2005-07-09 | Highly compressed randomly accessed storage of large tables with arbitrary columns |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US7496589B1 true US7496589B1 (en) | 2009-02-24 |
+Family
+ID=40364690
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US11/178,655 Active 2026-04-16 US7496589B1 (en) | 2005-07-09 | 2005-07-09 | Highly compressed randomly accessed storage of large tables with arbitrary columns |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7496589B1 (en) |
+Cited By (109)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20070192385A1 (en) * | 2005-11-28 | 2007-08-16 | Anand Prahlad | Systems and methods for using metadata to enhance storage operations |
+US20070198602A1 (en) * | 2005-12-19 | 2007-08-23 | David Ngo | Systems and methods for resynchronizing information |
+US20070226535A1 (en) * | 2005-12-19 | 2007-09-27 | Parag Gokhale | Systems and methods of unified reconstruction in storage systems |
+US20080120315A1 (en) * | 2006-11-21 | 2008-05-22 | Nokia Corporation | Signal message decompressor |
+US20080244177A1 (en) * | 1999-07-15 | 2008-10-02 | Commvault Systems, Inc. | Modular systems and methods for managing data storage operations |
+US20080243796A1 (en) * | 2006-12-22 | 2008-10-02 | Anand Prahlad | Method and system for searching stored data |
+US20080294605A1 (en) * | 2006-10-17 | 2008-11-27 | Anand Prahlad | Method and system for offline indexing of content and classifying stored data |
+US20090012828A1 (en) * | 2007-03-09 | 2009-01-08 | Commvault Systems, Inc. | Computer systems and methods for workflow automation |
+US20090055422A1 (en) * | 2007-08-23 | 2009-02-26 | Ken Williams | System and Method For Data Compression Using Compression Hardware |
+US20090182963A1 (en) * | 2003-11-13 | 2009-07-16 | Anand Prahlad | System and method for performing a snapshot and for restoring data |
+US20090248762A1 (en) * | 2003-11-13 | 2009-10-01 | Commvault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US20100057870A1 (en) * | 2008-08-29 | 2010-03-04 | Ahn Jun H | Method and system for leveraging identified changes to a mail server |
+US20100082541A1 (en) * | 2005-12-19 | 2010-04-01 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US20100094808A1 (en) * | 2005-12-19 | 2010-04-15 | Commvault Systems, Inc. | Pathname translation in a data replication system |
+US20100100529A1 (en) * | 2005-12-19 | 2010-04-22 | Commvault Systems, Inc. | Rolling cache configuration for a data replication system |
+US20100122053A1 (en) * | 2005-12-19 | 2010-05-13 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US20100138393A1 (en) * | 1999-07-14 | 2010-06-03 | Commvault Systems, Inc. | Modular backup and retrieval system used in conjunction with a storage area network |
+US20100179941A1 (en) * | 2008-12-10 | 2010-07-15 | Commvault Systems, Inc. | Systems and methods for performing discrete data replication |
+US20100281004A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Storing compression units in relational tables |
+US20100281079A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Compression analyzer |
+US20100278446A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Structure of hierarchical compressed data structure for tabular data |
+US20110029569A1 (en) * | 2009-04-30 | 2011-02-03 | Oracle International Corporation | Ddl and dml support for hybrid columnar compressed tables |
+US20110060725A1 (en) * | 2008-01-30 | 2011-03-10 | Commvault Systems, Inc. | Systems and methods for grid-based data scanning |
+US20110072364A1 (en) * | 2000-01-31 | 2011-03-24 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US20110119235A1 (en) * | 1999-07-15 | 2011-05-19 | Commvault Systems, Inc. | Hierarchical systems and methods for performing data storage operations |
+US7962709B2 (en) | 2005-12-19 | 2011-06-14 | Commvault Systems, Inc. | Network redirector systems and methods for performing data replication |
+US20110161327A1 (en) * | 2009-12-31 | 2011-06-30 | Pawar Rahul S | Asynchronous methods of data classification using change journals and other data structures |
+US20110238621A1 (en) * | 2010-03-29 | 2011-09-29 | Commvault Systems, Inc. | Systems and methods for selective data replication |
+US20110295817A1 (en) * | 2009-04-30 | 2011-12-01 | Oracle International Corporation | Technique For Compressing XML Indexes |
+US8103670B2 (en) | 2000-01-31 | 2012-01-24 | Commvault Systems, Inc. | Systems and methods for retrieving data in a computer network |
+US8103829B2 (en) | 2003-06-25 | 2012-01-24 | Commvault Systems, Inc. | Hierarchical systems and methods for performing storage operations in a computer network |
+US8121983B2 (en) | 2005-12-19 | 2012-02-21 | Commvault Systems, Inc. | Systems and methods for monitoring application data in a data replication system |
+US8204859B2 (en) | 2008-12-10 | 2012-06-19 | Commvault Systems, Inc. | Systems and methods for managing replicated database data |
+US20120166402A1 (en) * | 2010-12-28 | 2012-06-28 | Teradata Us, Inc. | Techniques for extending horizontal partitioning to column partitioning |
+US8214444B2 (en) | 2000-01-31 | 2012-07-03 | Commvault Systems, Inc. | Email attachment management in a computer system |
+US8239421B1 (en) | 2010-08-30 | 2012-08-07 | Oracle International Corporation | Techniques for compression and processing optimizations by using data transformations |
+US8352422B2 (en) | 2010-03-30 | 2013-01-08 | Commvault Systems, Inc. | Data restore systems and methods in a replication environment |
+US8489656B2 (en) | 2010-05-28 | 2013-07-16 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8504515B2 (en) | 2010-03-30 | 2013-08-06 | Commvault Systems, Inc. | Stubbing systems and methods in a data replication environment |
+US8627006B2 (en) | 2009-08-19 | 2014-01-07 | Oracle International Corporation | Storing row-major data with an affinity for columns |
+GB2506184A (en) * | 2012-09-25 | 2014-03-26 | Ibm | Compressing table data using dictionary encoding |
+US8719264B2 (en) | 2011-03-31 | 2014-05-06 | Commvault Systems, Inc. | Creating secondary copies of data based on searches for content |
+US8725698B2 (en) | 2010-03-30 | 2014-05-13 | Commvault Systems, Inc. | Stub file prioritization in a data replication system |
+US8726242B2 (en) | 2006-07-27 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for continuous data replication |
+CN103838802A (en) * | 2012-11-26 | 2014-06-04 | 财团法人资讯工业策进会 | Data processing apparatus and data processing method |
+US8832142B2 (en) | 2010-08-30 | 2014-09-09 | Oracle International Corporation | Query and exadata support for hybrid columnar compressed data |
+US20140280249A1 (en) | 2013-03-14 | 2014-09-18 | Oracle International Corporation | Predicate offload of large objects |
+US8892523B2 (en) | 2012-06-08 | 2014-11-18 | Commvault Systems, Inc. | Auto summarization of content |
+US8933829B2 (en) | 2013-09-23 | 2015-01-13 | International Business Machines Corporation | Data compression using dictionary encoding |
+US20150074066A1 (en) * | 2013-09-06 | 2015-03-12 | Sap Ag | Database operations on a columnar table database |
+US20150113026A1 (en) * | 2013-10-17 | 2015-04-23 | Muhammed Sharique | Rollover strategies in a n-bit dictionary compressed column store |
+US9021198B1 (en) | 2011-01-20 | 2015-04-28 | Commvault Systems, Inc. | System and method for sharing SAN storage |
+EP2881870A1 (en) * | 2013-12-06 | 2015-06-10 | Sap Se | Data compression method |
+US9262435B2 (en) | 2013-01-11 | 2016-02-16 | Commvault Systems, Inc. | Location-based data synchronization management |
+US9298715B2 (en) | 2012-03-07 | 2016-03-29 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9325344B2 (en) | 2010-12-03 | 2016-04-26 | International Business Machines Corporation | Encoding data stored in a column-oriented manner |
+US9342537B2 (en) | 2012-04-23 | 2016-05-17 | Commvault Systems, Inc. | Integrated snapshot interface for a data storage system |
+US9448731B2 (en) | 2014-11-14 | 2016-09-20 | Commvault Systems, Inc. | Unified snapshot storage management |
+US9471578B2 (en) | 2012-03-07 | 2016-10-18 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9495251B2 (en) | 2014-01-24 | 2016-11-15 | Commvault Systems, Inc. | Snapshot readiness checking and reporting |
+US9495466B2 (en) | 2013-11-27 | 2016-11-15 | Oracle International Corporation | LIDAR model with hybrid-columnar format and no indexes for spatial searches |
+US9514187B2 (en) | 2012-09-28 | 2016-12-06 | Oracle International Corporation | Techniques for using zone map information for post index access pruning |
+US9632874B2 (en) | 2014-01-24 | 2017-04-25 | Commvault Systems, Inc. | Database application backup in single snapshot for multiple applications |
+US9639426B2 (en) | 2014-01-24 | 2017-05-02 | Commvault Systems, Inc. | Single snapshot for multiple applications |
+US9646053B2 (en) | 2013-03-12 | 2017-05-09 | Oracle International Corporation | OLTP compression of wide tables |
+US9648105B2 (en) | 2014-11-14 | 2017-05-09 | Commvault Systems, Inc. | Unified snapshot storage management, using an enhanced storage manager and enhanced media agents |
+US9753812B2 (en) | 2014-01-24 | 2017-09-05 | Commvault Systems, Inc. | Generating mapping information for single snapshot for multiple applications |
+US9774672B2 (en) | 2014-09-03 | 2017-09-26 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US9773041B2 (en) | 2013-03-06 | 2017-09-26 | Oracle International Corporation | Methods and apparatus of shared expression evaluation across RDBMS and storage layer |
+US9864816B2 (en) | 2015-04-29 | 2018-01-09 | Oracle International Corporation | Dynamically updating data guide for hierarchical data objects |
+US9881048B2 (en) | 2013-09-21 | 2018-01-30 | Oracle International Corporation | Mirroring, in memory, data from disk to improve query performance |
+US9886346B2 (en) | 2013-01-11 | 2018-02-06 | Commvault Systems, Inc. | Single snapshot for multiple agents |
+US9910861B2 (en) | 2012-09-28 | 2018-03-06 | Oracle International Corporation | Automated information lifecycle management using low access patterns |
+US9990308B2 (en) | 2015-08-31 | 2018-06-05 | Oracle International Corporation | Selective data compression for in-memory databases |
+US10042716B2 (en) | 2014-09-03 | 2018-08-07 | Commvault Systems, Inc. | Consolidated processing of storage-array commands using a forwarder media agent in conjunction with a snapshot-control media agent |
+US10055128B2 (en) | 2010-01-20 | 2018-08-21 | Oracle International Corporation | Hybrid binary XML storage model for efficient XML processing |
+US10133667B2 (en) | 2016-09-06 | 2018-11-20 | Orcle International Corporation | Efficient data storage and retrieval using a heterogeneous main memory |
+US10191944B2 (en) | 2015-10-23 | 2019-01-29 | Oracle International Corporation | Columnar data arrangement for semi-structured data |
+US10241979B2 (en) | 2015-07-21 | 2019-03-26 | Oracle International Corporation | Accelerated detection of matching patterns |
+US10296462B2 (en) | 2013-03-15 | 2019-05-21 | Oracle International Corporation | Method to accelerate queries using dynamically generated alternate data formats in flash cache |
+US10311154B2 (en) | 2013-09-21 | 2019-06-04 | Oracle International Corporation | Combined row and columnar storage for in-memory databases for OLTP and analytics workloads |
+US10389810B2 (en) | 2016-11-02 | 2019-08-20 | Commvault Systems, Inc. | Multi-threaded scanning of distributed file systems |
+US10503753B2 (en) | 2016-03-10 | 2019-12-10 | Commvault Systems, Inc. | Snapshot replication operations based on incremental block change tracking |
+US10540516B2 (en) | 2016-10-13 | 2020-01-21 | Commvault Systems, Inc. | Data protection within an unsecured storage environment |
+US10642837B2 (en) | 2013-03-15 | 2020-05-05 | Oracle International Corporation | Relocating derived cache during data rebalance to maintain application performance |
+US10642886B2 (en) | 2018-02-14 | 2020-05-05 | Commvault Systems, Inc. | Targeted search of backup data using facial recognition |
+US10719446B2 (en) | 2017-08-31 | 2020-07-21 | Oracle International Corporation | Directly mapped buffer cache on non-volatile memory |
+US10732836B2 (en) | 2017-09-29 | 2020-08-04 | Oracle International Corporation | Remote one-sided persistent writes |
+US10732885B2 (en) | 2018-02-14 | 2020-08-04 | Commvault Systems, Inc. | Block-level live browsing and private writable snapshots using an ISCSI server |
+US10802766B2 (en) | 2017-09-29 | 2020-10-13 | Oracle International Corporation | Database with NVDIMM as persistent storage |
+US10803039B2 (en) | 2017-05-26 | 2020-10-13 | Oracle International Corporation | Method for efficient primary key based queries using atomic RDMA reads on cache friendly in-memory hash index |
+US10838961B2 (en) | 2017-09-29 | 2020-11-17 | Oracle International Corporation | Prefix compression |
+US10922189B2 (en) | 2016-11-02 | 2021-02-16 | Commvault Systems, Inc. | Historical network data-based scanning thread generation |
+US20210055932A1 (en) * | 2019-08-19 | 2021-02-25 | Advanced Micro Devices, Inc. | Decompression Engine for Decompressing Compressed Input Data that Includes Multiple Streams of Data |
+US10956335B2 (en) | 2017-09-29 | 2021-03-23 | Oracle International Corporation | Non-volatile cache access using RDMA |
+US10984041B2 (en) | 2017-05-11 | 2021-04-20 | Commvault Systems, Inc. | Natural language processing integrated with database and data storage management |
+US11042318B2 (en) | 2019-07-29 | 2021-06-22 | Commvault Systems, Inc. | Block-level data replication |
+US11086876B2 (en) | 2017-09-29 | 2021-08-10 | Oracle International Corporation | Storing derived summaries on persistent memory of a storage device |
+US11159469B2 (en) | 2018-09-12 | 2021-10-26 | Commvault Systems, Inc. | Using machine learning to modify presentation of mailbox objects |
+US11157478B2 (en) | 2018-12-28 | 2021-10-26 | Oracle International Corporation | Technique of comprehensively support autonomous JSON document object (AJD) cloud service |
+US11269829B2 (en) | 2013-03-12 | 2022-03-08 | Oracle International Corporation | Row level locking for columnar data |
+US11294932B2 (en) | 2016-10-03 | 2022-04-05 | Ocient Inc. | Data transition in highly parallel database management system |
+US11403367B2 (en) | 2019-09-12 | 2022-08-02 | Oracle International Corporation | Techniques for solving the spherical point-in-polygon problem |
+US11423001B2 (en) | 2019-09-13 | 2022-08-23 | Oracle International Corporation | Technique of efficiently, comprehensively and autonomously support native JSON datatype in RDBMS for both OLTP and OLAP |
+US11442820B2 (en) | 2005-12-19 | 2022-09-13 | Commvault Systems, Inc. | Systems and methods of unified reconstruction in storage systems |
+US11494417B2 (en) | 2020-08-07 | 2022-11-08 | Commvault Systems, Inc. | Automated email classification in an information management system |
+WO2023278091A1 (en) * | 2021-07-01 | 2023-01-05 | Microsoft Technology Licensing, Llc | Hybrid intermediate stream format |
+US11789923B2 (en) | 2015-10-23 | 2023-10-17 | Oracle International Corporation | Compression units in an index block |
+US11809285B2 (en) | 2022-02-09 | 2023-11-07 | Commvault Systems, Inc. | Protecting a management database of a data storage management system to meet a recovery point objective (RPO) |
+Citations (17)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5414834A (en) * | 1988-04-08 | 1995-05-09 | International Business Machines Corporation | Method and apparatus for data storage and interchange using a relational database table, and a data record for use in connection therewith |
+US5794228A (en) * | 1993-04-16 | 1998-08-11 | Sybase, Inc. | Database system with buffer manager providing per page native data compression and decompression |
+US5918225A (en) * | 1993-04-16 | 1999-06-29 | Sybase, Inc. | SQL-based database system with improved indexing methodology |
+US6006232A (en) * | 1997-10-21 | 1999-12-21 | At&T Corp. | System and method for multirecord compression in a relational database |
+US6169990B1 (en) * | 1996-03-02 | 2001-01-02 | University Of Strathclyde | Databases |
+US6298342B1 (en) * | 1998-03-16 | 2001-10-02 | Microsoft Corporation | Electronic database operations for perspective transformations on relational tables using pivot and unpivot columns |
+US20020178171A1 (en) * | 2001-05-16 | 2002-11-28 | Reengineering Llc | Semantic encoding and compression of database tables |
+US6725225B1 (en) * | 1999-09-29 | 2004-04-20 | Mitsubishi Denki Kabushiki Kaisha | Data management apparatus and method for efficiently generating a blocked transposed file and converting that file using a stored compression method |
+US20040148301A1 (en) * | 2003-01-24 | 2004-07-29 | Mckay Christopher W.T. | Compressed data structure for a database |
+US6778996B2 (en) * | 1999-10-25 | 2004-08-17 | Oracle International Corporation | Techniques for indexing into a row of a database table |
+US6879984B2 (en) * | 2000-10-05 | 2005-04-12 | Clareos, Inc. | Analytical database system that models data to speed up and simplify data analysis |
+US20050219076A1 (en) * | 2004-03-22 | 2005-10-06 | Michael Harris | Information management system |
+US7024414B2 (en) * | 2001-08-06 | 2006-04-04 | Sensage, Inc. | Storage of row-column data |
+US20060123035A1 (en) * | 2004-12-06 | 2006-06-08 | Ivie James R | Applying multiple compression algorithms in a database system |
+US7103588B2 (en) * | 2003-05-05 | 2006-09-05 | International Business Machines Corporation | Range-clustered tables in a database management system |
+US7103608B1 (en) * | 2002-05-10 | 2006-09-05 | Oracle International Corporation | Method and mechanism for storing and accessing data |
+US7181457B2 (en) * | 2003-05-28 | 2007-02-20 | Pervasive Software, Inc. | System and method for utilizing compression in database caches to facilitate access to database information |
+-
+2005
+- 2005-07-09 US US11/178,655 patent/US7496589B1/en active Active
+Patent Citations (17)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5414834A (en) * | 1988-04-08 | 1995-05-09 | International Business Machines Corporation | Method and apparatus for data storage and interchange using a relational database table, and a data record for use in connection therewith |
+US5794228A (en) * | 1993-04-16 | 1998-08-11 | Sybase, Inc. | Database system with buffer manager providing per page native data compression and decompression |
+US5918225A (en) * | 1993-04-16 | 1999-06-29 | Sybase, Inc. | SQL-based database system with improved indexing methodology |
+US6169990B1 (en) * | 1996-03-02 | 2001-01-02 | University Of Strathclyde | Databases |
+US6006232A (en) * | 1997-10-21 | 1999-12-21 | At&T Corp. | System and method for multirecord compression in a relational database |
+US6298342B1 (en) * | 1998-03-16 | 2001-10-02 | Microsoft Corporation | Electronic database operations for perspective transformations on relational tables using pivot and unpivot columns |
+US6725225B1 (en) * | 1999-09-29 | 2004-04-20 | Mitsubishi Denki Kabushiki Kaisha | Data management apparatus and method for efficiently generating a blocked transposed file and converting that file using a stored compression method |
+US6778996B2 (en) * | 1999-10-25 | 2004-08-17 | Oracle International Corporation | Techniques for indexing into a row of a database table |
+US6879984B2 (en) * | 2000-10-05 | 2005-04-12 | Clareos, Inc. | Analytical database system that models data to speed up and simplify data analysis |
+US20020178171A1 (en) * | 2001-05-16 | 2002-11-28 | Reengineering Llc | Semantic encoding and compression of database tables |
+US7024414B2 (en) * | 2001-08-06 | 2006-04-04 | Sensage, Inc. | Storage of row-column data |
+US7103608B1 (en) * | 2002-05-10 | 2006-09-05 | Oracle International Corporation | Method and mechanism for storing and accessing data |
+US20040148301A1 (en) * | 2003-01-24 | 2004-07-29 | Mckay Christopher W.T. | Compressed data structure for a database |
+US7103588B2 (en) * | 2003-05-05 | 2006-09-05 | International Business Machines Corporation | Range-clustered tables in a database management system |
+US7181457B2 (en) * | 2003-05-28 | 2007-02-20 | Pervasive Software, Inc. | System and method for utilizing compression in database caches to facilitate access to database information |
+US20050219076A1 (en) * | 2004-03-22 | 2005-10-06 | Michael Harris | Information management system |
+US20060123035A1 (en) * | 2004-12-06 | 2006-06-08 | Ivie James R | Applying multiple compression algorithms in a database system |
+Cited By (280)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8352433B2 (en) | 1999-07-14 | 2013-01-08 | Commvault Systems, Inc. | Modular backup and retrieval system used in conjunction with a storage area network |
+US8930319B2 (en) | 1999-07-14 | 2015-01-06 | Commvault Systems, Inc. | Modular backup and retrieval system used in conjunction with a storage area network |
+US20100138393A1 (en) * | 1999-07-14 | 2010-06-03 | Commvault Systems, Inc. | Modular backup and retrieval system used in conjunction with a storage area network |
+US20110119235A1 (en) * | 1999-07-15 | 2011-05-19 | Commvault Systems, Inc. | Hierarchical systems and methods for performing data storage operations |
+US20080244177A1 (en) * | 1999-07-15 | 2008-10-02 | Commvault Systems, Inc. | Modular systems and methods for managing data storage operations |
+US8041673B2 (en) | 1999-07-15 | 2011-10-18 | Commvault Systems, Inc. | Hierarchical systems and methods for performing data storage operations |
+US8433679B2 (en) | 1999-07-15 | 2013-04-30 | Commvault Systems, Inc. | Modular systems and methods for managing data storage operations |
+US8566278B2 (en) | 1999-07-15 | 2013-10-22 | Commvault Systems, Inc. | Hierarchical systems and methods for performing data storage operations |
+US9003137B2 (en) | 2000-01-31 | 2015-04-07 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US8103670B2 (en) | 2000-01-31 | 2012-01-24 | Commvault Systems, Inc. | Systems and methods for retrieving data in a computer network |
+US8214444B2 (en) | 2000-01-31 | 2012-07-03 | Commvault Systems, Inc. | Email attachment management in a computer system |
+US8504634B2 (en) | 2000-01-31 | 2013-08-06 | Commvault Systems, Inc. | Email attachment management in a computer system |
+US8266397B2 (en) | 2000-01-31 | 2012-09-11 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US8086809B2 (en) | 2000-01-31 | 2011-12-27 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US8725964B2 (en) | 2000-01-31 | 2014-05-13 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US20110072364A1 (en) * | 2000-01-31 | 2011-03-24 | Commvault Systems, Inc. | Interface systems and methods for accessing stored data |
+US8725731B2 (en) | 2000-01-31 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for retrieving data in a computer network |
+US9003117B2 (en) | 2003-06-25 | 2015-04-07 | Commvault Systems, Inc. | Hierarchical systems and methods for performing storage operations in a computer network |
+US8402219B2 (en) | 2003-06-25 | 2013-03-19 | Commvault Systems, Inc. | Hierarchical systems and methods for performing storage operations in a computer network |
+US8103829B2 (en) | 2003-06-25 | 2012-01-24 | Commvault Systems, Inc. | Hierarchical systems and methods for performing storage operations in a computer network |
+US8078583B2 (en) | 2003-11-13 | 2011-12-13 | Comm Vault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US8190565B2 (en) | 2003-11-13 | 2012-05-29 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US9208160B2 (en) | 2003-11-13 | 2015-12-08 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US8886595B2 (en) | 2003-11-13 | 2014-11-11 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US8645320B2 (en) | 2003-11-13 | 2014-02-04 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US20090248762A1 (en) * | 2003-11-13 | 2009-10-01 | Commvault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US20090182963A1 (en) * | 2003-11-13 | 2009-07-16 | Anand Prahlad | System and method for performing a snapshot and for restoring data |
+US9104340B2 (en) | 2003-11-13 | 2015-08-11 | Commvault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US8577844B2 (en) | 2003-11-13 | 2013-11-05 | Commvault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US9405631B2 (en) | 2003-11-13 | 2016-08-02 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US8266106B2 (en) | 2003-11-13 | 2012-09-11 | Commvault Systems, Inc. | Systems and methods for performing storage operations using network attached storage |
+US9619341B2 (en) | 2003-11-13 | 2017-04-11 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US20110066599A1 (en) * | 2003-11-13 | 2011-03-17 | Commvault Systems, Inc. | System and method for performing an image level snapshot and for restoring partial volume data |
+US8195623B2 (en) | 2003-11-13 | 2012-06-05 | Commvault Systems, Inc. | System and method for performing a snapshot and for restoring data |
+US7831553B2 (en) | 2005-11-28 | 2010-11-09 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US9606994B2 (en) | 2005-11-28 | 2017-03-28 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US20110016163A1 (en) * | 2005-11-28 | 2011-01-20 | Commvault Systems, Inc. | Metabase for facilitating data classification |
+US8352472B2 (en) | 2005-11-28 | 2013-01-08 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US7831622B2 (en) | 2005-11-28 | 2010-11-09 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US8285685B2 (en) | 2005-11-28 | 2012-10-09 | Commvault Systems, Inc. | Metabase for facilitating data classification |
+US8285964B2 (en) | 2005-11-28 | 2012-10-09 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US8010769B2 (en) | 2005-11-28 | 2011-08-30 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US8271548B2 (en) | 2005-11-28 | 2012-09-18 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance storage operations |
+US10198451B2 (en) | 2005-11-28 | 2019-02-05 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US11256665B2 (en) | 2005-11-28 | 2022-02-22 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US20100131461A1 (en) * | 2005-11-28 | 2010-05-27 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US8051095B2 (en) | 2005-11-28 | 2011-11-01 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US20100131467A1 (en) * | 2005-11-28 | 2010-05-27 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US20100114829A1 (en) * | 2005-11-28 | 2010-05-06 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data management operations |
+US8612714B2 (en) | 2005-11-28 | 2013-12-17 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US9098542B2 (en) | 2005-11-28 | 2015-08-04 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US20070192385A1 (en) * | 2005-11-28 | 2007-08-16 | Anand Prahlad | Systems and methods for using metadata to enhance storage operations |
+US8725737B2 (en) | 2005-11-28 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US8832406B2 (en) | 2005-11-28 | 2014-09-09 | Commvault Systems, Inc. | Systems and methods for classifying and transferring information in a storage network |
+US8131680B2 (en) | 2005-11-28 | 2012-03-06 | Commvault Systems, Inc. | Systems and methods for using metadata to enhance data management operations |
+US8131725B2 (en) | 2005-11-28 | 2012-03-06 | Comm Vault Systems, Inc. | Systems and methods for using metadata to enhance data identification operations |
+US9298382B2 (en) | 2005-12-19 | 2016-03-29 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US9020898B2 (en) | 2005-12-19 | 2015-04-28 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8121983B2 (en) | 2005-12-19 | 2012-02-21 | Commvault Systems, Inc. | Systems and methods for monitoring application data in a data replication system |
+US9971657B2 (en) | 2005-12-19 | 2018-05-15 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8930496B2 (en) | 2005-12-19 | 2015-01-06 | Commvault Systems, Inc. | Systems and methods of unified reconstruction in storage systems |
+US9996430B2 (en) | 2005-12-19 | 2018-06-12 | Commvault Systems, Inc. | Systems and methods of unified reconstruction in storage systems |
+US20070198602A1 (en) * | 2005-12-19 | 2007-08-23 | David Ngo | Systems and methods for resynchronizing information |
+US9639294B2 (en) | 2005-12-19 | 2017-05-02 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US20070226535A1 (en) * | 2005-12-19 | 2007-09-27 | Parag Gokhale | Systems and methods of unified reconstruction in storage systems |
+US8793221B2 (en) | 2005-12-19 | 2014-07-29 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8024294B2 (en) | 2005-12-19 | 2011-09-20 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US8271830B2 (en) | 2005-12-19 | 2012-09-18 | Commvault Systems, Inc. | Rolling cache configuration for a data replication system |
+US8935210B2 (en) | 2005-12-19 | 2015-01-13 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US8725694B2 (en) | 2005-12-19 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US8285684B2 (en) | 2005-12-19 | 2012-10-09 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US9002799B2 (en) | 2005-12-19 | 2015-04-07 | Commvault Systems, Inc. | Systems and methods for resynchronizing information |
+US7962455B2 (en) | 2005-12-19 | 2011-06-14 | Commvault Systems, Inc. | Pathname translation in a data replication system |
+US8656218B2 (en) | 2005-12-19 | 2014-02-18 | Commvault Systems, Inc. | Memory configuration for data replication system including identification of a subsequent log entry by a destination computer |
+US7962709B2 (en) | 2005-12-19 | 2011-06-14 | Commvault Systems, Inc. | Network redirector systems and methods for performing data replication |
+US9633064B2 (en) | 2005-12-19 | 2017-04-25 | Commvault Systems, Inc. | Systems and methods of unified reconstruction in storage systems |
+US8655850B2 (en) | 2005-12-19 | 2014-02-18 | Commvault Systems, Inc. | Systems and methods for resynchronizing information |
+US20100082541A1 (en) * | 2005-12-19 | 2010-04-01 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US20100094808A1 (en) * | 2005-12-19 | 2010-04-15 | Commvault Systems, Inc. | Pathname translation in a data replication system |
+US20100100529A1 (en) * | 2005-12-19 | 2010-04-22 | Commvault Systems, Inc. | Rolling cache configuration for a data replication system |
+US20100122053A1 (en) * | 2005-12-19 | 2010-05-13 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US9208210B2 (en) | 2005-12-19 | 2015-12-08 | Commvault Systems, Inc. | Rolling cache configuration for a data replication system |
+US11442820B2 (en) | 2005-12-19 | 2022-09-13 | Commvault Systems, Inc. | Systems and methods of unified reconstruction in storage systems |
+US8463751B2 (en) | 2005-12-19 | 2013-06-11 | Commvault Systems, Inc. | Systems and methods for performing replication copy storage operations |
+US9003374B2 (en) | 2006-07-27 | 2015-04-07 | Commvault Systems, Inc. | Systems and methods for continuous data replication |
+US8726242B2 (en) | 2006-07-27 | 2014-05-13 | Commvault Systems, Inc. | Systems and methods for continuous data replication |
+US20110093470A1 (en) * | 2006-10-17 | 2011-04-21 | Parag Gokhale | Method and system for offline indexing of content and classifying stored data |
+US8037031B2 (en) | 2006-10-17 | 2011-10-11 | Commvault Systems, Inc. | Method and system for offline indexing of content and classifying stored data |
+US10783129B2 (en) | 2006-10-17 | 2020-09-22 | Commvault Systems, Inc. | Method and system for offline indexing of content and classifying stored data |
+US20080294605A1 (en) * | 2006-10-17 | 2008-11-27 | Anand Prahlad | Method and system for offline indexing of content and classifying stored data |
+US8170995B2 (en) | 2006-10-17 | 2012-05-01 | Commvault Systems, Inc. | Method and system for offline indexing of content and classifying stored data |
+US9158835B2 (en) | 2006-10-17 | 2015-10-13 | Commvault Systems, Inc. | Method and system for offline indexing of content and classifying stored data |
+US20080120315A1 (en) * | 2006-11-21 | 2008-05-22 | Nokia Corporation | Signal message decompressor |
+US9967338B2 (en) | 2006-11-28 | 2018-05-08 | Commvault Systems, Inc. | Method and system for displaying similar email messages based on message contents |
+US9509652B2 (en) | 2006-11-28 | 2016-11-29 | Commvault Systems, Inc. | Method and system for displaying similar email messages based on message contents |
+US7882098B2 (en) * | 2006-12-22 | 2011-02-01 | Commvault Systems, Inc | Method and system for searching stored data |
+US20080249996A1 (en) * | 2006-12-22 | 2008-10-09 | Anand Prahlad | Method and system for searching stored data |
+US8234249B2 (en) | 2006-12-22 | 2012-07-31 | Commvault Systems, Inc. | Method and system for searching stored data |
+US20090287665A1 (en) * | 2006-12-22 | 2009-11-19 | Anand Prahlad | Method and system for searching stored data |
+US9639529B2 (en) | 2006-12-22 | 2017-05-02 | Commvault Systems, Inc. | Method and system for searching stored data |
+US7937365B2 (en) | 2006-12-22 | 2011-05-03 | Commvault Systems, Inc. | Method and system for searching stored data |
+US8615523B2 (en) | 2006-12-22 | 2013-12-24 | Commvault Systems, Inc. | Method and system for searching stored data |
+US20080243796A1 (en) * | 2006-12-22 | 2008-10-02 | Anand Prahlad | Method and system for searching stored data |
+US8799051B2 (en) | 2007-03-09 | 2014-08-05 | Commvault Systems, Inc. | System and method for automating customer-validated statement of work for a data storage environment |
+US8428995B2 (en) | 2007-03-09 | 2013-04-23 | Commvault Systems, Inc. | System and method for automating customer-validated statement of work for a data storage environment |
+US20090012828A1 (en) * | 2007-03-09 | 2009-01-08 | Commvault Systems, Inc. | Computer systems and methods for workflow automation |
+US8290808B2 (en) | 2007-03-09 | 2012-10-16 | Commvault Systems, Inc. | System and method for automating customer-validated statement of work for a data storage environment |
+US8538936B2 (en) * | 2007-08-23 | 2013-09-17 | Thomson Reuters (Markets) Llc | System and method for data compression using compression hardware |
+US7987161B2 (en) * | 2007-08-23 | 2011-07-26 | Thomson Reuters (Markets) Llc | System and method for data compression using compression hardware |
+US20110282849A1 (en) * | 2007-08-23 | 2011-11-17 | Thomson Reuters (Markets) Llc | System and Method for Data Compression Using Compression Hardware |
+US20090055422A1 (en) * | 2007-08-23 | 2009-02-26 | Ken Williams | System and Method For Data Compression Using Compression Hardware |
+US20110060725A1 (en) * | 2008-01-30 | 2011-03-10 | Commvault Systems, Inc. | Systems and methods for grid-based data scanning |
+US8356018B2 (en) | 2008-01-30 | 2013-01-15 | Commvault Systems, Inc. | Systems and methods for grid-based data scanning |
+US11516289B2 (en) | 2008-08-29 | 2022-11-29 | Commvault Systems, Inc. | Method and system for displaying similar email messages based on message contents |
+US10708353B2 (en) | 2008-08-29 | 2020-07-07 | Commvault Systems, Inc. | Method and system for displaying similar email messages based on message contents |
+US11082489B2 (en) | 2008-08-29 | 2021-08-03 | Commvault Systems, Inc. | Method and system for displaying similar email messages based on message contents |
+US8370442B2 (en) | 2008-08-29 | 2013-02-05 | Commvault Systems, Inc. | Method and system for leveraging identified changes to a mail server |
+US20100057870A1 (en) * | 2008-08-29 | 2010-03-04 | Ahn Jun H | Method and system for leveraging identified changes to a mail server |
+US9047357B2 (en) | 2008-12-10 | 2015-06-02 | Commvault Systems, Inc. | Systems and methods for managing replicated database data in dirty and clean shutdown states |
+US8204859B2 (en) | 2008-12-10 | 2012-06-19 | Commvault Systems, Inc. | Systems and methods for managing replicated database data |
+US8666942B2 (en) | 2008-12-10 | 2014-03-04 | Commvault Systems, Inc. | Systems and methods for managing snapshots of replicated databases |
+US9396244B2 (en) | 2008-12-10 | 2016-07-19 | Commvault Systems, Inc. | Systems and methods for managing replicated database data |
+US9495382B2 (en) | 2008-12-10 | 2016-11-15 | Commvault Systems, Inc. | Systems and methods for performing discrete data replication |
+US20100179941A1 (en) * | 2008-12-10 | 2010-07-15 | Commvault Systems, Inc. | Systems and methods for performing discrete data replication |
+US20110295817A1 (en) * | 2009-04-30 | 2011-12-01 | Oracle International Corporation | Technique For Compressing XML Indexes |
+US20100281079A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Compression analyzer |
+US8935223B2 (en) | 2009-04-30 | 2015-01-13 | Oracle International Corporation | Structure of hierarchical compressed data structure for tabular data |
+US8645337B2 (en) | 2009-04-30 | 2014-02-04 | Oracle International Corporation | Storing compression units in relational tables |
+US20110029569A1 (en) * | 2009-04-30 | 2011-02-03 | Oracle International Corporation | Ddl and dml support for hybrid columnar compressed tables |
+US11520743B2 (en) | 2009-04-30 | 2022-12-06 | Oracle International Corporation | Storing compression units in relational tables |
+US9667269B2 (en) * | 2009-04-30 | 2017-05-30 | Oracle International Corporation | Technique for compressing XML indexes |
+US8356060B2 (en) * | 2009-04-30 | 2013-01-15 | Oracle International Corporation | Compression analyzer |
+US20130036101A1 (en) * | 2009-04-30 | 2013-02-07 | Oracle International Corporation | Compression Analyzer |
+US9559720B2 (en) * | 2009-04-30 | 2017-01-31 | Oracle International Corporation | Compression analyzer |
+US20100281004A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Storing compression units in relational tables |
+US20100278446A1 (en) * | 2009-04-30 | 2010-11-04 | Oracle International Corporation | Structure of hierarchical compressed data structure for tabular data |
+US8583692B2 (en) | 2009-04-30 | 2013-11-12 | Oracle International Corporation | DDL and DML support for hybrid columnar compressed tables |
+US8838894B2 (en) | 2009-08-19 | 2014-09-16 | Oracle International Corporation | Storing row-major data with an affinity for columns |
+US8627006B2 (en) | 2009-08-19 | 2014-01-07 | Oracle International Corporation | Storing row-major data with an affinity for columns |
+US10025820B2 (en) | 2009-11-12 | 2018-07-17 | Oracle International Corporation | Query and exadata support for hybrid columnar compressed data |
+US9047296B2 (en) | 2009-12-31 | 2015-06-02 | Commvault Systems, Inc. | Asynchronous methods of data classification using change journals and other data structures |
+US8442983B2 (en) | 2009-12-31 | 2013-05-14 | Commvault Systems, Inc. | Asynchronous methods of data classification using change journals and other data structures |
+US20110161327A1 (en) * | 2009-12-31 | 2011-06-30 | Pawar Rahul S | Asynchronous methods of data classification using change journals and other data structures |
+US10055128B2 (en) | 2010-01-20 | 2018-08-21 | Oracle International Corporation | Hybrid binary XML storage model for efficient XML processing |
+US20110238621A1 (en) * | 2010-03-29 | 2011-09-29 | Commvault Systems, Inc. | Systems and methods for selective data replication |
+US8504517B2 (en) | 2010-03-29 | 2013-08-06 | Commvault Systems, Inc. | Systems and methods for selective data replication |
+US8868494B2 (en) | 2010-03-29 | 2014-10-21 | Commvault Systems, Inc. | Systems and methods for selective data replication |
+US8725698B2 (en) | 2010-03-30 | 2014-05-13 | Commvault Systems, Inc. | Stub file prioritization in a data replication system |
+US8352422B2 (en) | 2010-03-30 | 2013-01-08 | Commvault Systems, Inc. | Data restore systems and methods in a replication environment |
+US8504515B2 (en) | 2010-03-30 | 2013-08-06 | Commvault Systems, Inc. | Stubbing systems and methods in a data replication environment |
+US9483511B2 (en) | 2010-03-30 | 2016-11-01 | Commvault Systems, Inc. | Stubbing systems and methods in a data replication environment |
+US9002785B2 (en) | 2010-03-30 | 2015-04-07 | Commvault Systems, Inc. | Stubbing systems and methods in a data replication environment |
+US8489656B2 (en) | 2010-05-28 | 2013-07-16 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8589347B2 (en) | 2010-05-28 | 2013-11-19 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8745105B2 (en) | 2010-05-28 | 2014-06-03 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+US8572038B2 (en) | 2010-05-28 | 2013-10-29 | Commvault Systems, Inc. | Systems and methods for performing data replication |
+CN103026631B (en) * | 2010-06-01 | 2017-07-04 | 甲骨文国际公司 | Method and system for compressing XML document |
+CN103026631A (en) * | 2010-06-01 | 2013-04-03 | 甲骨文国际公司 | A method and system for compressing xml documents |
+US8832142B2 (en) | 2010-08-30 | 2014-09-09 | Oracle International Corporation | Query and exadata support for hybrid columnar compressed data |
+US8239421B1 (en) | 2010-08-30 | 2012-08-07 | Oracle International Corporation | Techniques for compression and processing optimizations by using data transformations |
+US9325344B2 (en) | 2010-12-03 | 2016-04-26 | International Business Machines Corporation | Encoding data stored in a column-oriented manner |
+US20120166402A1 (en) * | 2010-12-28 | 2012-06-28 | Teradata Us, Inc. | Techniques for extending horizontal partitioning to column partitioning |
+US11228647B2 (en) | 2011-01-20 | 2022-01-18 | Commvault Systems, Inc. | System and method for sharing SAN storage |
+US9021198B1 (en) | 2011-01-20 | 2015-04-28 | Commvault Systems, Inc. | System and method for sharing SAN storage |
+US9578101B2 (en) | 2011-01-20 | 2017-02-21 | Commvault Systems, Inc. | System and method for sharing san storage |
+US11003626B2 (en) | 2011-03-31 | 2021-05-11 | Commvault Systems, Inc. | Creating secondary copies of data based on searches for content |
+US10372675B2 (en) | 2011-03-31 | 2019-08-06 | Commvault Systems, Inc. | Creating secondary copies of data based on searches for content |
+US8719264B2 (en) | 2011-03-31 | 2014-05-06 | Commvault Systems, Inc. | Creating secondary copies of data based on searches for content |
+US9471578B2 (en) | 2012-03-07 | 2016-10-18 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9928146B2 (en) | 2012-03-07 | 2018-03-27 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9898371B2 (en) | 2012-03-07 | 2018-02-20 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9298715B2 (en) | 2012-03-07 | 2016-03-29 | Commvault Systems, Inc. | Data storage system utilizing proxy device for storage operations |
+US9342537B2 (en) | 2012-04-23 | 2016-05-17 | Commvault Systems, Inc. | Integrated snapshot interface for a data storage system |
+US9928002B2 (en) | 2012-04-23 | 2018-03-27 | Commvault Systems, Inc. | Integrated snapshot interface for a data storage system |
+US10698632B2 (en) | 2012-04-23 | 2020-06-30 | Commvault Systems, Inc. | Integrated snapshot interface for a data storage system |
+US11269543B2 (en) | 2012-04-23 | 2022-03-08 | Commvault Systems, Inc. | Integrated snapshot interface for a data storage system |
+US9418149B2 (en) | 2012-06-08 | 2016-08-16 | Commvault Systems, Inc. | Auto summarization of content |
+US11580066B2 (en) | 2012-06-08 | 2023-02-14 | Commvault Systems, Inc. | Auto summarization of content for use in new storage policies |
+US11036679B2 (en) | 2012-06-08 | 2021-06-15 | Commvault Systems, Inc. | Auto summarization of content |
+US10372672B2 (en) | 2012-06-08 | 2019-08-06 | Commvault Systems, Inc. | Auto summarization of content |
+US8892523B2 (en) | 2012-06-08 | 2014-11-18 | Commvault Systems, Inc. | Auto summarization of content |
+GB2506184A (en) * | 2012-09-25 | 2014-03-26 | Ibm | Compressing table data using dictionary encoding |
+US9910861B2 (en) | 2012-09-28 | 2018-03-06 | Oracle International Corporation | Automated information lifecycle management using low access patterns |
+US9514187B2 (en) | 2012-09-28 | 2016-12-06 | Oracle International Corporation | Techniques for using zone map information for post index access pruning |
+US8854239B2 (en) * | 2012-11-26 | 2014-10-07 | Institute For Information Industry | Data processing apparatus and method |
+CN103838802A (en) * | 2012-11-26 | 2014-06-04 | 财团法人资讯工业策进会 | Data processing apparatus and data processing method |
+CN103838802B (en) * | 2012-11-26 | 2017-04-05 | 财团法人资讯工业策进会 | Data processing apparatus and data processing method |
+US10853176B2 (en) | 2013-01-11 | 2020-12-01 | Commvault Systems, Inc. | Single snapshot for multiple agents |
+US9886346B2 (en) | 2013-01-11 | 2018-02-06 | Commvault Systems, Inc. | Single snapshot for multiple agents |
+US9430491B2 (en) | 2013-01-11 | 2016-08-30 | Commvault Systems, Inc. | Request-based data synchronization management |
+US9262435B2 (en) | 2013-01-11 | 2016-02-16 | Commvault Systems, Inc. | Location-based data synchronization management |
+US9336226B2 (en) | 2013-01-11 | 2016-05-10 | Commvault Systems, Inc. | Criteria-based data synchronization management |
+US11847026B2 (en) | 2013-01-11 | 2023-12-19 | Commvault Systems, Inc. | Single snapshot for multiple agents |
+US9773041B2 (en) | 2013-03-06 | 2017-09-26 | Oracle International Corporation | Methods and apparatus of shared expression evaluation across RDBMS and storage layer |
+US11269829B2 (en) | 2013-03-12 | 2022-03-08 | Oracle International Corporation | Row level locking for columnar data |
+US9646053B2 (en) | 2013-03-12 | 2017-05-09 | Oracle International Corporation | OLTP compression of wide tables |
+US20140280249A1 (en) | 2013-03-14 | 2014-09-18 | Oracle International Corporation | Predicate offload of large objects |
+US10489365B2 (en) | 2013-03-14 | 2019-11-26 | Oracle International Corporation | Predicate offload of large objects |
+US10642837B2 (en) | 2013-03-15 | 2020-05-05 | Oracle International Corporation | Relocating derived cache during data rebalance to maintain application performance |
+US10296462B2 (en) | 2013-03-15 | 2019-05-21 | Oracle International Corporation | Method to accelerate queries using dynamically generated alternate data formats in flash cache |
+US9418091B2 (en) * | 2013-09-06 | 2016-08-16 | Sap Se | Database operations on a columnar table database |
+CN104424314B (en) * | 2013-09-06 | 2019-06-11 | Sap欧洲公司 | Column-shaped table wide area information server is operated |
+CN104424314A (en) * | 2013-09-06 | 2015-03-18 | Sap欧洲公司 | Database operation for columnar table database |
+US20150074066A1 (en) * | 2013-09-06 | 2015-03-12 | Sap Ag | Database operations on a columnar table database |
+US11860830B2 (en) | 2013-09-21 | 2024-01-02 | Oracle International Corporation | Combined row and columnar storage for in-memory databases for OLTP and analytics workloads |
+US10120895B2 (en) | 2013-09-21 | 2018-11-06 | Oracle International Corporation | Mirroring, in memory, data from disk to improve query performance |
+US9881048B2 (en) | 2013-09-21 | 2018-01-30 | Oracle International Corporation | Mirroring, in memory, data from disk to improve query performance |
+US10311154B2 (en) | 2013-09-21 | 2019-06-04 | Oracle International Corporation | Combined row and columnar storage for in-memory databases for OLTP and analytics workloads |
+US8933829B2 (en) | 2013-09-23 | 2015-01-13 | International Business Machines Corporation | Data compression using dictionary encoding |
+US20150113026A1 (en) * | 2013-10-17 | 2015-04-23 | Muhammed Sharique | Rollover strategies in a n-bit dictionary compressed column store |
+US9489409B2 (en) * | 2013-10-17 | 2016-11-08 | Sybase, Inc. | Rollover strategies in a N-bit dictionary compressed column store |
+US9495466B2 (en) | 2013-11-27 | 2016-11-15 | Oracle International Corporation | LIDAR model with hybrid-columnar format and no indexes for spatial searches |
+US9336196B2 (en) | 2013-12-06 | 2016-05-10 | Sap Se | Methods, systems, and apparatus for optimization using statistical estimation |
+EP2881870A1 (en) * | 2013-12-06 | 2015-06-10 | Sap Se | Data compression method |
+US10223365B2 (en) | 2014-01-24 | 2019-03-05 | Commvault Systems, Inc. | Snapshot readiness checking and reporting |
+US10942894B2 (en) | 2014-01-24 | 2021-03-09 | Commvault Systems, Inc | Operation readiness checking and reporting |
+US9892123B2 (en) | 2014-01-24 | 2018-02-13 | Commvault Systems, Inc. | Snapshot readiness checking and reporting |
+US9639426B2 (en) | 2014-01-24 | 2017-05-02 | Commvault Systems, Inc. | Single snapshot for multiple applications |
+US9495251B2 (en) | 2014-01-24 | 2016-11-15 | Commvault Systems, Inc. | Snapshot readiness checking and reporting |
+US9632874B2 (en) | 2014-01-24 | 2017-04-25 | Commvault Systems, Inc. | Database application backup in single snapshot for multiple applications |
+US10572444B2 (en) | 2014-01-24 | 2020-02-25 | Commvault Systems, Inc. | Operation readiness checking and reporting |
+US10671484B2 (en) | 2014-01-24 | 2020-06-02 | Commvault Systems, Inc. | Single snapshot for multiple applications |
+US9753812B2 (en) | 2014-01-24 | 2017-09-05 | Commvault Systems, Inc. | Generating mapping information for single snapshot for multiple applications |
+US10042716B2 (en) | 2014-09-03 | 2018-08-07 | Commvault Systems, Inc. | Consolidated processing of storage-array commands using a forwarder media agent in conjunction with a snapshot-control media agent |
+US10798166B2 (en) | 2014-09-03 | 2020-10-06 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US10891197B2 (en) | 2014-09-03 | 2021-01-12 | Commvault Systems, Inc. | Consolidated processing of storage-array commands using a forwarder media agent in conjunction with a snapshot-control media agent |
+US11245759B2 (en) | 2014-09-03 | 2022-02-08 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US10044803B2 (en) | 2014-09-03 | 2018-08-07 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US9774672B2 (en) | 2014-09-03 | 2017-09-26 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US10419536B2 (en) | 2014-09-03 | 2019-09-17 | Commvault Systems, Inc. | Consolidated processing of storage-array commands by a snapshot-control media agent |
+US9921920B2 (en) | 2014-11-14 | 2018-03-20 | Commvault Systems, Inc. | Unified snapshot storage management, using an enhanced storage manager and enhanced media agents |
+US10521308B2 (en) | 2014-11-14 | 2019-12-31 | Commvault Systems, Inc. | Unified snapshot storage management, using an enhanced storage manager and enhanced media agents |
+US11507470B2 (en) | 2014-11-14 | 2022-11-22 | Commvault Systems, Inc. | Unified snapshot storage management |
+US9996428B2 (en) | 2014-11-14 | 2018-06-12 | Commvault Systems, Inc. | Unified snapshot storage management |
+US9648105B2 (en) | 2014-11-14 | 2017-05-09 | Commvault Systems, Inc. | Unified snapshot storage management, using an enhanced storage manager and enhanced media agents |
+US9448731B2 (en) | 2014-11-14 | 2016-09-20 | Commvault Systems, Inc. | Unified snapshot storage management |
+US10628266B2 (en) | 2014-11-14 | 2020-04-21 | Commvault System, Inc. | Unified snapshot storage management |
+US9864816B2 (en) | 2015-04-29 | 2018-01-09 | Oracle International Corporation | Dynamically updating data guide for hierarchical data objects |
+US10241979B2 (en) | 2015-07-21 | 2019-03-26 | Oracle International Corporation | Accelerated detection of matching patterns |
+US9990308B2 (en) | 2015-08-31 | 2018-06-05 | Oracle International Corporation | Selective data compression for in-memory databases |
+US10331572B2 (en) | 2015-08-31 | 2019-06-25 | Oracle International Corporation | Selective data mirroring for in-memory databases |
+US10191944B2 (en) | 2015-10-23 | 2019-01-29 | Oracle International Corporation | Columnar data arrangement for semi-structured data |
+US11789923B2 (en) | 2015-10-23 | 2023-10-17 | Oracle International Corporation | Compression units in an index block |
+US11836156B2 (en) | 2016-03-10 | 2023-12-05 | Commvault Systems, Inc. | Snapshot replication operations based on incremental block change tracking |
+US10503753B2 (en) | 2016-03-10 | 2019-12-10 | Commvault Systems, Inc. | Snapshot replication operations based on incremental block change tracking |
+US11238064B2 (en) | 2016-03-10 | 2022-02-01 | Commvault Systems, Inc. | Snapshot replication operations based on incremental block change tracking |
+US10133667B2 (en) | 2016-09-06 | 2018-11-20 | Orcle International Corporation | Efficient data storage and retrieval using a heterogeneous main memory |
+US11294932B2 (en) | 2016-10-03 | 2022-04-05 | Ocient Inc. | Data transition in highly parallel database management system |
+US11586647B2 (en) * | 2016-10-03 | 2023-02-21 | Ocient, Inc. | Randomized data distribution in highly parallel database management system |
+US11934423B2 (en) | 2016-10-03 | 2024-03-19 | Ocient Inc. | Data transition in highly parallel database management system |
+US10540516B2 (en) | 2016-10-13 | 2020-01-21 | Commvault Systems, Inc. | Data protection within an unsecured storage environment |
+US11443061B2 (en) | 2016-10-13 | 2022-09-13 | Commvault Systems, Inc. | Data protection within an unsecured storage environment |
+US11669408B2 (en) | 2016-11-02 | 2023-06-06 | Commvault Systems, Inc. | Historical network data-based scanning thread generation |
+US10389810B2 (en) | 2016-11-02 | 2019-08-20 | Commvault Systems, Inc. | Multi-threaded scanning of distributed file systems |
+US11677824B2 (en) | 2016-11-02 | 2023-06-13 | Commvault Systems, Inc. | Multi-threaded scanning of distributed file systems |
+US10922189B2 (en) | 2016-11-02 | 2021-02-16 | Commvault Systems, Inc. | Historical network data-based scanning thread generation |
+US10798170B2 (en) | 2016-11-02 | 2020-10-06 | Commvault Systems, Inc. | Multi-threaded scanning of distributed file systems |
+US10984041B2 (en) | 2017-05-11 | 2021-04-20 | Commvault Systems, Inc. | Natural language processing integrated with database and data storage management |
+US10803039B2 (en) | 2017-05-26 | 2020-10-13 | Oracle International Corporation | Method for efficient primary key based queries using atomic RDMA reads on cache friendly in-memory hash index |
+US10719446B2 (en) | 2017-08-31 | 2020-07-21 | Oracle International Corporation | Directly mapped buffer cache on non-volatile memory |
+US10956335B2 (en) | 2017-09-29 | 2021-03-23 | Oracle International Corporation | Non-volatile cache access using RDMA |
+US10838961B2 (en) | 2017-09-29 | 2020-11-17 | Oracle International Corporation | Prefix compression |
+US10732836B2 (en) | 2017-09-29 | 2020-08-04 | Oracle International Corporation | Remote one-sided persistent writes |
+US11086876B2 (en) | 2017-09-29 | 2021-08-10 | Oracle International Corporation | Storing derived summaries on persistent memory of a storage device |
+US10802766B2 (en) | 2017-09-29 | 2020-10-13 | Oracle International Corporation | Database with NVDIMM as persistent storage |
+US10642886B2 (en) | 2018-02-14 | 2020-05-05 | Commvault Systems, Inc. | Targeted search of backup data using facial recognition |
+US10740022B2 (en) | 2018-02-14 | 2020-08-11 | Commvault Systems, Inc. | Block-level live browsing and private writable backup copies using an ISCSI server |
+US11422732B2 (en) | 2018-02-14 | 2022-08-23 | Commvault Systems, Inc. | Live browsing and private writable environments based on snapshots and/or backup copies provided by an ISCSI server |
+US10732885B2 (en) | 2018-02-14 | 2020-08-04 | Commvault Systems, Inc. | Block-level live browsing and private writable snapshots using an ISCSI server |
+US11159469B2 (en) | 2018-09-12 | 2021-10-26 | Commvault Systems, Inc. | Using machine learning to modify presentation of mailbox objects |
+US11157478B2 (en) | 2018-12-28 | 2021-10-26 | Oracle International Corporation | Technique of comprehensively support autonomous JSON document object (AJD) cloud service |
+US11042318B2 (en) | 2019-07-29 | 2021-06-22 | Commvault Systems, Inc. | Block-level data replication |
+US11709615B2 (en) | 2019-07-29 | 2023-07-25 | Commvault Systems, Inc. | Block-level data replication |
+US20210055932A1 (en) * | 2019-08-19 | 2021-02-25 | Advanced Micro Devices, Inc. | Decompression Engine for Decompressing Compressed Input Data that Includes Multiple Streams of Data |
+US11561797B2 (en) * | 2019-08-19 | 2023-01-24 | Ati Technologies Ulc | Decompression engine for decompressing compressed input data that includes multiple streams of data |
+US11403367B2 (en) | 2019-09-12 | 2022-08-02 | Oracle International Corporation | Techniques for solving the spherical point-in-polygon problem |
+US11423001B2 (en) | 2019-09-13 | 2022-08-23 | Oracle International Corporation | Technique of efficiently, comprehensively and autonomously support native JSON datatype in RDBMS for both OLTP and OLAP |
+US11494417B2 (en) | 2020-08-07 | 2022-11-08 | Commvault Systems, Inc. | Automated email classification in an information management system |
+WO2023278091A1 (en) * | 2021-07-01 | 2023-01-05 | Microsoft Technology Licensing, Llc | Hybrid intermediate stream format |
+US11809285B2 (en) | 2022-02-09 | 2023-11-07 | Commvault Systems, Inc. | Protecting a management database of a data storage management system to meet a recovery point objective (RPO) |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7496589B1 (en) | Highly compressed randomly accessed storage of large tables with arbitrary columns | |
+AU2005200166B2 (en) | Searchable archive | |
+US9390098B2 (en) | Fast approximation to optimal compression of digital data | |
+US10467420B2 (en) | Systems for embedding information in data strings | |
+US6216125B1 (en) | Coarse indexes for a data warehouse | |
+US7827187B2 (en) | Frequency partitioning: entropy compression with fixed size fields | |
+US20080162521A1 (en) | Compression of encrypted data in database management systems | |
+US20080133565A1 (en) | Device and method for constructing inverted indexes | |
+O'Neil et al. | Bitmap index design choices and their performance implications | |
+US10042873B2 (en) | Data encoding and processing columnar data | |
+EP2487630A1 (en) | Relevancy filter for new data based on underlying files | |
+US20230153273A1 (en) | Hardware-Implemented File Reader | |
+US9286333B2 (en) | Stream compression and decompression | |
+US9165008B1 (en) | System and method for data compression using a dynamic compression dictionary | |
+Moffat et al. | Memory efficient ranking | |
+US11422805B1 (en) | Sorting by permutation | |
+US20070198567A1 (en) | File storage and retrieval method | |
+US20030051005A1 (en) | Apparatus for encapsulating data within a self-defining file and method thereof | |
+JPH01184763A (en) | Data storage system in file system | |
+US8392362B2 (en) | Systems and methods associated with hybrid paged encoding and decoding | |
+Kaneta | Faster practical block compression for rank/select dictionaries | |
+An | Column-based RLE in row-oriented database | |
+CA2345422A1 (en) | Method and apparatus for element selection exhausting an entire array | |
+Willenborg | Some Improvements for pu-ARGUS | |
+Rishe et al. | Storage Types in the Semantic Binary Database Engine. |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: ORTIZ & LOPEZ, PLLC, NEW MEXICOFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:JAIN, ARVIND;MANKU, GURMEET SINGH;REEL/FRAME:016771/0777Effective date: 20050701 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:JAIN, ARVIND;MANKU, GURMEET SINGH;REEL/FRAME:019584/0516Effective date: 20050701 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: CORRECTIVE ASSIGNMENT TO CORRECT THE RECEIVING PARTY NAME PREVIOUSLY RECORDED AT REEL: 016771 FRAME: 0778. ASSIGNOR(S) HEREBY CONFIRMS THE ASSIGNMENT;ASSIGNORS:JAIN, ARVIND;MANKU, GURMEET SINGH;REEL/FRAME:035411/0031Effective date: 20050701 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044101/0610Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 12 |

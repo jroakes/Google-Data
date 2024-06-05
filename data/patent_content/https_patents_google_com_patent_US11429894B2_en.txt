@@ -1,0 +1,529 @@
+US11429894B2 - Constrained classification and ranking via quantiles - Google Patents
+Constrained classification and ranking via quantiles Download PDFInfo
+- Publication number
+- US11429894B2 US11429894B2 US16/288,217 US201916288217A US11429894B2 US 11429894 B2 US11429894 B2 US 11429894B2 US 201916288217 A US201916288217 A US 201916288217A US 11429894 B2 US11429894 B2 US 11429894B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- quantile
+- classification model
+- estimator
+- classification
+- training
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06N—COMPUTING ARRANGEMENTS BASED ON SPECIFIC COMPUTATIONAL MODELS
+- G06N20/00—Machine learning
+Definitions
+- the present disclosure relates generally to machine learning. More particularly, the present disclosure relates to systems and methods for learning classification models which satisfy constraints via the use of quantile estimators.
+- a decision threshold of a machine-learned classification model is often adjusted after training to select a particular operating point on the precision-recall or ROC curve, reflecting how the classification model will be used.
+- automated email spam filters might be adjusted to operate with an increased threshold to achieve a high precision or low predicted positive rate.
+- the threshold can be decreased so that the classification model will make predictions with a high recall.
+- classification models are adjusted to obey constraints on coverage or fairness (e.g., predicted positive rates on subsets of the training dataset) so that the system will not treat some demographics of users unfairly.
+- the most desirable binary classification model can be characterized as one which maximizes a quantity such as accuracy, precision, or recall, subject to a constraint.
+- the constraint is usually an inequality on the predicted positive rate (e.g., coverage) or true/false positive/negative rate on some subset of the data.
+- the most common practice to produce a classification model which satisfies a constraint is to train the classification model by maximum likelihood and then, after training, adjust its threshold so that the constraint is satisfied. That is, a machine-learned classification model is first trained to optimize classification accuracy, and then subsequently the decision threshold of the model is adjusted to obtain desired model performance according to some other metric.
+- One example aspect of the present disclosure is directed to a computer-implemented method for training a machine-learned classification model to satisfy a constraint.
+- the method includes obtaining, by one or more computing devices, data descriptive of the machine-learned classification model.
+- the machine-learned classification model is configured to produce a classification score for an input and to classify the input by comparing the classification score to a decision threshold.
+- the method includes training, by the one or more computing devices, the machine-learned classification model based at least in part on a training dataset.
+- Training, by the one or more computing devices, the machine-learned classification model includes optimizing, by the one or more computing devices, an unconstrained objective function in which the decision threshold of the machine-learned classification model is expressed as an estimator of a quantile function on the classification scores of the machine-learned classification model for a subset of the training dataset at a desired quantile.
+- the desired quantile is based at least in part on a rate value associated with the constraint.
+- the computing system includes one or more processors and one or more non-transitory computer-readable media that collectively store instructions that, when executed by the one or more processors cause the computing system to perform operations.
+- the operations include obtaining data descriptive of the machine-learned classification model.
+- the machine-learned classification model is configured to produce a classification score for an input and to classify the input by comparing the classification score to a decision threshold.
+- the operations include, for each of a plurality of iterations, obtaining a first minibatch of training data from a training dataset.
+- the operations include, for each of the plurality of iterations, obtaining a second minibatch of training data from a specified subset of the training dataset.
+- the operations include, for each of the plurality of iterations, determining a gradient of a loss function that describes a classification performance of the machine-learned classification model on the first minibatch of training data.
+- the loss function expresses the decision threshold of the machine-learned classification model as an estimator of a quantile function on the classification scores of the machine-learned classification model for the second minibatch of training data at a desired quantile.
+- the desired quantile is based at least in part on a rate value.
+- the operations include, for each of the plurality of iterations, updating one or more of a plurality of learnable parameters of the machine-learned classification model based at least in part on the gradient of the loss function.
+- Another example aspect of the present disclosure is directed to one or more non-transitory computer-readable media that collectively store instructions that, when executed by one or more processors, cause the one or more processors to perform operations.
+- the operations include obtaining data descriptive of a machine-learned classification model.
+- the machine-learned classification model is configured to produce a classification score for an input and to classify the input by comparing the classification score to a decision threshold.
+- the operations include training the machine-learned classification model based at least in part on a training dataset.
+- the operation of training the machine-learned classification model includes optimizing an objective function in which the decision threshold of the machine-learned classification model is expressed as an estimator of a quantile function on the classification scores of the machine-learned classification model for a subset of the training dataset at a desired quantile.
+- the desired quantile is based at least in part on a rate value associated with a constraint.
+- FIG. 1 depicts a graphical diagram of the performance of three example classification models.
+- FIG. 2 depicts a graphical diagram of the precision recall curves of the three example classification models of FIG. 1 .
+- FIG. 3A depicts a block diagram of an example computing system according to example embodiments of the present disclosure.
+- FIG. 3B depicts a block diagram of an example computing device according to example embodiments of the present disclosure.
+- FIG. 3C depicts a block diagram of an example computing device according to example embodiments of the present disclosure.
+- FIG. 4 depicts a graphical diagram of example experimental results according to example embodiments of the present disclosure.
+- FIG. 5 depicts a graphical diagram of example experimental results according to example embodiments of the present disclosure.
+- FIG. 6 depicts a flow chart diagram of an example method to train and deploy a machine-learned classification model according to example embodiments of the present disclosure.
+- FIG. 7 depicts a flow chart diagram of an example method to train a machine-learned classification model according to example embodiments of the present disclosure.
+- Example aspects of the present disclosure are directed to systems and methods for learning classification models which satisfy constraints such as, for example, constraints that can be expressed as a predicted positive rate or negative rate on a subset of the training dataset.
+- constraints such as, for example, constraints that can be expressed as a predicted positive rate or negative rate on a subset of the training dataset.
+- the systems and methods of the present disclosure can transform a constrained optimization problem into an unconstrained optimization problem that is solved more efficiently and generally than the constrained optimization problem.
+- the unconstrained optimization problem can include optimizing an objective function where a decision threshold of the classification model is expressed as an estimator of a quantile function on the classification scores of the machine-learned classification model for a subset of the training dataset at a desired quantile.
+- the systems and methods described herein are model-agnostic and only marginally more expensive than minimization of a traditionally-formulated unconstrained loss.
+- gradient-based optimization approaches can be used to solve the unconstrained optimization problem, which are significantly more efficient in terms of consumed computing resources than systems which solve constrained optimization problem.
+- the classification models produced according to the present disclosure are explicitly optimized for use in a particular regime (e.g., to satisfy a particular constraint), when used in that regime the models of the present disclosure will often significantly outperform a standard classification model operating with a threshold that was adjusted post-training.
+- experiments on a variety of benchmarks have shown competitive performance relative to existing baselines.
+- classification models can be used in anti-abuse pipelines which seek to identify (e.g., classify as such) abusive content. For example, imagine an anti-abuse setting where 100 out of 1000 web sites contain abusive content of some form. Consider three classification models, all with 95% classification accuracy with the following error pattern:
+- FIG. 1 A simplified graphical diagram of the performance of these classification models is provided in FIG. 1 .
+- the large outer space corresponds to benign sites while the large inner circle corresponds to abusive sites.
+- the space within the respective circle of changing location/diameter corresponds to the sites that are respectively classified by the respective classification model as being abusive.
+- classification model 1 has high precision (98%), which is the fraction of positive predictions which are correct. This property means that sites flagged by the classification model as being abusive have a 98% chance of actually being abusive in fact, so this classification model 1 could be used to automatically block a site. The high precision will guarantee that blocked sites will almost always be abusive sites, even if the classification model misses a substantial fraction of bad sites.
+- classification model 3 has high recall (99%), which is the fraction of abusive sites which are detected. This property means that 99% of all abusive sites can be found among those flagged by the classification model, so it could be used to identify sites for manual review. The high recall will guarantee that all types of abuse are caught, even if the classification model also labels some benign sites as abusive.
+- classification model 1 would be a good choice for automatically blocking abusive sites, it would be a poor choice for identifying all abusive sites.
+- classification model 3 In theory and in practice, there is a tradeoff between precision and recall.
+- the systems and methods described herein provide tools that enable a user be able to pick the best of each world: A classification model that is designed for a high recall constraint and another classification model for the high precision setting.
+- the standard way to adjust the tradeoff between precision and recall is by adjusting, subsequent to training of a classification model, the model's threshold for determining when a positive label is predicted.
+- a higher threshold will result with a higher precision and lower recall, and conversely a lower threshold will result in a lower precision and higher recall.
+- Changing the threshold can be thought as moving on the precision-recall curve, as shown graphically in FIG. 2 .
+- a fundamental flaw of this threshold adjustment method is that a given classification model can be suboptimal when its threshold is adjusted in order to reach a desired operating point on the precision-recall curve. Take for instance the classification circle of classification model 2 shown in FIG. 1 . If used in either the high recall or high precision regimes it will be inferior to classification model 3 or 1 (respectively). Moreover, classification models 1 and 3 which have strong performance in one regime have poor performance in the other.
+- the present disclosure shows that for a large class of these problems, the constraint can be eliminated by substitution using the quantile function, which can be effectively estimated in a way which is amenable to standard learning methods.
+- the present disclosure instead focuses on eliminating the constraint by substitution.
+- the decision threshold of a classification model which satisfies the constraint can be expressed as a quantile of the classification model's scores.
+- the threshold at which a classification model must operate to satisfy the constraint can be explicitly modeled using quantile estimators, yielding a surrogate loss function which avoids the complexity of constrained optimization.
+- the resulting unconstrained optimization problem can include optimizing an objective function where a decision threshold of the classification model is expressed as an estimator of a quantile function on the classification scores of the machine-learned classification model for a subset of the training dataset at a desired quantile.
+- the desired quantile can be based at least in part on a rate value associated with the constraint.
+- the rate value can be a value associated with a required predicted positive rate (e.g., coverage) or true/false positive/negative rate on a specified subset of the training dataset.
+- the constraint can include a desired relationship (e.g., inequality) between a predicted positive rate of the machine-learned classification model on the subset of the training dataset and the rate value.
+- the desired quantile is equal to one minus the rate value.
+- the subset of the training dataset that is considered by the quantile function corresponds to a portion of the training dataset that exhibits a particular feature value. For example, this may be the case for coverage or fairness constraints. In other implementations, the subset of the training dataset that is considered by the quantile function can correspond to or include an entirety of the training dataset.
+- a number of different quantile estimators can be used.
+- a point estimator of the quantile function can be used.
+- one of a number of different L-estimators of the quantile function can be used.
+- the estimator of the quantile function can be a kernel quantile estimator of the quantile function (e.g., a Gaussian kernel quantile estimator).
+- the estimator of the quantile function can be an interval quantile estimator as described further herein.
+- the constraint can be a precision at a fixed recall constraint and optimizing the unconstrained objective function can include minimizing a sum over all negative training examples in the training dataset of a logistic loss or a hinge loss of the classification score produced for such training example by the machine-learned classification model minus the estimator of the quantile function on the classification scores of the machine-learned classification model for all positive training examples of the training dataset at the desired quantile.
+- the constraint can be a precision at a fixed predicted positive rate constraint and optimizing the unconstrained objective function can include minimizing a sum over all negative training examples in the training dataset of a logistic loss or a hinge loss of the classification score produced for such training example by the machine-learned classification model minus the estimator of the quantile function on the classification scores of the machine-learned classification model for all training examples of the training dataset at the desired quantile.
+- the constraint can be a precision at a fixed predicted positive rate constraint and optimizing the unconstrained objective function can include minimizing a sum over all positive training examples in the training dataset of a logistic loss or a hinge loss of an inverse of the classification score produced for such training example by the machine-learned classification model plus the estimator of the quantile function on the classification scores of the machine-learned classification model for all training examples of the training dataset at the desired quantile.
+- the proposed quantile estimation approaches of the present disclosure enable optimization of a classification model for a particular regime (high precision, high recall, or a tradeoff between the two). Because the classification model was optimized for use in a particular regime, when used in that regime it will often significantly outperform a standard classification model with an adjusted threshold. In addition, the systems and methods of the present disclosure enjoy standard empirical risk bounds and strong performance relative to other methods and surrogates for enforcing constraints relevant to non-accuracy objectives.
+- the systems and methods of the present disclosure can be used for a number of different applications and provide a number of different technical effects and benefits.
+- the systems and methods of the present disclosure can be used for fighting abusive content and/or malware hosting sites as described above.
+- a high recall classification model can be appropriate for labeling of abusive content or malicious sites while a high precision classification model can be more appropriate for automatic blocking of advertisements (e.g., that point to malicious sites and/or abusive content).
+- aspects of the present disclosure can be used to provide improved systems for combating abusive or malicious content such as abusive comments in an online forum or false “news” articles.
+- fraud detection Another example application of the technologies described herein is to fraud detection.
+- fraud detection the number of blocked transactions needs to be closely controlled in order to provide a good user experience. However, at the same time the number of fraudulent transactions should be minimized. This required balance can be handled naturally by a high precision classification model.
+- Another example application of the technologies described herein is to image classification.
+- One objective of image classification to label an image with its content based only on the image.
+- the classical use case is retrieval: given a query such as, for example, “dog show”, the system (e.g., a photograph management application) seeks to produce a set of image results that are responsive to the query.
+- a moderately high (e.g., 70%) precision constraint can be used in order to guarantee appropriate results for the users.
+- Another example application of the technologies described herein is image annotation. For example, given one image (e.g., possibly taken real time) the machine learning system has to predict a number K (e.g., 5) labels that describe the content of the image and is measured via the Precision@K metric.
+- K e.g. 5
+- the present disclosure provides a number of technical effects and benefits and can be used in any number of different applications.
+- a classification model for use in a particular regime (e.g., subject to a particular constraint)
+- when the classification model used in that regime it will often significantly outperform a standard classification model with an adjusted threshold.
+- the performance of the computing system itself is improved.
+- the malicious sites can be classified with improved recall.
+- the improved performance of the classification model in a particular regime can result in improved goods, services, or system performance that result from or are based on the classification provided by the classification model in such regime. For example, since malicious sites are classified with improved recall, a computing system that relies upon the classifications of the model is less likely to visit such a malicious site and, therefore, is less likely to be infected with or acquire malware, thereby resulting in less system down-time and improved system processing performance.
+- optimization techniques designed for unconstrained problems e.g., gradient-based techniques
+- optimization techniques designed for unconstrained problems are typically much less complex and resource intensive than optimization techniques designed for constrained problems. Therefore, the systems and methods of the present disclosure enable classification models which satisfy constraints to be trained in a much less resource intensive fashion, thereby saving processing resources, memory resources, bandwidth (e.g., in the case of distributed training schemes), and/or other computing resources.
+- the present disclosure first shows that, using the insights of the present disclosure, a wide variety of machine learning problems with constraints can be recast as ordinary, unconstrained learning problems. Second, the present disclosure shows that the resulting unconstrained problems can be solved efficiently and generally; they are particularly amenable to gradient-based optimization, independent of what model is used. Next, a convex upper bound on the loss is derived and a uniform risk bound is proven for linear models. Finally, experimental results across a variety of benchmarks are provided which demonstrate performance matching or outperforming state of the art methods.
+- the present disclosure focuses on binary classification and applies the quantile estimation approach to optimize Precision at a fixed recall and Precision@K.
+- the present disclosure is not limited to these example focuses.
+- aspects of the present disclosure such as, for example, the use of quantile function estimators to transform constrained machine learning problems into unconstrained problems, are more general and are applicable in scenarios other than the presented examples.
+- FIG. 3A depicts a block diagram of an example computing system 100 according to example embodiments of the present disclosure.
+- the system 100 includes a user computing device 102 , a server computing system 130 , and a training computing system 150 that are communicatively coupled over a network 180 .
+- the user computing device 102 can be any type of computing device, such as, for example, a personal computing device (e.g., laptop or desktop), a mobile computing device (e.g., smartphone or tablet), a gaming console or controller, a wearable computing device, an embedded computing device, or any other type of computing device.
+- a personal computing device e.g., laptop or desktop
+- a mobile computing device e.g., smartphone or tablet
+- a gaming console or controller e.g., a gaming console or controller
+- a wearable computing device e.g., an embedded computing device, or any other type of computing device.
+- the user computing device 102 includes one or more processors 112 and a memory 114 .
+- the one or more processors 112 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, a FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected.
+- the memory 114 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof.
+- the memory 114 can store data 116 and instructions 118 which are executed by the processor 112 to cause the user computing device 102 to perform operations.
+- the user computing device 102 can store or include one or more classification models 120 .
+- the classification model 120 can perform various types of classification based on input data.
+- the classification model 120 can perform binary classification or multiclass classification.
+- binary classification the output data can include a classification of the input data into one of two different classes.
+- multiclass classification the output data can include a classification of the input data into one (or more) of more than two classes.
+- the classifications can be single label or multi-label.
+- the classification model 120 can perform discrete categorical classification in which the input data is simply classified into one or more classes or categories.
+- the classification model 120 can perform classification in which the classification model 120 provides, for each of one or more classes, a numerical value descriptive of a degree to which it is believed that the input data should be classified into the corresponding class.
+- the numerical values provided by the classification model 120 can be referred to as “confidence scores” that are indicative of a respective confidence associated with classification of the input into the respective class.
+- the confidence scores can be compared to one or more decision thresholds to render a discrete categorical prediction. In some implementations, only a certain number of classes (e.g., one) with the relatively largest confidence scores can be selected to render a discrete categorical prediction.
+- the classification model 120 can provide a probabilistic classification.
+- the classification model 120 can be able to predict, given a sample input, a probability distribution over a set of classes.
+- the classification model 120 can output, for each class, a probability that the sample input belongs to such class.
+- the probability distribution over all possible classes can sum to one.
+- a softmax function or layer can be used to squash a set of real values respectively associated with the possible classes to a set of real values in the range (0, 1) that sum to one.
+- the probabilities provided by the probability distribution can be compared to one or more decision thresholds to render a discrete categorical prediction. In some implementations, only a certain number of classes (e.g., one) with the relatively largest predicted probability can be selected to render a discrete categorical prediction.
+- the classification models 120 can be or can otherwise include various machine-learned models such as, for example, neural networks (e.g., deep neural networks) or other types of machine-learned models, including non-linear models and/or linear models.
+- Neural networks can include feed-forward neural networks, recurrent neural networks (e.g., long short-term memory recurrent neural networks), convolutional neural networks or other forms of neural networks.
+- the classification model 120 can be or include linear classification models, quadratic classification models, or the like.
+- the classification model 120 can be or include one or more decision tree-based models such as, for example, classification and/or regression trees; iterative dichotomiser 3 decision trees; C4.5 decision trees; chi-squared automatic interaction detection decision trees; decision stumps; conditional decision trees; etc.
+- the classification model 120 can be or include one or more kernel machines.
+- the classification model 120 can be or include one or more support vector machines.
+- the classification model 120 can be or include one or more Bayesian models such as, for example, na ⁇ ve Bayes models; Gaussian na ⁇ ve Bayes models; multinomial na ⁇ ve Bayes models; averaged one-dependence estimators; Bayesian networks; Bayesian belief networks; hidden Markov models; etc.
+- Bayesian models such as, for example, na ⁇ ve Bayes models; Gaussian na ⁇ ve Bayes models; multinomial na ⁇ ve Bayes models; averaged one-dependence estimators; Bayesian networks; Bayesian belief networks; hidden Markov models; etc.
+- the one or more classification models 120 can be received from the server computing system 130 over network 180 , stored in the user computing device memory 114 , and then used or otherwise implemented by the one or more processors 112 .
+- the user computing device 102 can implement multiple parallel instances of a single classification model 120 .
+- one or more classification models 140 can be included in or otherwise stored and implemented by the server computing system 130 that communicates with the user computing device 102 according to a client-server relationship.
+- the classification models 140 can be implemented by the server computing system 140 as a portion of a web service (e.g., an anti-abuse service, an image classification service, an image labelling service, and/or the like).
+- a web service e.g., an anti-abuse service, an image classification service, an image labelling service, and/or the like.
+- one or more models 120 can be stored and implemented at the user computing device 102 and/or one or more models 140 can be stored and implemented at the server computing system 130 .
+- the user computing device 102 can also include one or more user input component 122 that receives user input.
+- the user input component 122 can be a touch-sensitive component (e.g., a touch-sensitive display screen or a touch pad) that is sensitive to the touch of a user input object (e.g., a finger or a stylus).
+- the touch-sensitive component can serve to implement a virtual keyboard.
+- Other example user input components include a microphone, a traditional keyboard, or other means by which a user can provide user input.
+- the server computing system 130 includes one or more processors 132 and a memory 134 .
+- the one or more processors 132 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, a FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected.
+- the memory 134 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof.
+- the memory 134 can store data 136 and instructions 138 which are executed by the processor 132 to cause the server computing system 130 to perform operations.
+- the server computing system 130 includes or is otherwise implemented by one or more server computing devices. In instances in which the server computing system 130 includes plural server computing devices, such server computing devices can operate according to sequential computing architectures, parallel computing architectures, or some combination thereof.
+- the server computing system 130 can store or otherwise include one or more machine-learned classification models 140 .
+- the models 140 can be or can otherwise include various machine-learned models.
+- the models 140 can be the same as any of the models 120 described above.
+- the user computing device 102 and/or the server computing system 130 can train the models 120 and/or 140 via interaction with the training computing system 150 that is communicatively coupled over the network 180 .
+- the training computing system 150 can be separate from the server computing system 130 or can be a portion of the server computing system 130 .
+- the training computing system 150 includes one or more processors 152 and a memory 154 .
+- the one or more processors 152 can be any suitable processing device (e.g., a processor core, a microprocessor, an ASIC, a FPGA, a controller, a microcontroller, etc.) and can be one processor or a plurality of processors that are operatively connected.
+- the memory 154 can include one or more non-transitory computer-readable storage mediums, such as RAM, ROM, EEPROM, EPROM, flash memory devices, magnetic disks, etc., and combinations thereof.
+- the memory 154 can store data 156 and instructions 158 which are executed by the processor 152 to cause the training computing system 150 to perform operations.
+- the training computing system 150 includes or is otherwise implemented by one or more server computing devices.
+- the training computing system 150 can include a model trainer 160 that trains the machine-learned models 120 and/or 140 stored at the user computing device 102 and/or the server computing system 130 using various training or learning techniques, such as, for example, backwards propagation of errors.
+- performing backwards propagation of errors can include performing truncated backpropagation through time.
+- the model trainer 160 can perform a number of generalization techniques (e.g., weight decays, dropouts, etc.) to improve the generalization capability of the models being trained.
+- the model trainer 160 can use any of the training techniques described herein, including, for example, quantile estimation approaches.
+- the model trainer 160 can train the classification models 120 and/or 140 based on a set of training data 162 .
+- the training data 162 can include, for example, training examples that have been annotated with a corresponding label (e.g., a “correct” classification).
+- the training examples can be provided by the user computing device 102 .
+- the model 120 provided to the user computing device 102 can be trained by the training computing system 150 on user-specific data received from the user computing device 102 . In some instances, this process can be referred to as personalizing the model.
+- the model trainer 160 includes computer logic utilized to provide desired functionality.
+- the model trainer 160 can be implemented in hardware, firmware, and/or software controlling a general purpose processor.
+- the model trainer 160 includes program files stored on a storage device, loaded into a memory and executed by one or more processors.
+- the model trainer 160 includes one or more sets of computer-executable instructions that are stored in a tangible computer-readable storage medium such as RAM hard disk or optical or magnetic media.
+- the network 180 can be any type of communications network, such as a local area network (e.g., intranet), wide area network (e.g., Internet), or some combination thereof and can include any number of wired or wireless links.
+- communication over the network 180 can be carried via any type of wired and/or wireless connection, using a wide variety of communication protocols (e.g., TCP/IP, HTTP, SMTP, FTP), encodings or formats (e.g., HTML, XML), and/or protection schemes (e.g., VPN, secure HTTP, SSL).
+- FIG. 3A illustrates one example computing system that can be used to implement the present disclosure.
+- the user computing device 102 can include the model trainer 160 and the training dataset 162 .
+- the models 120 can be both trained and used locally at the user computing device 102 .
+- the user computing device 102 can implement the model trainer 160 to personalize the models 120 based on user-specific data.
+- FIG. 3B depicts a block diagram of an example computing device 10 according to example embodiments of the present disclosure.
+- the computing device 10 can be a user computing device or a server computing device.
+- the computing device 10 includes a number of applications (e.g., applications 1 through N). Each application contains its own machine learning library and machine-learned model(s). For example, each application can include a classification model.
+- Example applications include a text messaging application, an email application, a dictation application, a virtual keyboard application, a browser application, etc.
+- each application can communicate with a number of other components of the computing device, such as, for example, one or more sensors, a context manager, a device state component, and/or additional components.
+- each application can communicate with each device component using an API (e.g., a public API).
+- the API used by each application is specific to that application.
+- FIG. 3C depicts a block diagram of an example computing device 50 according to example embodiments of the present disclosure.
+- the computing device 50 can be a user computing device or a server computing device.
+- the computing device 50 includes a number of applications (e.g., applications 1 through N). Each application is in communication with a central intelligence layer.
+- Example applications include a text messaging application, an email application, a dictation application, a virtual keyboard application, a browser application, etc.
+- each application can communicate with the central intelligence layer (and model(s) stored therein) using an API (e.g., a common API across all applications).
+- the central intelligence layer includes a number of machine-learned models. For example, as illustrated in FIG. 3C , a respective machine-learned model (e.g., a classification model) can be provided for each application and managed by the central intelligence layer. In other implementations, two or more applications can share a single machine-learned model. For example, in some implementations, the central intelligence layer can provide a single model (e.g., a single model) for all of the applications. In some implementations, the central intelligence layer is included within or otherwise implemented by an operating system of the computing device 50 .
+- a respective machine-learned model e.g., a classification model
+- two or more applications can share a single machine-learned model.
+- the central intelligence layer can provide a single model (e.g., a single model) for all of the applications.
+- the central intelligence layer is included within or otherwise implemented by an operating system of the computing device 50 .
+- the central intelligence layer can communicate with a central device data layer.
+- the central device data layer can be a centralized repository of data for the computing device 50 . As illustrated in FIG. 3C , the central device data layer can communicate with a number of other components of the computing device, such as, for example, one or more sensors, a context manager, a device state component, and/or additional components. In some implementations, the central device data layer can communicate with each device component using an API (e.g., a private API).
+- an API e.g., a private API
+- An example classification model can include learnable parameters w, and a decision threshold ⁇ .
+- the classification model can generate a score for the input and classify the input based on the generated score.
+- the portion of the classification model that generates the score can be referred to as a scoring model f, while the score generated by the scoring model for the input x i is represented as f(x i ; w).
+- r A ⁇ ( f , ⁇ ) ⁇ ⁇ x i ⁇ A ⁇ : ⁇ ⁇ f ⁇ ( x i ; w ) - ⁇ > 0 ⁇ ⁇ ⁇ A ⁇ .
+- a rate constraint is a constraint which can be written in the form r A c for some value of c ⁇ [0,1].
+- the value c can be referred to as a rate value.
+- predicted positive rate on a subset is general enough to represent many metrics of interest.
+- X + denote the positive examples in X
+- the recall (or true positive rate) of a classification model (f, ⁇ ) is equal to r X + (f, ⁇ ).
+- the typical notion of predicted positive rate coincides with r X (f, ⁇ ), and false positive rate can be written as r X ⁇ (f, ⁇ ).
+- Other examples include coverage, churn, and fairness, which can all be expressed in terms of predicted positive rates. Because the predicted positive and predicted negative rates must sum to one, predicted positive rate constraints are specifically discussed herein without loss of generality to these other example metrics of interest.
+- FP(f, ⁇ ) can be upper bounded in the standard way by the logistic loss (or hinge loss), which is denoted by l:
+- the minimization is performed with respect to the parameters w of the scoring model f, e.g. by stochastic gradient descent.
+- the precision at recall objective can be used to target Precision-Recall AUC by approximating the area under the Precision-Recall curve as a Riemann sum.
+- the objective can be considered as:
+- the objective can also be formed as:
+- the chosen estimator is required to have explicit dependence on w, for the purposes of numerical optimization.
+- x ⁇ arg ⁇ ⁇ max x ⁇ A ⁇ ⁇ f ⁇ ( x ) ⁇ : ⁇ ⁇ ⁇ ⁇ z ⁇ A ⁇ : ⁇ f ⁇ ( z ) ⁇ f ⁇ ( x ) ⁇ ⁇ ⁇ A ⁇ ⁇ c ⁇ .
+- a i ⁇ (w T x i ⁇ w T ⁇ circumflex over (x) ⁇ ).
+- the present disclosure proposes use of kernel quantile estimators. These are a subclass of L-estimators, computed as a weighted average of the order statistics of f(A). These estimators are beneficial for the techniques described herein because their gradients are far less sensitive to small parameter changes than the point estimator.
+- ⁇ h ⁇ ( x ) 1 h ⁇ ⁇ ⁇ ( x / h )
+- c is the quantile to be estimated
+- the free parameter h controls the scale of the kernel, and increasing it trades off variance for bias.
+- ⁇ h ⁇ ( x ) 1 h ⁇ 2 ⁇ ⁇ ⁇ e x 2 / 2 ⁇ h ⁇ 2 .
+- the kernel estimators lead to losses which are not convex.
+- Another example L-estimator of the present disclosure serves as a lower bound for the point estimator and results in convex loss.
+- Losses of the form (2) regardless of the choice of quantile estimator or bound, are compatible with any classification model and amenable to numerical optimization.
+- One example of a possible application to stochastic gradient descent (SGD) is provided in Algorithm 1.
+- Other and different applications to SGD and/or other optimization techniques are possible as well.
+- the Gaussian kernel quantile estimator was used.
+- the weight decay regularization coefficient and scale parameter h of the kernel quantile estimator are the algorithm's only hyperparameters in the example implementations.
+- h is fixed to equal 0.05 on the Ionosphere data and h is fixed to equal 0.08 on the Housing data.
+- the regularization coefficient C was chosen based on the largest average value of Precision@ ⁇ .
+- the quantile method may converge to a suboptimal local minimum.
+- the algorithm can be run with multiple random initializations of w and the solution with the lowest loss on the training set can be taken. Results for one and three initializations are reported.
+- the quantile surrogate achieves results matching or beating Accuracy at the Top, with the largest improvements occurring for small ⁇ .
+- optimization of the quantile surrogate enjoys very favorable computational complexity relative to Accuracy at the Top.
+- logistic regression has an O(N) cost.
+- Accuracy at the Top requires solving a separate logistic regression problem for each datapoint, for a total cost of O(N 2 ).
+- the only additional cost of the quantile method over logistic regression is a sorting operation per iteration, for a total cost of O(N log N).
+- ⁇ ⁇ [0, 1] is the predicted positive rate.
+- the columns correspond to logistic regression, Accuracy at the Top, the quantile method with one initialization, and the quantile method with three initializations, respectively.
+- ⁇ (%) LR AATP Q1 Q3 1 0.26 ⁇ 0.44 0.2 ⁇ 0.27 0.4 ⁇ 0.49 0.43 ⁇ 0.50 2 0.12 ⁇ 0.19 0.23 ⁇ 0.10 0.23 ⁇ 0.23 0.28 ⁇ 0.23 3 0.09 ⁇ 0.10 0.20 ⁇ 0.12 0.18 ⁇ 0.17 0.25 ⁇ 0.16 4 0.09 ⁇ 0.10 0.19 ⁇ 0.13 0.16 ⁇ 0.14 0.23 ⁇ 0.14 5 0.11 ⁇ 0.09 0.17 ⁇ 0.07 0.14 ⁇ 0.12 0.21 ⁇ 0.13 6 0.11 ⁇ 0.08 0.14 ⁇ 0.05 0.13 ⁇ 0.12 0.18 ⁇ 0.10
+- SVMPerf (see Joachims, Thorsten. A support vector method for multivariate performance measures. In Proceedings of the 22 nd international conference on Machine learning , pp. 377-384. ACM, 2005) is a standard baseline for methods targeting Precision@K. It is compared to the I prec@k avg surrogate from Kar et al., which resolves theoretical issues which arise when applying the structured SVM method to Precision@K. Results are presented in terms of Precision@ ⁇ . For this dataset, the loss (10) was considered.
+- FIG. 4 illustrates P@ ⁇ on the KDD Cup 2008 dataset, where error bars denote 95% confidence intervals.
+- FIG. 4 shows results averaged across 100 random train/test splits of the dataset, with 70% used for training and the rest reserved for testing.
+- Models with the I prec@k avg and quantile surrogate losses were evaluated at the same value of ⁇ for which they were trained, and were learned on the full training set to give the strongest results.
+- the model with the quantile surrogate was trained using stochastic gradient descent with momentum on minibatches of size 1000 for 3 epochs, with randomly initialized parameters.
+- This section evaluates example implementations of the quantile framework on the target metric of precision at fixed recall for a range of recall values on a variety of datasets.
+- FIG. 5 illustrates logistic (black) and quantile surrogate loss (magenta) classification models on the synthetic dataset.
+- the solid black line depicts the learned threshold of the logistic classification model, while the dashed black line is the adjusted threshold to satisfy a 90% recall constraint.
+- the precision of the logistic classification model at recall 0.9 is 0.13, the QS loss classification models achieves a precision of 0.37.
+- quantile estimator is either the interval estimator or a kernel quantile estimator (Eq. (13)) where ⁇ h is bounded and Lipschitz. Moreover, the bound is uniform with respect to model parameters if the model is linear.
+- quantile estimators on an arbitrary subset of the feature set X, and in particular includes the P@R and P@k case used in the experiments.
+- the proof is similar to that in Kar et al., and follows mainly from repeated applications of Hoeffding's inequality (which also holds in the case of sampling without replacement (see Bardenet et al. Concentration inequalities for sampling without replacement. Bernoulli, 21(3):1361-1385, 2015)).
+- ⁇ circumflex over (q) ⁇ (f(A)) ⁇ circumflex over (q) ⁇ (f( ⁇ )) be either the kernel estimator (13) with ⁇ bounded and Lipschitz, or the interval estimator (16).
+- L(w;Z,A) ⁇ i (1 ⁇ y i )l(f(x i ) ⁇ circumflex over (q) ⁇ (f(A))). Then with probability at least 1 ⁇ ,
+- Proposition 2 gives a uniform bound on the population loss based on the sample loss. However, because the quantile surrogate does not decompose across datapoints, minibatches give biased estimates and the efficacy of stochastic gradient methods is not immediately clear. In the case when q is the lower bound quantile estimator defined in Eq. (14), we have the following convergence bound for stochastic gradient descent on the quantile surrogate loss.
+- Proposition 3 Let w* be the parameters of a linear model learned by T steps of stochastic gradient descent with batch size b on the quantile loss L q , where q is the lower bound estimator defined in Eq. (14). Then for any parameters w, with probability at least 1 ⁇
+- the proof of Proposition 2 depends on the following concentration bounds for the kernel and interval quantile estimators.
+- FIG. 6 depicts a flow chart diagram of an example method 600 to perform according to example embodiments of the present disclosure.
+- FIG. 6 depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particularly illustrated order or arrangement.
+- the various steps of the method 600 can be omitted, rearranged, combined, and/or adapted in various ways without deviating from the scope of the present disclosure.
+- a computing system obtains data descriptive of a machine-learned classification model.
+- the machine-learned classification model can be configured to produce a classification score for an input and to classify the input by comparing the classification score to a decision threshold.
+- the computing system can train the machine-learned model based at least in part on a training data.
+- training the machine-learned model at 604 can include optimizing an unconstrained objective function in which the decision threshold of the machine-learned classification model is expressed as an estimator of a quantile function on the classification scores of the machine-learned classification model for a subset of the training dataset at a desired quantile.
+- the desired quantile is based at least in part on a rate value associated with the constraint.
+- the desired quantile can be equal to one minus the rate value.
+- the constraint can include a desired relationship between a predicted positive rate of the machine-learned classification model on the subset of the training dataset and the rate value.
+- the estimator of the quantile function can be an L-estimator of the quantile function or a point estimator of the quantile function.
+- the estimator of the quantile function can be a kernel quantile estimator of the quantile function (e.g., a Gaussian kernel quantile estimator).
+- the estimator of the quantile function can be an interval quantile estimator of the quantile function.
+- optimizing the unconstrained objective function in which the decision threshold of the machine-learned classification model is expressed as the estimator of the quantile function can include minimizing an unconstrained surrogate loss function in which the decision threshold of the machine-learned classification model is expressed as the estimator of the quantile function.
+- optimizing the unconstrained objective function in which the decision threshold of the machine-learned classification model is expressed as the estimator of the quantile function can include, for each of a plurality of iterations: determining a gradient of the unconstrained objective function in which the decision threshold of the machine-learned classification model is expressed as the estimator of the quantile function; and updating one or more of a plurality of learnable parameters of the machine-learned classification model based at least in part on the determined gradient.
+- the computing system can deploy the trained machine-learned model.
+- the machine-learned model can be used to perform any of the applications described in section 1, including, for example, abusive content detection.
+- FIG. 7 depicts a flow chart diagram of an example method 700 to perform according to example embodiments of the present disclosure.
+- FIG. 7 depicts steps performed in a particular order for purposes of illustration and discussion, the methods of the present disclosure are not limited to the particularly illustrated order or arrangement.
+- the various steps of the method 700 can be omitted, rearranged, combined, and/or adapted in various ways without deviating from the scope of the present disclosure.
+- a computing system obtains data descriptive of a machine-learned classification model.
+- the machine-learned classification model can be configured to produce a classification score for an input and to classify the input by comparing the classification score to a decision threshold.
+- the computing system obtains a first minibatch of training data from a training dataset.
+- the computing system obtains a second minibatch of training data from a specified subset of the training dataset.
+- the computing system determines a gradient of a loss function that describes a classification performance of the machine-learned classification model on the first minibatch of training data, where the loss function expresses the decision threshold of the machine-learned classification model as an estimator of a quantile function on the classification scores of the machine-learned classification model for the second minibatch of training data at a desired quantile.
+- the desired quantile is based at least in part on a rate value associated with the constraint.
+- the desired quantile can be equal to one minus the rate value.
+- a constraint to be satisfied can include a desired relationship between a predicted positive rate of the machine-learned classification model on the subset of the training dataset and the rate value.
+- the estimator of the quantile function can be an L-estimator of the quantile function or a point estimator of the quantile function.
+- the estimator of the quantile function can be a kernel quantile estimator of the quantile function (e.g., a Gaussian kernel quantile estimator).
+- the estimator of the quantile function can be an interval quantile estimator of the quantile function.
+- the computing system updates one or more one or more of a plurality of learnable parameters of the machine-learned classification model based at least in part on the gradient of the loss function.
+- the parameters can be updated according to an update step size applied to the gradient.
+- steps 704 - 710 of method 700 can be performed iteratively until one or more one or more criteria are met.
+- Example criteria include: when the loss function converges; when a threshold number of iterations have been completed; when a moving average of a total loss value is less than a threshold amount; when an iteration-over-iteration change in the total loss value is less than a threshold amount; and/or other various criteria.
+- the technology discussed herein makes reference to servers, databases, software applications, and other computer-based systems, as well as actions taken and information sent to and from such systems.
+- the inherent flexibility of computer-based systems allows for a great variety of possible configurations, combinations, and divisions of tasks and functionality between and among components.
+- processes discussed herein can be implemented using a single device or component or multiple devices or components working in combination.
+- Databases and applications can be implemented on a single system or distributed across multiple systems. Distributed components can operate sequentially or in parallel.
+Abstract
+Description
+Correctly classified | Correctly classified | ||
+abusive sites | benign sites | Accuracy | |
+Classification | 51 | 899 | 95 |
+Model | |||
+1 | |||
+Classification | 75 | 875 | 95 |
+Model | |||
+2 | |||
+Classification | 99 | 851 | 95 |
+Model | |||
+3 | |||
+ŷ i=sign(f(x i ;w)−θ).
+{circumflex over (θ)}=q(f(A),1−c).
+θ≤sup{t:r A(f*,t)≥c}≤sup{t:|{x∈A:f*(x)>t}|/|A|≥c}≤sup{t:1−|{x∈A:f*(x)≤t}|/|A|≥c}—sup{t:|{x∈A:f*(x)≤t}|/|A|≤1−c}.
+θ≤q(f(A),1−c).
+with L=−G. Conversely, optimizers of (2) are feasible and hence optimal for (1). In practice, G is usually a differentiable surrogate allowing for numerical optimization and the monotonicity assumption is easily verified. For inequality constraints of the form rA(f,θ)≤c,θ* is again given by the quantile function so long as G is monotone decreasing in θ.
+where TP and FP denote the true positives and false positives, respectively:
+gives the solution to (3). In addition, (4) is equivalent to:
+which by the same logistic loss bound and application of
+q(f(A),c).
+{circumflex over (q)} 1(f(A),c)=f({circumflex over (x)})
+where {circumflex over (x)} is the datapoint which solves:
+f(x;w)=w T x,
+where a bias term is unnecessary because it can be absorbed in to θ. In this case, the loss for a rate constraint rA(f,θ)≥c is
+where {circumflex over (x)}∈A is the datapoint such that {circumflex over (q)}1(A),c)=f({circumflex over (x)})=wT{circumflex over (x)}. Note that, due to the change in {circumflex over (x)}={circumflex over (x)}(w) as w changes, the loss is not convex.
+where ai=σ(wT xi−wT{circumflex over (x)}). From this expression, the excessive influence of {circumflex over (x)} is clear. Variation in the classification model parameters or the data which causes only a small change in the quantile estimate may nonetheless cause a dramatic change in ∇wL; this gradient is discontinuous.
+where
+c is the quantile to be estimated, and the index i* is defined to break ties: i*=max{j:s(j)=s(i))}.
+so that using the {circumflex over (q)}m estimator yields an upper bound on the loss with the point estimator {circumflex over (q)}1. When f is linear, repeated applications of the rules of convex function composition show that {circumflex over (q)}m(f(A),c) is convex and hence the entire upper bound is as well. The bound {circumflex over (q)}m enjoys a lower gradient variance than {circumflex over (q)}1, and is tightest when c is small, which occurs exactly when enforcing a constraint that the predicted positive rate on A be high.
+|
+SGD for Quantile Loss Eq. (2) |
+1: | require A dataset (X, Y), desired rate constraint rA ≥ c on a subset A |
+⊆ X, quantile estimator {circumflex over (q)}, scoring model ƒ (•; w), and learning rate γ. |
+2: | while not converged do |
+3: | Gather a minibatch (Xb, Yb) from (X, Y) |
+4: | Gather a minibatch Ab from A |
+5: | Update w ← w − γ∇wL(Xb, Yb, ƒ (•; w), {circumflex over (q)}(ƒ (Ab),1 − c)) |
+6: | end while |
+TABLE 1 |
+P@τ on the Ionosphere dataset, τ ∈ [0, |
+1] is the predicted positive rate. Results are expressed |
+as mean ± standard deviation. The columns correspond |
+to logistic regression, Accuracy at the Top, the quantile |
+method with one initialization, and the quantile method |
+with three initializations, respectively. |
+τ (%) | LR | | Q1 | Q3 | |
+1 | 0.52 ± 0.38 | 0.85 ± 0.24 | 0.87 ± 0.27 | 0.98 ± 0.10 |
+5 | 0.76 ± 0.14 | 0.91 ± 0.14 | 0.93 ± 0.11 | 0.98 ± 0.07 |
+9.5 | 0.83 ± 0.08 | 0.93 ± 0.06 | 0.91 ± 0.10 | 0.96 ± 0.08 |
+14 | 0.87 ± 0.05 | 0.91 ± 0.05 | 0.90 ± 0.08 | 0.92 ± 0.08 |
+19 | 0.89 ± 0.04 | 0.89 ± 0.04 | 0.88 ± 0.06 | 0.88 ± 0.05 |
+TABLE 2 |
+P@τ on the Housing dataset. τ ∈ [0, |
+1] is the predicted positive rate. The columns correspond |
+to logistic regression, Accuracy at the Top, the quantile |
+method with one initialization, and the quantile method |
+with three initializations, respectively. |
+τ (%) | LR | | Q1 | Q3 | |
+1 | 0.26 ± 0.44 | 0.2 ± 0.27 | 0.4 ± 0.49 | 0.43 ± 0.50 | |
+2 | 0.12 ± 0.19 | 0.23 ± 0.10 | 0.23 ± 0.23 | 0.28 ± 0.23 | |
+3 | 0.09 ± 0.10 | 0.20 ± 0.12 | 0.18 ± 0.17 | 0.25 ± 0.16 | |
+4 | 0.09 ± 0.10 | 0.19 ± 0.13 | 0.16 ± 0.14 | 0.23 ± 0.14 | |
+5 | 0.11 ± 0.09 | 0.17 ± 0.07 | 0.14 ± 0.12 | 0.21 ± 0.13 | |
+6 | 0.11 ± 0.08 | 0.14 ± 0.05 | 0.13 ± 0.12 | 0.18 ± 0.10 | |
+where 0<k1<c<k2, and 0≤s1, . . . , ≤sN. This is a generalized version of the upper bound estimator in Eq. (14), since instead of taking all scores lower than the quantile, the average on an arbitrary interval is taken.
+uniformly in w.
+with probability at least 1−δ.
+Claims (20)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US16/288,217 US11429894B2 (en) | 2018-02-28 | 2019-02-28 | Constrained classification and ranking via quantiles |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US201862636745P | 2018-02-28 | 2018-02-28 | |
+US16/288,217 US11429894B2 (en) | 2018-02-28 | 2019-02-28 | Constrained classification and ranking via quantiles |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20190266513A1 US20190266513A1 (en) | 2019-08-29 |
+US11429894B2 true US11429894B2 (en) | 2022-08-30 |
+Family
+ID=67683923
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US16/288,217 Active 2040-08-13 US11429894B2 (en) | 2018-02-28 | 2019-02-28 | Constrained classification and ranking via quantiles |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US11429894B2 (en) |
+Families Citing this family (8)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US11574241B2 (en) * | 2019-04-24 | 2023-02-07 | Cisco Technology, Inc. | Adaptive threshold selection for SD-WAN tunnel failure prediction |
+CN112651414B (en) * | 2019-10-10 | 2023-06-27 | 马上消费金融股份有限公司 | Method, device, equipment and storage medium for processing motion data and training model |
+CN113014413A (en) * | 2019-12-20 | 2021-06-22 | 中兴通讯股份有限公司 | Threshold optimization method, apparatus and computer readable medium applied to communication system |
+US11423333B2 (en) | 2020-03-25 | 2022-08-23 | International Business Machines Corporation | Mechanisms for continuous improvement of automated machine learning |
+US11768945B2 (en) * | 2020-04-07 | 2023-09-26 | Allstate Insurance Company | Machine learning system for determining a security vulnerability in computer software |
+JP2023528688A (en) * | 2020-05-22 | 2023-07-05 | ニデック アドバンステクノロジー カナダ コーポレーション | Method and system for training automatic defect classification inspection equipment |
+US20220156481A1 (en) * | 2020-11-19 | 2022-05-19 | Sony Group Corporation | Efficient and robust high-speed neural networks for cell image classification |
+CN113642740B (en) * | 2021-08-12 | 2023-08-01 | 百度在线网络技术（北京）有限公司 | Model training method and device, electronic equipment and medium |
+-
+2019
+- 2019-02-28 US US16/288,217 patent/US11429894B2/en active Active
+Non-Patent Citations (12)
+Title |
+---|
+Amirou et al., "Optimizing the classification cost using SVMs with a double hinge loss", 2014, Informatica, vol. 38, pp. 125-133 (Year: 2014). * |
+Boyd et al., "Accuracy at the Top", 2012, Advances in Neural Information Processing Systems 25 (NIPS 2012), vol. 25 (2012), pp. 1-9 (Year: 2012). * |
+Faghri et al., "VSE++: Improving Visual-Semantic Embeddings with Hard Negatives", 2017, https://arxiv.org/abs/1707.05612v2, Version 2, pp. 1-10 (Year: 2017). * |
+Ferdowsi et al., "Online Active Learning with Imbalanced Classes", 2013, 2013 IEEE 13th International Conference on Data Mining, vol. 13(2013), pp. 1043-1048 (Year: 2013). * |
+Goel, "Duality", 2008, Stanford University, 2008, pp. 83-110—supplementary evidence, existence of dual minimization problem for maximization problem, and vice versa (Year: 2008). * |
+Ko et al., "Background Subtraction on Distributions", 2008, Computer Vision—ECCV 2008, vol. 2008, pp. 276-289 (Year: 2008). * |
+Pedregosa, "Surrogate Loss Functions in Machine Learning", Jun. 20, 2014, http://fa.bianp.net/blog/2014/surrogate-loss-functions-in-machine-learning/, Jun. 20, 2014, pp. 1-9 (Year: 2014). * |
+Pillai et. al., "Threshold optimization for multi-label classifiers", 2013, Pattern Recognition, vol. 46, pp. 2055-2065 (Year: 2013). * |
+Wei et al., "An Investigation of Quantile Function Estimators Relative to Quantile Confidence Interval Coverage", 2015, Communications in Statistics—Theory and Methods, vol. 44, pp. 2107-2135 (Year: 2015). * |
+Wikipedia, "Loss Function", Retrieved 2021, https://en.wikipedia.org/wiki/Loss_function, 2021, p. 1—supplementary evidence (Year: 2021). * |
+Zemel et al., "Learning Fair Representations", Jun. 28, 2013, Proceedings of the 30th International Conference on International Conference on Machine Learning, vol. 28, pp III-325-III-333 (Year: 2013). * |
+Zheng, "QBoost: Predicting quantiles with boosting for regression and binary classification", 2012, Expert Systems with Applications, vol. 39, pp. 1687-1697 (Year: 2012). * |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20190266513A1 (en) | 2019-08-29 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11429894B2 (en) | Constrained classification and ranking via quantiles | |
+US20200401946A1 (en) | Management and Evaluation of Machine-Learned Models Based on Locally Logged Data | |
+US11526752B2 (en) | Systems and methods for active learning | |
+US20220036203A1 (en) | Identifying and Correcting Label Bias in Machine Learning | |
+US7809665B2 (en) | Method and system for transitioning from a case-based classifier system to a rule-based classifier system | |
+US20090222243A1 (en) | Adaptive Analytics | |
+US11586904B2 (en) | Adaptive optimization with improved convergence | |
+US11657118B2 (en) | Systems and methods for learning effective loss functions efficiently | |
+US11531886B2 (en) | Bayesian graph convolutional neural networks | |
+US20230027427A1 (en) | Memory-augmented graph convolutional neural networks | |
+Singh et al. | Assessment of supervised machine learning algorithms using dynamic API calls for malware detection | |
+US20230044102A1 (en) | Ensemble machine learning models incorporating a model trust factor | |
+US11531845B1 (en) | Bias mitigating machine learning training system | |
+US11823076B2 (en) | Tuning classification hyperparameters | |
+Mehrizi et al. | A feature-based Bayesian method for content popularity prediction in edge-caching networks | |
+Amin et al. | Cyber security and beyond: Detecting malware and concept drift in AI-based sensor data streams using statistical techniques | |
+Gao et al. | Active sampler: Light-weight accelerator for complex data analytics at scale | |
+Rios Insua et al. | Adversarial machine learning: Bayesian perspectives | |
+Sreenath et al. | Stochastic ground motion models to NGA‐West2 and NGA‐Sub databases using Bayesian neural network | |
+Ciarelli et al. | An incremental neural network with a reduced architecture | |
+Liao et al. | Server-based manipulation attacks against machine learning models | |
+US20220180979A1 (en) | Adaptive clinical trials | |
+Kveton et al. | Meta-learning bandit policies by gradient ascent | |
+Yang et al. | A robust deterministic annealing algorithm for data clustering | |
+US20220327227A1 (en) | Privacy filters and odometers for deep learning |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:EBAN, ELAD EDWIN TZVI;MACKEY, ALAN;LUO, XIYANG;SIGNING DATES FROM 20180305 TO 20180306;REEL/FRAME:048462/0821 |
+|
+FEPP | Fee payment procedure |
+Free format text: ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: BIG.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: NON FINAL ACTION MAILED |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: RESPONSE TO NON-FINAL OFFICE ACTION ENTERED AND FORWARDED TO EXAMINER |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: FINAL REJECTION MAILED |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: ADVISORY ACTION MAILED |
+|
+STCV | Information on status: appeal procedure |
+Free format text: NOTICE OF APPEAL FILED |
+|
+STCV | Information on status: appeal procedure |
+Free format text: APPEAL BRIEF (OR SUPPLEMENTAL BRIEF) ENTERED AND FORWARDED TO EXAMINER |
+|
+STCV | Information on status: appeal procedure |
+Free format text: EXAMINER'S ANSWER TO APPEAL BRIEF MAILED |
+|
+STCV | Information on status: appeal procedure |
+Free format text: APPEAL READY FOR REVIEW |
+|
+STCV | Information on status: appeal procedure |
+Free format text: ON APPEAL -- AWAITING DECISION BY THE BOARD OF APPEALS |
+|
+FEPP | Fee payment procedure |
+Free format text: PETITION RELATED TO MAINTENANCE FEES GRANTED (ORIGINAL EVENT CODE: PTGR); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCV | Information on status: appeal procedure |
+Free format text: BOARD OF APPEALS DECISION RENDERED |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: NOTICE OF ALLOWANCE MAILED -- APPLICATION RECEIVED IN OFFICE OF PUBLICATIONS |
+|
+STPP | Information on status: patent application and granting procedure in general |
+Free format text: PUBLICATIONS -- ISSUE FEE PAYMENT VERIFIED |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |

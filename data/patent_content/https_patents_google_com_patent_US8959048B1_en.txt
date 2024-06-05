@@ -1,0 +1,290 @@
+US8959048B1 - Index for set emptiness in temporal databases - Google Patents
+Index for set emptiness in temporal databases Download PDFInfo
+- Publication number
+- US8959048B1 US8959048B1 US13/279,027 US201113279027A US8959048B1 US 8959048 B1 US8959048 B1 US 8959048B1 US 201113279027 A US201113279027 A US 201113279027A US 8959048 B1 US8959048 B1 US 8959048B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- tuples
+- entities
+- compaction
+- increments
+- timestamp
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/23—Updating
+- G06F16/2365—Ensuring data consistency and integrity
+Definitions
+- the following relates to an index for a database that supports transactions.
+- the index maintains a history of the times that a set of entities is empty.
+- Temporal database systems that support transactions enable storage and retrieval of historical data, including data that changes over time. Transactions can include, among other things, adding and removing entities (e.g., files) to or from sets (e.g. logical directories). As sets of entities evolve, some sets can become very large, and some sets can become empty.
+- entities e.g., files
+- sets e.g. logical directories
+- Write transactions must adhere to the ACID principle, in which the transaction must be Atomic, Consistent, Isolated, and Durable. Thus, before a transaction is committed, several write transactions can be in progress at the same time in parallel. Some types of write transactions can involve a “read-modify-write” process, requiring a step of reading a last committed value, modifying the last committed value, and writing the modified value. Because transactions must be atomic, consistent, isolated, and durable, conflicts between read transactions and write transactions can occur. Subsequently, it would be necessary to serialize read and write transactions.
+- a temporal database system, method, and computer-readable storage medium in which a database is provided with sets of entities defined by initial tuples having a set ID, a unique timestamp, and a member increment.
+- a write transaction is performed for sets of entities, wherein the write transaction designates the set by said set ID and produces an increment, wherein the increment is a number of entities to be added to or removed from the designated respective set of entities.
+- New tuples including the set ID, the increment, and a new unique timestamp are created for the write transaction.
+- an asynchronous compaction operation is performed on the new tuples.
+- the compaction operation aggregates the increment of each new tuple into summary point counts.
+- the compaction operation facilitates efficient queries without contention with write transactions.
+- FIG. 1 is a system block diagram
+- FIG. 2 is a flowchart for operation on an index of sets of entities over time
+- FIGS. 3A , 3 B, 3 C are flowcharts for transaction operations
+- FIG. 4 is an example compaction operation
+- FIG. 5 is an example index
+- FIG. 6 is an example read transaction performed on the index of FIG. 5 ;
+- FIGS. 7A , 7 B are an example of compaction performed on the index of FIG. 5 ;
+- FIGS. 8A , 8 B are an example of parallel transactions performed using the index write transactions.
+- FIG. 9 is an example computer for performing the database index.
+- a common query in a temporal database is whether there are any entities in a set at a certain point in time. Records resulting from transactions performed on a temporal database can quickly accumulate to several hundreds, and to billions, of records over time. It is desirable to have a capability to efficiently perform this common query even in the case of an ever increasing temporal database. In addition, it is desirable to perform transactions in parallel without contention.
+- An approach to handling such queries is to create an explicit membership index.
+- An explicit membership index may be stored that records for each entity-set pair the times when the membership starts and ends. Such an index may be stored sorted by set. Subsequently, to determine if a set is empty, a query can be performed over a range of time for a set, which can be referred to as a range query.
+- the latest member count and the time intervals when the set is not empty can be stored as a count index.
+- database systems can perform transactions with locks, or without locks (optimistic by performing multiversion concurrency).
+- Performing transactions with locking involves acquiring write and read locks on the affected data.
+- Performing transactions with locking ensures that there are no conflicts, by not running potentially conflicting transactions in parallel.
+- Performing transactions without locks can be serialized by performing the transaction, and at commit time, verifying that no conflicts occurred. If a conflict occurs, the commit fails.
+- Multiversion concurrency resolves conflicts by rejecting all but one of competing transactions.
+- Range indexing with locking causes contention between writes to a set and reads of the index data.
+- Range indexing with optimistic transactions causes frequent transaction failure due to conflicts between reads and writes on the index data.
+- Count indexing with locking causes contention on the counters between writes.
+- Count indexing with optimistic transactions causes transaction failure due to conflicts between writes on the counter.
+- An index is provided that is a counter-like index that allows contention-free non-optimistic updates, and queries with a low probability of contention, while maintaining serializable isolation.
+- FIG. 1 is a block diagram for a transaction-processing-type database system.
+- one or more user terminals 110 submit queries that invoke transaction processing in a database system 100 having a database back-end 130 and a transaction processing front-end 120 .
+- Read-type queries will typically result in a response being sent to the user terminal 110 that submitted the query.
+- queries may be received from automatic processes performed by an external network of computers.
+- the transaction processing front-end 120 can include an indexing mechanism 122 that manages an index 124 stored in the database back-end 130 .
+- the database back-end 130 may consist of a network of computers, or may be contained on the same machine as the transaction processing front-end 120 .
+- the transaction processing front-end 120 may itself consist of a network of computers. It is also possible that the both the transaction processing front-end 120 and the database back-end 130 reside in the user terminal 110 .
+- FIG. 9 which will be described later, is an example of a computer that can be used to implement a user terminal 110 , a transaction processing front-end 120 , and a database backend 130 .
+- a query may invoke a write transaction process on the index 124 .
+- a write transaction on the index 124 is performed by the index mechanism 122 by computing how the transaction changes the member count of each set of entities, by counting add and remove operations. The count of add and remove operations is represented as an increment. The increment of each affected set is written to the index 124 .
+- the write transaction is committed to the index 124 . Only one transaction is committed per logical timestamp. Since a logical timestamp is unique, there will not be any contention with other write transactions. Also, the write transaction does not need to read the index before updating it. Thus, the index mechanism 122 operates such that there is also no contention between write transactions and read transactions.
+- a record for a write transaction consists of a set ID, commit timestamp, and an increment value.
+- FIG. 5 shows an example of an index 124 for two sets “Bigtown” and “Smallville.” Entries labeled “increment” are examples of results of write transactions on the index 124 .
+- a query from a user terminal 110 may be processed as a read transaction from the index 124 .
+- a read transaction specifies a set ID and a read time.
+- a range scan is performed on the index 124 and increments are summed up.
+- a range scan involves a scan of the index over a range of timestamps.
+- a range scan can be performed either as a forward scan in increasing order of time, or performed as a reverse scan in reverse order of time.
+- the read transaction requires a read lock on the part of the index for a particular set of entities and for timestamps older than the query. However, read locks do not exclude other read locks. Because queries refer to committed timestamps and write transactions refer to uncommitted timestamps, the index mechanism 122 operates such that there is no contention between read transactions and write transactions.
+- Compaction In order to improve efficiency, after a write transaction, an asynchronous compaction is performed at a time after the write transaction has been committed. Compaction competes for locks with read transactions. In particular, compaction briefly locks a part of the index. However, after the compaction, future read transactions will be performed faster, as the index is reduced in size. Compaction involves replacement of increments with summary points. Summary points represent a summation of a set of increments. As will be described later, summary points adhere to a certain criteria. Compaction can be done per set of entities, so there is no single transaction locking large amounts of data for a long time. Furthermore, it is possible to find the latest summary point before the transaction or remember some last known summary point in a cache. In such case, only timestamps newer than a summary point need to be locked, such that there is no contention with reads at earlier timestamps.
+- the index mechanism 122 By writing increments during write transactions and performing compaction later, the index mechanism 122 enables parallel transactions, where multiple write transactions are performed at the same time.
+- FIGS. 8A and 8B show an example of parallel transactions.
+- a set “x” contains 100 entities at time 1.
+- a transaction A adds 5 entities at time 3.
+- a transaction B removes 59 entities at time 2.
+- Transaction A can write an increment “+5” while transaction B is still in progress. As can be seen in the timeline of FIG. 8A , although transaction B is not committed (in progress), the index will still be correct. Alternatively, as can be seen in timeline of FIG. 8B , if the transaction B is committed, the index will be correct.
+- transaction A would have to write:
+- FIG. 2 is a flowchart of transaction processing that involves the index mechanism 122 .
+- the flowchart assumes an initial index 124 provided at step 202 , having one or more summary points and possibly some increments. It is also possible that an initial index may have no summary points. In an embodiment, a new index can be provided with a start summary point zero as a default.
+- a transaction begins when a query is received.
+- the index mechanism 122 is waiting for a query. As explained above, several transactions may be started in parallel. Parallel transactions occur when at least two transactions are being processed at the same time. The index mechanism 122 insures that only one transaction is committed per each logical timestamp.
+- a read transaction is performed at step 210 .
+- a write transaction is performed at step 212 .
+- the write transaction is successful (YES at step 214 )
+- an asynchronous compaction process will be performed. Because the write transaction is separate from the compaction process, the write transaction does not require performing a read on the index, and will not conflict with a read transaction.
+- FIG. 4 shows an example of compaction of a set.
+- the index for the set contains summary points and increments.
+- the top row 402 of FIG. 4 shows logical timestamps.
+- the second row 404 shows the index before the compaction operation.
+- the third row 406 shows the index as a result of the compaction operation.
+- a compaction operation is asynchronous and is performed after completion of a successful write transaction (after the write transaction has been committed). Although a compaction operation competes with read transactions for locks, a compaction operation reduces the amount of information that a read transaction would have to process. Also, compaction operation is performed per set, such that there is no single transaction locking large amounts of data for a long time.
+- Compaction results in the following properties of an index: (1) an increment will not be followed by a summary point in time; (2) there will not be two consecutive summary points that have the same “emptiness” (where either both summary points are empty, or both summary points are non-empty), with the exception of the most recent summary point.
+- a compaction operation picks a (recent) timestamp.
+- the compaction operation picks timestamp 300 .
+- a compaction operation performs a range scan, in which all read increments are replaced by a set of summary points. Summary points are written to the index based on criteria including: (a) written at timestamps when the set becomes non-empty, (b) written at timestamps when the set becomes empty, and (c) written at the most recent increment.
+- a reverse range scan is performed by reading the index going backwards in time, and summing up the increments until a summary point is reached.
+- a forward range scan can be performed by reading the index going forwards in time.
+- a criterion (d) is that a compaction operation will remove the summary point that it reaches during a reverse scan, unless the summary point is the very first in the index or has an “emptiness” different from the preceding summary point.
+- the set becomes “empty” at timestamp 240 .
+- a summary point is written at timestamp 240 .
+- a summary point is written at the chosen timestamp 300 .
+- the resulting index is a summary point at timestamp 150 , a summary point at timestamp 240 , and a summary point at timestamp 300 .
+- FIGS. 3A , 3 B, and 3 C Details of a read transaction 310 , write transaction 330 , and compaction 340 are shown in FIGS. 3A , 3 B, and 3 C.
+- FIG. 5 shows an example index for two sets, “Bigtown” and “Smallville.”
+- FIG. 6 shows an example read transaction.
+- FIGS. 7A , 7 B show an example of compaction on the index shown in FIG. 5 .
+- the example indexes have a “SetID”, “Valid time”, “entry”, and “value”.
+- the “SetID” is a unique identifier for a set of entities.
+- the “Valid time” is a logical transaction time, as well as a time that pertains to the value.
+- the “entry” indicates a type of entry in the index.
+- the “value” indicates the number of citizens (or change in the number of citizens) in a town identified by the “SetID.”
+- a query specifies a set and a time.
+- the set ID and time are obtained from the query (“Smallville”, 1996).
+- the index is read and increments are summed, starting from the time (1996), in reverse order until the first summary point is reached (summary point at 1950).
+- the response to the query is “FALSE” 318 , meaning that the set is empty at time 1996.
+- the sum of increments to the first summary point is zero. Thus, there was no one living in Smallville in 1996.
+- an index does not contain any summary points
+- a read transaction will read the index until it reaches the beginning of the index.
+- an initial index can be created to include a summary point zero at the beginning of the index.
+- step 332 For each affected set, at step 332 compute a change in number count by counting the add and remove operations. At step 334 , the write transaction writes an “increment” for each affected set. Also, for each set, the write transaction commits only one transaction per logical timestamp.
+- the index mechanism determines a logical timestamp that is unique for the transaction.
+- a write transaction is considered as “successful” when it is committed.
+- the logical timestamp for a write transaction may be a timestamp that is near the time of completion of the transaction.
+- a read transaction requesting the state of the index at the time of a logical timestamp will include the effect of the transaction, but will be delayed by the index mechanism until the write transaction has completed.
+- FIG. 7A shows an example compaction operation performed on the index in FIG. 5 .
+- the compaction operation picks a timestamp 2000 for set “Smallville.”
+- the compaction operation Similar to a read transaction 310 , at step 344 the compaction operation reads the index and sums increments, for example starting from the picked timestamp 2000, in reverse order. At step 346 , the compaction operation replaces summed increments by a set of summary points. Performing the compaction operation using criteria (a) to (d), the resulting index is shown in FIG. 7A .
+- FIG. 7B shows the read transaction, but performed after the compaction operation.
+- the compacted index is read from (“Smallville”, 0) to (“Smallville”, 1996) in reverse order.
+- the summary point at 1995 has a count of zero.
+- the response to the query is that there was no one living in Smallville in 1996.
+- Embodiments described thus far presume a criteria of set emptiness in determining summary points.
+- increments are determined by summing up entities that are added and entities that are removed from a set.
+- summary points are written at timestamps where a set becomes empty, or at timestamps where a set becomes non-empty.
+- summary points can be written at timestamps when a count goes above a particular threshold or goes below a particular threshold. In such case, a threshold of zero would correspond to the set emptiness criteria (a) to (c), above.
+- the index could be used to answer such queries as—Did at least 100,000 people live in a particular city at a particular time? In this example query, the predetermined threshold would be 100,000.
+- FIG. 9 is a block diagram illustrating an example computing device 900 that is arranged for a user terminal, a transaction processing front-end, and/or a database backend in accordance with the present disclosure.
+- computing device 900 typically includes one or more processors 910 and system memory 920 .
+- a memory bus 930 can be used for communicating between the processor 910 and the system memory 920 .
+- processor 910 can be of any type including but not limited to a microprocessor ( ⁇ P), a microcontroller ( ⁇ C), a digital signal processor (DSP), or any combination thereof.
+- Processor 910 can include one more levels of caching, such as a level one cache 911 and a level two cache 912 , a processor core 913 , and registers 914 .
+- the processor core 913 can include an arithmetic logic unit (ALU), a floating point unit (FPU), a digital signal processing core (DSP Core), or any combination thereof.
+- a memory controller 915 can also be used with the processor 910 , or in some implementations the memory controller 915 can be an internal part of the processor 910 .
+- system memory 920 can be of any type including but not limited to volatile memory (such as RAM), non-volatile memory (such as ROM, flash memory, etc.) or any combination thereof.
+- System memory 920 typically includes an operating system 921 , one or more applications 922 , and program data 924 .
+- Application 922 includes an index processing algorithm 923 .
+- Program Data 924 includes transaction processing data.
+- application 922 can be arranged to operate with program data 924 on an operating system 921 . This described basic configuration is illustrated in FIG. 9 by those components within dashed line 901 .
+- Computing device 900 can have additional features or functionality, and additional interfaces to facilitate communications between the basic configuration 901 and any required devices and interfaces.
+- a bus/interface controller 940 can be used to facilitate communications between the basic configuration 901 and one or more data storage devices 950 via a storage interface bus 941 .
+- the data storage devices 950 can be removable storage devices 951 , non-removable storage devices 952 , or a combination thereof. Examples of removable storage and non-removable storage devices include magnetic disk devices such as flexible disk drives and hard-disk drives (HDD), optical disk drives such as compact disk (CD) drives or digital versatile disk (DVD) drives, solid state drives (SSD), and tape drives to name a few.
+- Example computer storage media can include volatile and nonvolatile, removable and non-removable media implemented in any method or technology for storage of information, such as computer readable instructions, data structures, program modules, or other data.
+- Computer storage media includes, but is not limited to, RAM, ROM, EEPROM, flash memory or other memory technology, CD-ROM, digital versatile disks (DVD) or other optical storage, magnetic cassettes, magnetic tape, magnetic disk storage or other magnetic storage devices, or any other medium which can be used to store the desired information and which can be accessed by computing device 900 . Any such computer storage media can be part of device 900 .
+- Computing device 900 can also include an interface bus 942 for facilitating communication from various interface devices (e.g., output interfaces, peripheral interfaces, and communication interfaces) to the basic configuration 901 via the bus/interface controller 940 .
+- Example output devices 960 include a graphics processing unit 961 and an audio processing unit 962 , which can be configured to communicate to various external devices such as a display or speakers via one or more A/V ports 963 .
+- Example peripheral interfaces 970 include a serial interface controller 971 or a parallel interface controller 972 , which can be configured to communicate with external devices such as input devices (e.g., keyboard, mouse, pen, voice input device, touch input device, etc.) or other peripheral devices (e.g., printer, scanner, etc.) via one or more I/O ports 973 .
+- An example communication device 980 includes a network controller 981 , which can be arranged to facilitate communications with one or more other computing devices 990 over a network communication via one or more communication ports 982 .
+- the communication connection is one example of a communication media.
+- Communication media may typically be embodied by computer readable instructions, data structures, program modules, or other data in a modulated data signal, such as a carrier wave or other transport mechanism, and includes any information delivery media.
+- a “modulated data signal” can be a signal that has one or more of its characteristics set or changed in such a manner as to encode information in the signal.
+- communication media can include wired media such as a wired network or direct-wired connection, and wireless media such as acoustic, radio frequency (RF), infrared (IR) and other wireless media.
+- RF radio frequency
+- IR infrared
+- the term computer readable media as used herein can include both storage media and communication media.
+- Computing device 900 can be implemented as a portion of a small-form factor portable (or mobile) electronic device such as a cell phone, a personal data assistant (PDA), a personal media player device, a wireless web-watch device, a personal headset device, an application specific device, or a hybrid device that include any of the above functions.
+- a small-form factor portable (or mobile) electronic device such as a cell phone, a personal data assistant (PDA), a personal media player device, a wireless web-watch device, a personal headset device, an application specific device, or a hybrid device that include any of the above functions.
+- PDA personal data assistant
+- Computing device 900 can also be implemented as a personal computer including both laptop computer and non-laptop computer configurations.
+- the implementer may opt for a mainly hardware and/or firmware vehicle; if flexibility is paramount, the implementer may opt for a mainly software implementation; or, yet again alternatively, the implementer may opt for some combination of hardware, software, and/or firmware.
+- a signal bearing medium examples include, but are not limited to, the following: a recordable type medium such as a floppy disk, a hard disk drive, a Compact Disc (CD), a Digital Video Disk (DVD), a digital tape, a computer memory, etc.; and a transmission type medium such as a digital and/or an analog communication medium (e.g., a fiber optic cable, a waveguide, a wired communications link, a wireless communication link, etc.).
+- a typical data processing system generally includes one or more of a system unit housing, a video display device, a memory such as volatile and non-volatile memory, processors such as microprocessors and digital signal processors, computational entities such as operating systems, drivers, graphical user interfaces, and applications programs, one or more interaction devices, such as a touch pad or screen, and/or control systems including feedback loops and control motors (e.g., feedback for sensing position and/or velocity; control motors for moving and/or adjusting components and/or quantities).
+- a typical data processing system may be implemented utilizing any suitable commercially available components, such as those typically found in data computing/communication and/or network computing/communication systems.
+Abstract
+Description
+-
+- (“x”, 3) 105
+if B is not committed (for the sum of 100+5), or would have to write: - (“x”, 3) 46
+if transaction B is committed (for the sum of 100+5−59). In such case, transaction A would have to wait for transaction B, and it would not be possible to perform the transactions in parallel.
+- (“x”, 3) 105
+Claims (45)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/279,027 US8959048B1 (en) | 2011-10-21 | 2011-10-21 | Index for set emptiness in temporal databases |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/279,027 US8959048B1 (en) | 2011-10-21 | 2011-10-21 | Index for set emptiness in temporal databases |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US8959048B1 true US8959048B1 (en) | 2015-02-17 |
+Family
+ID=52463699
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/279,027 Active 2033-02-19 US8959048B1 (en) | 2011-10-21 | 2011-10-21 | Index for set emptiness in temporal databases |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US8959048B1 (en) |
+Cited By (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150261563A1 (en) * | 2014-03-17 | 2015-09-17 | International Business Machines Corporation | Passive two-phase commit system for high-performance distributed transaction execution |
+US10896096B2 (en) | 2016-04-21 | 2021-01-19 | International Business Machines Corporation | Temporal logical transactions |
+US11537613B1 (en) | 2021-10-29 | 2022-12-27 | Snowflake Inc. | Merge small file consolidation |
+US11593306B1 (en) * | 2021-10-29 | 2023-02-28 | Snowflake Inc. | File defragmentation service |
+US11704035B2 (en) | 2020-03-30 | 2023-07-18 | Pure Storage, Inc. | Unified storage on block containers |
+Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5263156A (en) * | 1990-12-20 | 1993-11-16 | Bell Communications Research, Inc. | Parallel, distributed optimistic concurrency control certification using hardware filtering |
+US8538820B1 (en) * | 2009-10-26 | 2013-09-17 | Stoplift, Inc. | Method and apparatus for web-enabled random-access review of point of sale transactional video |
+-
+2011
+- 2011-10-21 US US13/279,027 patent/US8959048B1/en active Active
+Patent Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5263156A (en) * | 1990-12-20 | 1993-11-16 | Bell Communications Research, Inc. | Parallel, distributed optimistic concurrency control certification using hardware filtering |
+US8538820B1 (en) * | 2009-10-26 | 2013-09-17 | Stoplift, Inc. | Method and apparatus for web-enabled random-access review of point of sale transactional video |
+Cited By (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150261563A1 (en) * | 2014-03-17 | 2015-09-17 | International Business Machines Corporation | Passive two-phase commit system for high-performance distributed transaction execution |
+US10296371B2 (en) * | 2014-03-17 | 2019-05-21 | International Business Machines Corporation | Passive two-phase commit system for high-performance distributed transaction execution |
+US10896096B2 (en) | 2016-04-21 | 2021-01-19 | International Business Machines Corporation | Temporal logical transactions |
+US10901854B2 (en) | 2016-04-21 | 2021-01-26 | International Business Machines Corporation | Temporal logical transactions |
+US11704035B2 (en) | 2020-03-30 | 2023-07-18 | Pure Storage, Inc. | Unified storage on block containers |
+US11537613B1 (en) | 2021-10-29 | 2022-12-27 | Snowflake Inc. | Merge small file consolidation |
+US11593306B1 (en) * | 2021-10-29 | 2023-02-28 | Snowflake Inc. | File defragmentation service |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11921760B2 (en) | Distributed transaction management with tokens | |
+US9953051B2 (en) | Multi-version concurrency control method in database and database system | |
+JP7410181B2 (en) | Hybrid indexing methods, systems, and programs | |
+US10409864B2 (en) | Transaction control block for multiversion concurrency commit status | |
+US9922077B2 (en) | Reducing the cost of update, delete, and append-only insert operations in a database | |
+US8185551B2 (en) | Disk-resident streaming dictionary | |
+US9336258B2 (en) | Reducing database locking contention using multi-version data record concurrency control | |
+US7966298B2 (en) | Record-level locking and page-level recovery in a database management system | |
+US9881041B2 (en) | Multiple RID spaces in a delta-store-based database to support long running transactions | |
+US20170220617A1 (en) | Scalable conflict detection in transaction management | |
+US10754854B2 (en) | Consistent query of local indexes | |
+US9576038B1 (en) | Consistent query of local indexes | |
+US9268804B2 (en) | Managing a multi-version database | |
+US8959048B1 (en) | Index for set emptiness in temporal databases | |
+US8954407B2 (en) | System and method for partially deferred index maintenance | |
+KR20150098660A (en) | Maintenance of active database queries | |
+US20150081745A1 (en) | Database insert with deferred materialization | |
+US10372578B2 (en) | Dynamically adjusting statistics collection time in a database management system | |
+US20190108104A1 (en) | System and method for managing storage transaction requests | |
+EP3944094A1 (en) | Parallel processing of changes in a distributed system | |
+CN111444179B (en) | Data processing method, device, storage medium and server | |
+US20230214373A1 (en) | Access management of data objects in databases, including massively parallel database processing systems | |
+CN111949439B (en) | Database-based data file updating method and device | |
+US20110295808A1 (en) | HALDB OLR Variant Linear Statistics |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:ROSSBERG, ANDREAS;WALTHER, INGO;REEL/FRAME:027179/0157Effective date: 20111021 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044334/0466Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 4 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

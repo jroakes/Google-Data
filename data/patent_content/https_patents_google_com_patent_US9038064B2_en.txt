@@ -1,0 +1,565 @@
+US9038064B2 - Trace assisted prefetching of virtual machines in a distributed system - Google Patents
+Trace assisted prefetching of virtual machines in a distributed system Download PDFInfo
+- Publication number
+- US9038064B2 US9038064B2 US13/306,037 US201113306037A US9038064B2 US 9038064 B2 US9038064 B2 US 9038064B2 US 201113306037 A US201113306037 A US 201113306037A US 9038064 B2 US9038064 B2 US 9038064B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- trace
+- virtual
+- implementations
+- blocks
+- disk
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F21/00—Security arrangements for protecting computers, components thereof, programs or data against unauthorised activity
+- G06F21/60—Protecting data
+- G06F21/64—Protecting data integrity, e.g. using checksums, certificates or signatures
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F21/00—Security arrangements for protecting computers, components thereof, programs or data against unauthorised activity
+- G06F21/50—Monitoring users, programs or devices to maintain the integrity of platforms, e.g. of processors, firmware or operating systems
+- G06F21/52—Monitoring users, programs or devices to maintain the integrity of platforms, e.g. of processors, firmware or operating systems during program execution, e.g. stack integrity ; Preventing unwanted data erasure; Buffer overflow
+- G06F21/53—Monitoring users, programs or devices to maintain the integrity of platforms, e.g. of processors, firmware or operating systems during program execution, e.g. stack integrity ; Preventing unwanted data erasure; Buffer overflow by executing in a restricted environment, e.g. sandbox or secure virtual machine
+Definitions
+- This subject matter is generally related to computers and operating systems.
+- Virtual machines are a useful way to encapsulate software environments.
+- a virtual machine can hold an operating system, applications, settings, and user data and settings.
+- software environments can be distributed by distributing virtual machines.
+- Host devices can retrieve virtual machines from the network and run them to provide a user of the host device with a software environment.
+- One of the challenges of distributing virtual machines is that virtual machines can take a long time to download from a network due to their large size.
+- VM virtual machine
+- VMM virtual machine monitor
+- OS guest operating system
+- Prefetching requires a system to have excess capacity for the extra requests (e.g., pause times when the system can prefetch blocks). Effective prefetching also requires determining which blocks the virtual machine will request soon.
+- One conventional method is to look at past request patterns and assume that future request patterns will be similar. For a new host device, however, there are no request patterns available.
+- many virtual disk formats allow blocks to be arranged in an order (e.g., an arbitrary order) within the actual file (or “disk file”), storing the virtual disk. This feature can be used to rearrange the blocks inside the disk file so that, for example, the blocks needed earlier by clients occur earlier in the file.
+- a client By reading a sorted disk file sequentially, a client can fetch blocks according to a prefetch order.
+- reorganizing files creates a verification problem. For example, if a file is signed by one party and resorted by another, the integrity of the resorted file can become questionable, as an uncertainty can exist as to whether the signature of the file was maintained after the resorting.
+- a computer-implemented method includes determining an activity trace of a virtual machine; and automatically uploading the trace and the virtual machine to a network resource.
+- a second computer-implemented method includes receiving an activity trace for a virtual machine; and using the trace to preferentially fetch parts of the virtual machine from a network resource.
+- a third computer implemented method includes receiving one or more virtual disks, each virtual disk being in a first version and including one or more blocks in a first order; receiving an activity trace; reading the activity trace in the order received; and applying the read order of the activity trace to the first version of a virtual disk to create a new version of the virtual disk, the new version of the virtual disk including one or more blocks in a new order.
+- a fourth computer implemented method includes receiving a virtual disk including a first page table block corresponding to one or more other page table blocks or one or more data blocks, where the one or more other page table blocks or the one or more data blocks are in a first order; generating a representation of the first page table block, where the representation of the first page table block includes presence information with respect to the one or more other page table blocks or the one or more data blocks in the virtual disk that are pointed to by the first page table block, and where the representation is position independent with respect to the one or more data blocks or one or more other page table blocks; and signing the representation of the first page table block, where signing the representation includes generating a signature for the first page table block.
+- Embodiments of this aspect can include apparatus, systems, and computer program products.
+- Implementations of the method, computer program product and system can optionally include one or more of the following features.
+- the offset of the one or more other page table blocks or the one or more data blocks can be change such that the one or more other page table blocks or the one or more data blocks are in a new order.
+- the first page table block including the signature for the first page table block can be received, the position-independent representation from the first page table block can be generated, and the signature and the generated position-independent representation can be used to verify the integrity of the first page table block, where the first page table block includes the presence information with respect to the one or more other page table blocks or the one or more data blocks in the virtual disk, pointed to by the first page table block, and in the new order.
+- Each of the one or more other page table blocks and each of the one or more data blocks can be signed.
+- Each page table block and each data block can have a corresponding virtual address, and a signature for a block can include the virtual address for the block inside the signature.
+- Trace patterns can be automatically uploaded to a network resource, which aggregates the patterns, and serves the patterns back to the host device or a different host device when the host device downloads a virtual machine for the first time.
+- FIG. 1 is a block diagram of an example system for trace-assisted prefetching of virtual machines.
+- FIGS. 2A-2B are flow diagrams of example processes for trace-assisted prefetching of virtual machines.
+- FIG. 3 is a flow diagram of an example process for applying an activity trace to a virtual disk.
+- FIG. 4 is a block diagram of an example application of an activity trace to a virtual disk.
+- FIG. 5 is a flow diagram of an example process for verifying presence information using a signed representation of a page table block.
+- FIGS. 6A and 6B are a continuous flow diagram of an example process for generating, verifying, and reorganizing a signed disk.
+- FIG. 1 is a block diagram of an example system 100 for trace-assisted prefetching of virtual machines.
+- the system 100 can include a host device 102 and a network resource 104 coupled to a network (not shown).
+- the system 100 is one possible configuration for implementing trace-assisted prefetching of virtual machines. Other configurations are possible having more or fewer components.
+- the host device 102 can be any device capable of hosting a virtual machine, including but not limited to: personal computers, mobile phones, media players/recorders, consumer electronic devices, game consoles, television set-top box, tablets, personal digital assistants (PDAs), media centers, navigation systems, email devices, storage media (e.g., USB flash drives), etc.
+- the host device 102 can include a processor 172 (e.g., an x86 processor) and one or more user input devices (e.g., a keyboard, mouse, or touchpad).
+- the processor 172 can be coupled to a peripheral interface and operable for running a native environment.
+- the host device 102 can include a memory (e.g., coupled to the processor), for storing instructions which when executed by the processor cause the processor to perform certain operations (e.g., use a trace to preferentially fetch parts of a virtual machine from a network resource).
+- the data store 124 in the host device 102 can also include an OS and a temporary directory.
+- the host device 102 can include a virtual machine 106 running a guest OS 108 , a virtual machine monitor 110 , a shim library 112 , a prefetcher 114 , a trace processor 116 , a trace uploader 118 , a disk signer 160 , a verifier 190 , and a data store 124 .
+- the host device 102 can include a trace sorter 180 .
+- the shim library 112 can include a trace collector 120 and a cache 122 .
+- the data store 124 can include a cache 126 for storing virtual machines 128 and 130 .
+- the data store 124 for virtual machine 128 can include collected traces 132 , 134 , and a processed trace 136 .
+- the data store 124 for virtual machine 130 can include collected trace 138 and a published trace 140 .
+- Virtual machines 128 and 130 are on-disk representations of virtual machines.
+- Virtual machine 106 is the in-memory, running representation of a virtual machine.
+- the virtual machine 106 and the software to run the virtual machine 106 can be pre-installed on the host device 102 .
+- platform software installed on the host device 102 can include components (e.g., code), capable of checking the host device 102 for host device characteristics and capabilities, and selecting additional virtual machines or available software from the network resource 104 .
+- Host device 102 and network resource 104 can include a network connection (e.g., DSL, cable, dialup, LAN, VPN, cellular, or WiFi), to enable features of the platform software (e.g., acquiring updates, acquiring remote user data, or exposing host device 102 functionalities to other devices accessible using the network connection).
+- the network can be one or more networks having any desired topology, including but not limited to: the Internet, an intranet, wireless networks, optical networks, microwave networks, satellite networks, Ethernet, Wide Area Networks (“WAN”), Local Area Networks (“LAN”), and peer-to-peer (P2P) networks.
+- the Internet an intranet, wireless networks, optical networks, microwave networks, satellite networks, Ethernet, Wide Area Networks (“WAN”), Local Area Networks (“LAN”), and peer-to-peer (P2P) networks.
+- WAN Wide Area Networks
+- LAN Local Area Networks
+- P2P peer-to-peer
+- the network resource 104 can be any device with network connectivity and storage capacity, including but not limited to: server computers, databases, storage area networks (SANs), routers, hubs, datacenters, data stores, repositories, peer-to-peer network node, and wireless transceivers.
+- the network resource 104 can include a CPU 170 , a data store 144 , a trace sorter 180 and optionally a trace processor 142 , a verifier 190 , and a disk signer 160 .
+- the data store 144 can include one or more virtual machines 146 and 152 .
+- a virtual machine can include one or more traces.
+- virtual machine 146 includes a published trace 150 which was processed on host device 102 .
+- virtual machine 152 includes a client collected trace 154 and a published trace 156 which was processed on network device 104 .
+- the traces reflect the activity of the guest OS 108 and any applications running on top of the guest OS 108 .
+- the format of the traces can be a list of blocks. The blocks may be expressed by block number or by a pair of numbers (e.g., offset, size). Traces can also include data in-line.
+- the shim library 112 intercepts inputs and outputs (I/O) from the virtual machine monitor 110 to files of the virtual machine 106 (e.g.
+- the trace collector 120 can be coupled to a trace uploader 118 .
+- the shim library 112 operates by intercepting calls from the virtual machine monitor 110 to the operating system (e.g., asking to read and write the on-storage representation (e.g., the files) of the virtual machine). In some implementations, these are calls to the file I/O Application Programming Interfaces (APIs) (e.g., Windows® CreateFile, ReadFile, WriteFile, CloseFile).
+- APIs Application Programming Interfaces
+- the shim library 112 can be injected between the VMM 110 and the operating system using known shimming techniques (e.g., Import Address Table (IAT) patching, function entry-point rewriting, or application rewriting).
+- IAT Import Address Table
+- the trace collector 120 can be integrated into the virtual machine monitor 110 and the I/O library functions (e.g., a disk library) can be modified to log accesses to on-storage representation (e.g., the files), of the virtual machine.
+- I/O library functions e.g., a disk library
+- the trace uploader 118 can be operable to upload (e.g., automatically or upon user request), a trace to a network resource 104 .
+- the trace uploader 118 can run without user invention or with minimal user intervention.
+- the trace uploader 118 can run by prompting the user (e.g., by presenting a checkbox in the installer dialogs or in a dialog that occurs on first start), as to whether the user wishes to share traces.
+- using application system preferences e.g., via a checkbox in a GUI tool or command line option in a console tool
+- the user can set user preferences indicating whether or when the trace uploader 118 will run.
+- the traces (e.g., 132 , 134 , 136 , 138 , and 140 ), contain the addresses (e.g., the file name and offset) of blocks accessed.
+- the access is to a virtual disk that is part of a virtual machine (e.g., virtual machines 120 or 130 )
+- the blocks recorded in the trace can be translated to reflect the underlying blocks of the virtual disk file format.
+- the trace collector 120 learns by reading the header of a virtual disk file that the block size is a certain size (e.g., 64 kilobytes). The trace collector 120 can then discover the block boundaries by examining a page table.
+- the access start can be rounded to the beginning of the block, since the trace collector 120 knows where the blocks begin. Additionally, the size of the access can be rounded to the block size, since the trace collector 120 knows the size of the block. If an access spans multiple blocks, the access start can become the start of the block in which the first bytes of the access lies and the length can become the size of the blocks that the access spans. Additionally, instead of recording the access as file offset and size, the physical block number or numbers in the virtual disk file (e.g., a virtual disk file located on virtual machine 106 ), can be recorded (e.g., virtual disk files can be a sequence of physical blocks after an initial header).
+- the virtual disk file e.g., a virtual disk file located on virtual machine 106
+- the trace collector 120 can record at a sub-block granularity. For example, if a virtual disk file uses a 64 k block size, but the guest OS 108 or virtual machine 106 read just 2 kilobytes of the block, the trace would ordinarily record that the entire 64 k block of the virtual machine 106 was accessed. A trace collector 120 capable of recording at a finer (e.g., sub-block), granularity would record that only 2 kilobytes of the block had actually been accessed.
+- a trace collected from the most recent execution of the virtual machine 106 can be copied (e.g., automatically or by user-selection), to the network resource 104 .
+- a trace collected from the last run of the virtual machine 106 can be copied to the network resource 104 along with the virtual machine 106 .
+- blocks can be individually uploaded (e.g., to a virtual machine disk block service). In implementations where a whole disk file is uploaded, blocks can be individually shared (e.g., under protocols like HTTP), using a range request to grab a portion of a file (e.g., a single block).
+- the host device 102 can upload traces (e.g., by doing an HTTP POST to well-known URL in a virtual machine configuration file), for a virtual machine without creating and uploading a new version of the virtual machine.
+- the host device 102 can collect information about runs of an existing virtual machine rather than collecting information of a new one.
+- Network resources are generally configured to make virtual machine files available to authorized clients through network protocols (e.g., HTTP). Publishing a virtual machine places the files that constitute the virtual machine on a network resource (e.g., network resource 104 ).
+- a network resource e.g., network resource 104
+- the files of a new VM or a new version of an existing VM can be uploaded to network resource 104 using a program that communicates (e.g., using File Transfer Protocol (FTP)), with the network resource 104 .
+- FTP File Transfer Protocol
+- the program creates a new directory on the network resource 104 for the new VM or the new version of an existing VM.
+- the uploaded new VM or new version of the existing VM can then be placed in the files corresponding to the new directory.
+- one or more traces are stored on the network resource 104 (e.g., in the same directory as the virtual machine).
+- a file with a well-known name can enumerate the names of one or more available traces.
+- an administrator can set access control parameters for a new VM (and the corresponding files), or a new version of an existing VM (and the corresponding files).
+- authorized clients can access the files of published VMs (e.g., using the HTTP and GET requests, for example), to fetch the contents of the files constituting a new VM or a new version of an existing VM.
+- Range requests can be used in HTTP to fetch portions of files (e.g., individual blocks of a virtual disk).
+- the client program can use a network file system (NFS) protocol to access the files.
+- the client can use HTTP basic authentication or cookies to authenticate a request.
+- Some implementations can be configured to be peer-to-peer implementations, where information is shared between machines locally (e.g., without uploading to a server).
+- traces and one or more portions of the file that represents the VM
+- a tracker server can be implemented to monitor which host devices have fetched which parts of which VMs.
+- a new host device decides to run a VM, it can request (e.g., from the tracker server), a list of host devices that have previously fetched the one or more parts of the VM that the host device is interested in fetching. The new host device can then attempt to contact a host device from the list of host devices for traces and files.
+- a new host device can register itself with the tracker server (e.g., either automatically or by user-selection), as a source for files.
+- the tracker server can provide a list of one or more other servers running the VM (e.g., in cases where few clients have previously fetched the VM).
+- the trace data can be hosted on a server other than the server hosting the virtual machine. In those implementations, the server hosting the trace data can use a well-known name (e.g., a URL or URI), to identify the VM for which a trace is needed.
+- collected traces 132 and 134 are collected on different runs of the virtual machine.
+- the trace processor 116 creates a processed trace 136 from collected traces 132 and 134 .
+- trace processor 116 can combine the traces and can sort the blocks (within the combined trace), from most frequently requested block to least frequently requested block.
+- the trace processor 116 can remove overlapping and redundant accesses to the blocks in a trace before the trace is published.
+- the trace processor 116 can truncate a trace after the trace has reached a certain size or number of bytes referenced.
+- processed trace 136 can be copied (e.g., automatically or by user-selection), becoming published trace 150 .
+- the processed trace 136 can be copied using standard protocols (e.g., NFS or HTTP POST/PUT).
+- the host device 102 can download additional client collected traces 154 from the network resource 104 .
+- the host device 102 can then process the additional client collected traces 154 along with local collected traces 132 and 134 to create for example, processed trace 136 .
+- the host device 102 can then upload the processed trace 136 to network resource 104 where the processed trace 136 becomes published trace 150 .
+- the network resource 104 is able to maintain a simple state, while the host device 102 incorporates traces from multiple other host devices.
+- the host device 102 can delete collected traces 132 and 143 after the host device 102 has created process trace 136 .
+- the collected traces 132 and 134 traces can be kept (e.g., until a new version of a virtual machine 128 is detected, until virtual machine 128 is deleted, or until the traces exceed a preset limit for trace storage).
+- the network resource 104 can run the trace processor 142 .
+- the trace processor 142 can create one or more published traces 156 from one or more client collected traces 154 collected at one or more host devices 102 .
+- the transformations that can be done by trace processor 142 on the client collected traces 154 include those that can be done by trace processor 116 at the host device 102 .
+- An advantage of performing the trace processing at the network resource 104 is that the network resource 104 can have local access to many traces from a variety of host devices 102 . Additionally, the network resource 104 can locally write the published trace 156 .
+- a processed trace 136 can be transformed such that the most frequently used blocks are at the front of the trace and the least frequently used blocks are at the back of the trace.
+- the host device 102 when the host device 102 fetches a virtual machine or a new version of an existing virtual machine, the host device 102 can also fetch any corresponding published traces 140 .
+- a published trace 140 can be just another file in the collection of files that make up a virtual machine (e.g., virtual machine 130 ).
+- the prefetcher 114 on host device 102 can load the blocks listed in the published trace 140 into the local on-disk cache 126 .
+- the prefetcher 114 can scan the list of blocks in the published trace 140 in order and fetches (e.g., from a network resource 104 ), the blocks referenced in the trace to the host device 102 .
+- the prefetcher 114 can use the cache module 117 to check the local cache 126 to make sure the particular block is not already present on the host device 102 . Because the prefetcher 114 can be running concurrently with other programs accessing the virtual machine 130 , in some implementations, the system 100 is operable to prevent the prefetcher 114 and the other programs from concurrently retrieving the same block. In some implementations, preventing the concurrent retrieving of the same block is accomplished using file locking techniques (e.g., Windows LockFileEx, UNIX flock), over a range representing the blocks being fetched. In these implementations, locking can be performed on a small lock file representing the object being fetched.
+- file locking techniques e.g., Windows LockFileEx, UNIX flock
+- the file locking can be advisory and the blocks are being fetched into a file
+- the file being written can be used for advisory range locks (e.g., POSIX fcntl locks).
+- one or more ranges of blocks can be locked using the cache modules 117 and 122 .
+- the cache modules 117 and 122 can be the same code module (e.g., static or dynamic library). In some implementations, cache modules 117 and 122 can be different code modules capable of working together.
+- the features of the shim library 112 can be built into the virtual machine monitor 110 .
+- a trace can be collected by a process running on the guest OS 108 and communicated to the trace collector 120 using a mechanism such as, for example, VMware Inc.'s Crosstalk®.
+- the trace information can include information (e.g., an executable name), corresponding to the input or output generated by an application process or OS process.
+- one or more traces can be used to prefetch blocks from cache 126 into fast memory (e.g., RAM), on host device 102 .
+- the network resource 104 can select and send additional extra blocks to the host device 102 .
+- the selecting and sending of the additional extra blocks to the host device 102 can be based on a trace 156 stored by the network resource 104 .
+- These implementations require that the host device 102 be able to differentiate between blocks returned in response to a host device 102 request and blocks volunteered by the network resource 104 . In some implementations, this can be done by prepending a header to each block returned to the host device 102 indicating the offset and size of the following block.
+- the host device 102 can reorder blocks in the local data store 124 (e.g., such that sequential blocks in a trace are located sequentially in the data store 124 ).
+- the traces 132 , 134 , 136 , 138 , 140 , 150 , 154 , 156 can be compressed when stored, sent, or received from the network resource 104 (e.g. by using a gzip library).
+- the cache 126 on the host device 102 can implement eviction on a block granularity.
+- the host device 102 design can avoid evicting prefetched blocks from the cache 126 for a set amount of time or until the prefetched blocks can be used.
+- the blocks can be marked as referenced as they are inserted into the cache 126 .
+- the system 100 can limit the amount of the cache 126 devoted to prefetched data (e.g., to avoid replacing blocks that are being actively used with blocks that may or may not be used).
+- prefetching can be eliminated, for example, when the cache is about to evict a block (e.g., due to a fetch of new data), with an age below some threshold (e.g., determined by the designer of the cache 126 ).
+- the age of the block can be based upon the amount of time that has passed since the block was last referenced.
+- the trace processors 116 or 142 can create a prediction matrix calculating a probability for each block (e.g., based on a prior event).
+- the entries in the matrix can be based upon the collected traces and the probability that a second block appears after a first block within the collected traces.
+- the probability can be calculated by first counting the number of times the first block appears before the second block, and then dividing that number by the total number of times the second block occurs generally.
+- a second block can be fetched (e.g., either automatically or upon user-request), after the first block has been fetched.
+- the prefetcher 114 can specify to the host OS that the I/O or network traffic of the prefetcher 114 should be a lower priority than other I/O or network traffic activity (e.g., SetPriorityClass in Microsoft® Windows).
+- the prefetcher 114 can implement throttling to scale back the prefetcher 114 activity (e.g., when foreground network, disk, or processes are especially active). Network throttling can be done using, for example, TCP Nice, which is described in Venkataramani et al., “TCP Nice: A Mechanism for Background Transfers,” Laboratory of Advanced Systems Research, Department of Computer Sciences, University of Texas at Austin. This article is publicly available and is incorporated by reference herein.
+- disk throttling can be done by measuring the latency of disk writes and decreasing the frequency as the latency starts to increase. Processes can be throttled, for example, by using any known CPU priority mechanism.
+- an I/O queued by the prefetcher 114 can be cancelled by the cache 117 (e.g., by removing the I/O from the I/O queue), when a higher priority I/O for an overlapping region comes into the cache 117 .
+- the two I/Os can be merged into one I/O request encompassing more than one region.
+- the size of a merged region can be limited (e.g., to control latency).
+- the trace processor 116 or 142 can break a trace up into one or more non-overlapping collections of events (e.g., based on whether the events have occurred within a specific time period or based on the number of events). Within each collection, the blocks can be sorted. Additionally, accesses to adjacent blocks within a collection can be aggregated (e.g., to generate larger requests). In some implementations, accesses to adjacent blocks within a collection can be aggregated subject to a request size limit.
+- the prefetcher 114 can determine its own location in the trace or which trace to use (e.g., based on a recent block access pattern of the virtual machine 106 ). For example, this determination can be done by looking at the last block or last two blocks accessed by the virtual machine 106 and seeing if any trace accesses the same two blocks in the same order. In some implementations, the prefetcher 114 can keep track of how far it has progressed through the traces (e.g., in persistent storage on the host device 102 ).
+- a trace can include data along with one or more block addresses.
+- a trace can include references to one or more other traces.
+- the amount of space that the trace occupies per virtual machine can be bounded. For example, in some implementations, only a trace associated with the currently running or currently prefetching or currently running and currently fetching versions of the VM is kept. In these implementations, older traces can be deleted. In some implementations, it is not necessary to fetch the entire trace. In these implementations, the trace can be fetched in chunks.
+- the trace file can be divided into multiple smaller local files. In these implementations, the ability to individually delete the smaller local files facilitates the freeing of space on the cache 126 .
+- a file system that supports freeing data inside of a file e.g., Sun® ZFS
+- trace collection can be halted or older trace data can be deleted (e.g., either automatically or by user-selection).
+- the trace processor 116 or 142 can recognize a common sequence between multiple traces.
+- a search can be optimized by keeping a hash table (e.g., that points to offsets in traces). For example, a hash function can be computed on portions of a new trace as it is scanned. The hash function can then be used to identify one or more candidate sections of other, previously processed traces. These candidate sections can be compared for commonalities, and any common region can be kept in a separate trace.
+- an entirely different virtual machine can be prefetched (e.g., based on a user's previous usage patterns or based on the previous usage patterns of one or more other users or groups of users).
+- the network resource 104 may log (e.g., based on cookies, sourceIP address, authentication, or another type of identifier), that users accessing a virtual machine A often end up also accessing a virtual machine B.
+- prefetcher 114 fetches virtual machine A
+- the prefetcher can also fetch virtual machine B (e.g., either automatically or by user selection).
+- the network resource 104 can maintain a list of suggested additional virtual machines associated with a particular virtual machine.
+- a list of suggested additional virtual machines can be maintained in a well-known file in a directory of a particular virtual machine.
+- the user can be presented with the list of suggested additional virtual machines.
+- the user can then select one or more of the suggested additional virtual machines.
+- the suggestions can be added and prefetched without user interaction.
+- a host device 102 can report to the network resource 104 (e.g., by using HTTP POST to post a list and a log of usage), which virtual machines users of host device 102 subscribe to and use.
+- FIGS. 2A-2B are flow diagrams of example processes 200 and 201 , respectively, for trace-assisted prefetching of virtual machines.
+- the process 200 begins by collecting 202 an activity trace of a virtual machine from a first host device.
+- the activity trace is collected 202 by a trace collector 120 .
+- the activity trace can be uploaded 204 (e.g., either automatically or upon user-selection), to a network resource 104 .
+- the activity trace can be automatically uploaded 204 by a trace uploader 118 coupled to a trace collector 120 .
+- an activity trace can be uploaded with a corresponding virtual machine.
+- the process 201 can download 206 the activity trace for a virtual machine from a network resource 104 to one or more host devices 102 .
+- the downloaded activity trace can be stored in memory on the host device 102 .
+- a processor coupled to memory on the host device 102 can use the trace to fetch 208 (e.g., automatically, based on trigger event), parts of the virtual machine from the network resource 104 as needed (e.g., preferentially).
+- FIG. 3 is a flow diagram of example process 300 for applying an activity trace to a virtual disk.
+- FIG. 4 is a block diagram showing an example application of an activity trace to a virtual disk.
+- a client can fetch one or more blocks according to a prefetch order.
+- a sequential approach to reading a disk file can be simpler to implement and expedite than alternatives that can include a random access pattern approach to reading a disk file.
+- the rearrangement of blocks in a virtual disk is made possible due to a “mapping” structure in the disk file.
+- a mapping structure can be used to move the location of data blocks in the disk file without changing the contents of the virtual disk.
+- the mapping structure is a page table capable of translating virtual disk block offsets to physical offsets in the disk file.
+- the page table mapping can include one or more mappings of the virtual offset of a data block in the virtual disk to the physical offset of the data block in the physical disk file.
+- the data structure can be a multi-level page table (e.g., VMware's VMDK or Microsoft's VHD®).
+- the system When rearranging the physical disk, the physical offsets in the mapping structure are changed such that the physical disk continues to represent the same data blocks at the same corresponding virtual offsets.
+- the rearrangement of blocks inside a disk will be referred to as “trace sorting”.
+- the system first receives 305 one or more virtual disks. Each virtual disk can be in a first version including one or more data blocks in a first order.
+- FIG. 4 is a block diagram of an example application of an activity trace to a virtual disk.
+- the trace sorter 180 receives a virtual disk (e.g., “original disk” 410 ).
+- Original disk 410 includes page table 1 and multiple data blocks 1 , 2 , 3 , and 4 , corresponding in order to page table 1 .
+- the original disk 410 physical block 1 holds virtual block 1
+- physical block 2 holds virtual block 2
+- physical block 3 holds virtual block 3
+- physical block 4 holds virtual block 4 .
+- the system receives 310 an activity trace 420 .
+- the original disk 410 is then sorted according to the activity trace 420 .
+- the activity trace 420 can be read 315 in the order that the activity trace 420 is received.
+- the activity trace 420 is read 315 sequentially.
+- the system creates a new disk file (e.g., “trace sorted disk” 430 ).
+- the trace processor reads the virtual blocks (e.g., 3 , 1 , 4 , 2 ), from the original disk 410 and appends the blocks in that order to the new trace sorted disk 430 .
+- the trace sorted disk 430 physical block 1 now holds virtual block 3
+- physical block 2 now holds virtual block 1
+- physical block 3 now holds virtual block 4
+- physical block 4 now holds virtual block 2 .
+- the trace processor updates the mapping structure of sorted disk 430 (e.g., the page table), to reflect the presence of the new virtual blocks.
+- page table 1 from original disk 410 (e.g., physical blocks 1 , 2 , 3 , 4 )
+- a potentially reordered page table 430 e.g., physical blocks 2 , 4 , 1 , 3 ), to reflect the new physical offsets of the original set of data blocks.
+- the read order of the activity trace 420 is applied 320 to the original disk 410 (e.g., the first version of the virtual disk), to create a new trace sorted disk 430 (e.g., the second version of the virtual disk).
+- the trace sorted version of the virtual disk includes the one or more data blocks from the first version of the virtual disk; however, the one or more data blocks are now rearranged (e.g., according to the activity trace 420 ), into a new second order.
+- the mapping structure e.g., page table
+- the mapping structure can be updated in the manner described above (e.g., to reflect the new offset of the data blocks).
+- updates to the mapping structure are done after multiple blocks have been appended to the file. In some implementations, these updates can be accomplished by tracking necessary changes to the mapping structure (e.g., in memory) and only writing out the necessary changes after multiple blocks have been appended.
+- the sorting of the disk file can be done at the client. In some implementations, the sorting of the disk file can be done at the server.
+- the client receiving a trace sorted disk can choose to write a disk file to local storage with a new sort order. For example, the client may choose to place adjacent virtual data blocks in adjacent physical blocks in a cache or in a virtual disk (e.g., such that the users of the virtual disk potentially experience higher sequential throughput). Creation of a new sort order at the client could be done in the same manner as noted herein above with respect to the application of an activity trace 420 to an original disk 410 to create a trace sorted disk 430 .
+- One challenge with reorganizing data blocks in a virtual disk is maintaining the integrity of digitally signed virtual disks.
+- a signature needs to be maintained when a data block is signed by a first party and resorted by second different party.
+- individual data blocks can be individually signed.
+- signing the individual data blocks requires including the virtual address of the data block inside the signature (e.g., to protect against the swapping of blocks by attackers).
+- Metadata blocks can be assigned virtual addresses too to make sure they are secure against being swapped.
+- a virtual address for a page table in a multi-level page table can be synthesized by concatenating the indexes of the entries in the parent page tables that must be traversed to reach the data block.
+- the virtual address of the data block is not directly stored in the data block (e.g., when the virtual address can be computed by both the signer and verifier).
+- the virtual address can be generated in RAM and prepended or appended to the block being signed.
+- a page table can contain one or more additional page tables and/or one or more data blocks.
+- each additional page table can also contain one or more additional page tables and/or data block.
+- the virtual address can include an identifier that relates the block to the virtual disk, (e.g., such that block cannot be copied between disks signed by the same person).
+- the disk header may include a probabilistically unique x-bit random (e.g., 64-bit) number that is included in every virtual address.
+- mapping structures can be signed to prevent attackers from removing blocks from the disk file.
+- the mapping structures e.g., page tables
+- the format can specify that a position-independent representation corresponding to the page table is signed (e.g., in the place of signing the actual page table).
+- FIG. 5 is a flow diagram of an example process 500 for verifying presence information using a signed representation of a page table block.
+- the disk signer 160 receives 505 a virtual disk including a first page table block.
+- the first page table block can correspond (e.g., point) to one or more other page table blocks or one or more data blocks.
+- the one or more other page table blocks or the one or more data blocks can be in a first order.
+- the disk signer 160 can generate 510 a position-independent representation (e.g., a bitmap), of the first page table block (e.g., 1 , 2 , 3 , 4 , 0 ).
+- the position-independent representation (e.g., the bitmap), corresponding to the first page table block does not include the physical offsets corresponding to each entry.
+- the physical offsets can be removed while the related presence information (e.g., information indicative of whether the physical block is present in the file) is maintained.
+- the related presence information e.g., information indicative of whether the physical block is present in the file
+- a bit in the bitmap can indicate whether the corresponding block (e.g., the block pointed to), is present in the file.
+- the bitmap corresponding to the first page table block can be position-independent with respect to the one or more data blocks or one or more other page table blocks.
+- the representation of the block corresponding to the first page table block, including the position-independent representation of the page table block, is signed 515 (e.g., generating a signature).
+- signing the representation includes generating a signature for the first page table block.
+- a signature can be generated using a digital signature algorithm (e.g., NIST, DSA, HMAC-SHA1, RSA signing).
+- the digital signature algorithm can include a verification algorithm.
+- generating a signature can include calculating a cryptographic hash (e.g., SHA-1, MD5), on a position-independent representation.
+- a position-independent representation can be signed by disk signer 160 .
+- disk signer 160 can be located on a host device 102 .
+- disk signer 160 can be located on a network resource 104 .
+- each of the one or more other page table blocks can have a corresponding bitmap which can be individually signed. In some implementations, each of the one or more data blocks can be individually signed. In some implementations, each page table block has a corresponding virtual address, and a signature for the page table block can include the virtual address for the page table block inside the signature. In some implementations, each data block can have a corresponding virtual address, and a signature for a data block includes the virtual address for the data block inside the signature. In those implementations, the signature can be written into the virtual disk file.
+- the offset of one or more page table blocks or data blocks in the original page table block can be changed 520 to reflect a newly ordered first page table block (e.g., 2 , 4 , 1 , 3 as shown in FIG. 4 ).
+- the signature can be co-located in the block being signed.
+- the signature can be placed in a page table entry that points to the block being signed.
+- the verifier 190 can receive a first page table block and a signature for the first page table block. The verifier 190 can then generate 525 a position-independent representation of the first page table block and pass the position-independent representation to a verification algorithm for the digital signature algorithm (e.g., to verify the integrity and authenticity of the data). For example, the verifier 190 can use the signature and the generated position independent representation to verify the integrity of the first page table block.
+- the first page table block can include presence information with respect to one or more other page table blocks or one or more data blocks in the virtual disk, pointed to by the first page table block, and in the new order.
+- the digital signature algorithm can calculate a cryptographic hash of the position-independent representation. The digital signature algorithm can then verify that the cryptographic hash matches another cryptographic hash (e.g., one signed by the disk signer 160 ).
+- the position-independent representation can be signed and saved (e.g., written into the virtual disk file). The position-independent representation can be saved either before or after it is signed. In some implementations, the position-independent representation can be saved without being signed. In those implementations, the virtual disk can be considered authenticated if the in-file position-independent representation and a separately generated position-independent representation match.
+- representations of page table blocks other than a bitmap are possible.
+- each entry can also include a cryptographic hash of the representation of the block being pointed to by page table.
+- Representations should be invariant (e.g., position independent), with respect to the trace sorting method described above. Additionally, representations should be indicative of whether data blocks are present on a virtual disk (e.g., to protect against the deletion of blocks by malicious parties).
+- representations are not explicitly stored in the trace sorted disk (e.g., when the representation can be computed by both the signer and verifier).
+- signing page table blocks and data blocks does not require a digital signature at the end of every block.
+- An indirect signature can be made through a Merkle tree or similar data structure.
+- the Merkle tree needs to be constructed over the virtual blocks, which are invariant to reordering, rather than on the physical blocks. For example, the hash of the position-independent representation of the corresponding block can be placed in the page table alongside the pointer (e.g., the physical offset), to the corresponding block.
+- FIGS. 6A and 6B are a continuous flow diagram of an example process 600 for generating, verifying, and reorganizing a signed disk.
+- the process begins when the disk signer 160 reads the page table block 601 from a virtual disk.
+- the page table block 601 contains physical offsets to a block present in the file or zeros when a block is not present in the file.
+- the signer generates 605 the position-independent representation 610 from the page table block 601 .
+- the disk signer 160 can examine and convert entries which point to a block in the file to ones and entries which do not point to a block in the file to zeroes.
+- the disk signer 160 can then prepend 615 (e.g., in memory), a virtual address 621 (e.g., including a probabilistically unique disk ID and virtual block offset), to the position-independent representation 610 to generate the “to be signed” buffer 620 .
+- the disk signer 160 can sign 625 the “to be signed” buffer 620 to generate signature 630 (e.g., by using NIST's digital signature algorithm).
+- the key management for the signature can be handled using standard key management techniques.
+- the disk signer 160 can have a private key, a public key, and a certificate.
+- the certificate and public key can appear in the disk file or alongside the disk file when the disk file is published.
+- the certificate can be signed by a well-known trusted party (e.g., Verisign®).
+- the disk signer 160 inserts 635 the signature 630 into the page table block 601 to generate a modified page table 638 containing the signature field filled out with signature 630 .
+- a trace sorter 180 can then reorder 645 the blocks in the disk file (e.g., by trace sorting the disk), including page table 638 . This reordering can leave the signatures untouched, and can result in page table 640 , which contains the virtual blocks at offsets different from those in the page table 601 .
+- any new trace-sorted disk can have the same disk ID as the original virtual disk (e.g., to avoid failure of the signature verification process).
+- the verifier 190 receives 655 the page table 650 with signature 651 (e.g., by downloading page table 650 from network resource 104 ).
+- the page table 650 may not be identical to the page table 640 when received by the verifier 190 (e.g., when the page table 650 has been tampered with prior to receipt by the verifier 190 ).
+- the verifier 190 can take the page table 650 entries and generate 665 a position-independent representation 660 of the page table 650 (e.g., by using techniques described above). The verifier 190 can then generate the virtual address 671 of page table block 650 (e.g., using the algorithm used by the disk signer 160 ), and prepend 675 the virtual address 671 to generate the “to be verified” buffer 670 . In some implementations, in addition to the signature 651 , the disk signer 160 can use the “to be verified” buffer 670 to verify 685 the authenticity and integrity of the page table 650 .
+- the key used to verify the authenticity and integrity of page table 650 is a public key embedded in a certificate associated with the virtual disk file.
+- the key is a shared secret between the disk signer 160 and the verifier 190 .
+- the verifier 190 can make a binary determination (e.g., using NIST's digital signature algorithm). For example, the verifier 190 can indicate an OK if the signature matches the buffer 670 and fail if the signature does not match the buffer 670 .
+- the signature algorithm will generate a signature value that can be compared to signature 651 for equality. In those implementations, if the two signatures are equal, then the block is OK (e.g., the block has integrity and authenticity), otherwise the block is not OK (e.g., the block has been transformed in a potentially dangerous way).
+- Embodiments of the subject matter and the functional operations described in this specification can be implemented in digital electronic circuitry, or in computer software, firmware, or hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them.
+- Embodiments of the subject matter described in this specification can be implemented as one or more computer program products, i.e., one or more modules of computer program instructions encoded on a computer readable medium for execution by, or to control the operation of, data processing apparatus.
+- the computer readable medium can be a machine-readable storage device, a machine-readable storage substrate, a memory device, a composition of matter effecting a machine-readable propagated signal, or a combination of one or more of them.
+- data processing apparatus encompasses all apparatus, devices, and machines for processing data, including by way of example a programmable processor, a computer, or multiple processors or computers.
+- the apparatus can include, in addition to hardware, code that creates an execution environment for the computer program in question, e.g., code that constitutes processor firmware, a protocol stack, a database management system, an operating system, or a combination of one or more of them.
+- a propagated signal is an artificially generated signal, e.g., a machine-generated electrical, optical, or electromagnetic signal, that is generated to encode information for transmission to suitable receiver apparatus.
+- a computer program (also known as a program, software, software application, script, or code) can be written in any form of programming language, including compiled or interpreted languages, and it can be deployed in any form, including as a stand alone program or as a module, component, subroutine, or other unit suitable for use in a computing environment.
+- a computer program does not necessarily correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data (e.g., one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (e.g., files that store one or more modules, sub programs, or portions of code).
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network.
+- the processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform functions by operating on input data and generating output.
+- the processes and logic flows can also be performed by, and apparatus can also be implemented as, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- processors suitable for the execution of a computer program include, by way of example, both general and special purpose microprocessors, and any one or more processors of any kind of digital computer.
+- a processor will receive instructions and data from a read only memory or a random access memory or both.
+- the essential elements of a computer are a processor for performing instructions and one or more memory devices for storing instructions and data.
+- a computer will also include, or be operatively coupled to receive data from or transfer data to, or both, one or more mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks.
+- mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks.
+- a computer need not have such devices.
+- a computer can be embedded in another device, e.g., a mobile telephone, a personal digital assistant (PDA), a mobile audio player, a Global Positioning System (GPS) receiver, to name just a few.
+- Computer readable media suitable for storing computer program instructions and data include all forms of non volatile memory, media and memory devices, including by way of example semiconductor memory devices, e.g., EPROM, EEPROM, and flash memory devices; magnetic disks, e.g., internal hard disks or removable disks; magneto optical disks; and CD ROM and DVD-ROM disks.
+- the processor and the memory can be supplemented by, or incorporated in, special purpose logic circuitry.
+- a computer having a display device, e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor, for displaying information to the user and a keyboard, a pointing device, e.g., a mouse or a trackball, or a musical instrument including musical instrument data interface (MIDI) capabilities, e.g., a musical keyboard, by which the user can provide input to the computer.
+- a display device e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor
+- a keyboard e.g., a keyboard
+- a pointing device e.g., a mouse or a trackball
+- MIDI musical instrument data interface
+- feedback provided to the user can be any form of sensory feedback, e.g., visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, or tactile input.
+- Embodiments of the subject matter described in this specification can be implemented in a computing system that includes a back end component, e.g., as a data server, or that includes a middleware component, e.g., an application server, or that includes a front end component, e.g., a client computer having a graphical user interface or a Web browser through which a user can interact with an implementation of the subject matter described is this specification, or any combination of one or more such back end, middleware, or front end components.
+- the components of the system can be interconnected by any form or medium of digital data communication, e.g., a communication network. Examples of communication networks include a local area network (“LAN”) and a wide area network (“WAN”), e.g., the Internet.
+- LAN local area network
+- WAN wide area network
+- the computing system can include clients and servers.
+- a client and server are generally remote from each other and typically interact through a communication network.
+- the relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other.
+Abstract
+Description
+Claims (2)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/306,037 US9038064B2 (en) | 2007-04-09 | 2011-11-29 | Trace assisted prefetching of virtual machines in a distributed system |
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US91077107P | 2007-04-09 | 2007-04-09 | |
+US12/100,238 US8087017B1 (en) | 2007-04-09 | 2008-04-09 | Trace-assisted prefetching of virtual machines in a distributed system |
+US13/306,037 US9038064B2 (en) | 2007-04-09 | 2011-11-29 | Trace assisted prefetching of virtual machines in a distributed system |
+Related Parent Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US12/100,238 Division US8087017B1 (en) | 2007-04-09 | 2008-04-09 | Trace-assisted prefetching of virtual machines in a distributed system |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20120072911A1 US20120072911A1 (en) | 2012-03-22 |
+US9038064B2 true US9038064B2 (en) | 2015-05-19 |
+Family
+ID=45349946
+Family Applications (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US12/100,238 Active 2030-10-27 US8087017B1 (en) | 2007-04-09 | 2008-04-09 | Trace-assisted prefetching of virtual machines in a distributed system |
+US13/306,037 Active 2028-05-06 US9038064B2 (en) | 2007-04-09 | 2011-11-29 | Trace assisted prefetching of virtual machines in a distributed system |
+Family Applications Before (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US12/100,238 Active 2030-10-27 US8087017B1 (en) | 2007-04-09 | 2008-04-09 | Trace-assisted prefetching of virtual machines in a distributed system |
+Country Status (1)
+Country | Link |
+---|---|
+US (2) | US8087017B1 (en) |
+Families Citing this family (36)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8307215B2 (en) * | 2008-01-23 | 2012-11-06 | Noam Camiel | System and method for an autonomous software protection device |
+US8943203B1 (en) * | 2009-07-10 | 2015-01-27 | Netapp, Inc. | System and method for storage and deployment of virtual machines in a virtual server environment |
+US20120110348A1 (en) * | 2010-11-01 | 2012-05-03 | International Business Machines Corporation | Secure Page Tables in Multiprocessor Environments |
+US20120324446A1 (en) * | 2011-06-17 | 2012-12-20 | Microsoft Corporation | Virtual machine image composition and signing |
+US20140196036A1 (en) * | 2011-07-12 | 2014-07-10 | Kok Leong Ryan Ko | Tracing operations in a cloud system |
+US20130283267A1 (en) * | 2012-04-23 | 2013-10-24 | Hewlett-Packard Development Company Lp | Virtual machine construction |
+US8961302B2 (en) | 2012-07-20 | 2015-02-24 | Microsoft Technology Licensing, Llc | Game browsing |
+US9381432B2 (en) | 2012-08-24 | 2016-07-05 | Microsoft Technology Licensing, Llc | Game migration |
+US9717982B2 (en) | 2012-12-21 | 2017-08-01 | Microsoft Technology Licensing, Llc | Client rendering of latency sensitive game features |
+US9526980B2 (en) | 2012-12-21 | 2016-12-27 | Microsoft Technology Licensing, Llc | Client side processing of game controller input |
+US9694277B2 (en) | 2013-03-14 | 2017-07-04 | Microsoft Technology Licensing, Llc | Client side processing of character interactions in a remote gaming environment |
+US9564102B2 (en) | 2013-03-14 | 2017-02-07 | Microsoft Technology Licensing, Llc | Client side processing of player movement in a remote gaming environment |
+US20150143342A1 (en) * | 2013-11-15 | 2015-05-21 | Microsoft Corporation | Functional validation of software |
+US9158909B2 (en) * | 2014-03-04 | 2015-10-13 | Amazon Technologies, Inc. | Authentication of virtual machine images using digital certificates |
+US9804965B2 (en) * | 2014-12-03 | 2017-10-31 | Electronics And Telecommunications Research Institute | Virtual machine host server apparatus and method for operating the same |
+US9594687B2 (en) | 2015-04-14 | 2017-03-14 | Google Inc. | Virtualization-aware prefetching |
+US10108344B1 (en) * | 2015-05-06 | 2018-10-23 | American Megatrends, Inc. | Systems, devices and methods using a solid state device as a caching medium with an SSD filtering or SSD pre-fetch algorithm |
+US9569364B1 (en) * | 2016-02-08 | 2017-02-14 | International Business Machines Corporation | Multiple history based micro partition prefetch optimization |
+US10042737B2 (en) | 2016-08-31 | 2018-08-07 | Microsoft Technology Licensing, Llc | Program tracing for time travel debugging and analysis |
+US10031834B2 (en) | 2016-08-31 | 2018-07-24 | Microsoft Technology Licensing, Llc | Cache-based tracing for time travel debugging and analysis |
+US10310963B2 (en) | 2016-10-20 | 2019-06-04 | Microsoft Technology Licensing, Llc | Facilitating recording a trace file of code execution using index bits in a processor cache |
+US10310977B2 (en) | 2016-10-20 | 2019-06-04 | Microsoft Technology Licensing, Llc | Facilitating recording a trace file of code execution using a processor cache |
+US10489273B2 (en) | 2016-10-20 | 2019-11-26 | Microsoft Technology Licensing, Llc | Reuse of a related thread's cache while recording a trace file of code execution |
+US10324851B2 (en) | 2016-10-20 | 2019-06-18 | Microsoft Technology Licensing, Llc | Facilitating recording a trace file of code execution using way-locking in a set-associative processor cache |
+US10540250B2 (en) | 2016-11-11 | 2020-01-21 | Microsoft Technology Licensing, Llc | Reducing storage requirements for storing memory addresses and values |
+US10185507B1 (en) * | 2016-12-20 | 2019-01-22 | Amazon Technologies, Inc. | Stateless block store manager volume reconstruction |
+US10268593B1 (en) | 2016-12-20 | 2019-04-23 | Amazon Technologies, Inc. | Block store managamement using a virtual computing system service |
+US10921991B1 (en) | 2016-12-20 | 2021-02-16 | Amazon Technologies, Inc. | Rule invalidation for a block store management system |
+US10809920B1 (en) | 2016-12-20 | 2020-10-20 | Amazon Technologies, Inc. | Block store management for remote storage systems |
+US11507283B1 (en) | 2016-12-20 | 2022-11-22 | Amazon Technologies, Inc. | Enabling host computer systems to access logical volumes by dynamic updates to data structure rules |
+US11093136B2 (en) * | 2017-02-01 | 2021-08-17 | Hewlett-Packard Development Company, L.P. | Performance threshold |
+US10318332B2 (en) | 2017-04-01 | 2019-06-11 | Microsoft Technology Licensing, Llc | Virtual machine execution tracing |
+US10637738B1 (en) * | 2017-05-26 | 2020-04-28 | Amazon Technologies, Inc. | Network traffic logs with integrated product identifiers |
+US10296442B2 (en) | 2017-06-29 | 2019-05-21 | Microsoft Technology Licensing, Llc | Distributed time-travel trace recording and replay |
+US11042393B2 (en) * | 2018-07-25 | 2021-06-22 | Vmware, Inc. | Priming virtual machines in advance of user login in virtual desktop environments |
+US11385920B2 (en) * | 2019-03-28 | 2022-07-12 | Amazon Technologies, Inc. | Compute platform optimization over the life of a workload in a distributed computing environment |
+Citations (21)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5127094A (en) | 1987-11-09 | 1992-06-30 | Hitachi, Ltd. | Virtual storage type computer system |
+US5757919A (en) | 1996-12-12 | 1998-05-26 | Intel Corporation | Cryptographically protected paging subsystem |
+US5920896A (en) * | 1997-03-21 | 1999-07-06 | Intel Corporation | Reducing operating system start-up/boot time through disk block relocation |
+US6202121B1 (en) * | 1998-04-15 | 2001-03-13 | Microsoft Corporation | System and method for improved program launch time |
+US6317875B1 (en) * | 1999-01-15 | 2001-11-13 | Intel Corporation | Application execution performance through disk block relocation |
+US6681391B1 (en) | 2000-06-21 | 2004-01-20 | Microsoft Corporation | Method and system for installing software on a computer system |
+US20040153746A1 (en) * | 2002-04-24 | 2004-08-05 | Talagala Nisha D. | Mechanisms for embedding and using integrity metadata |
+US6802006B1 (en) | 1999-01-15 | 2004-10-05 | Macrovision Corporation | System and method of verifying the authenticity of dynamically connectable executable images |
+US20050198517A1 (en) * | 2004-03-05 | 2005-09-08 | Ivanov Lazar I. | System and method for distributed module authentication |
+US6952797B1 (en) * | 2000-10-25 | 2005-10-04 | Andy Kahn | Block-appended checksums |
+US20060155735A1 (en) * | 2005-01-07 | 2006-07-13 | Microsoft Corporation | Image server |
+US20070094348A1 (en) * | 2005-01-07 | 2007-04-26 | Microsoft Corporation | BITS/RDC integration and BITS enhancements |
+US7275150B2 (en) | 2004-03-15 | 2007-09-25 | International Business Machines Corporation | Method and system for adding frequently selected applications to a computer startup sequence |
+US20080082812A1 (en) * | 2006-09-29 | 2008-04-03 | Microsoft Corporation | Accelerated System Boot |
+US7415653B1 (en) * | 2004-04-21 | 2008-08-19 | Sun Microsystems, Inc. | Method and apparatus for vectored block-level checksum for file system data integrity |
+US7607000B1 (en) | 2003-05-13 | 2009-10-20 | Apple Inc. | Method for booting an operating system |
+US7836379B1 (en) * | 2006-04-03 | 2010-11-16 | Marvell International Ltd. | Method for computing buffer ECC |
+US7917956B2 (en) * | 2006-04-27 | 2011-03-29 | The Invention Science Fund I, Llc | Multi-network virus immunization |
+US20110191753A1 (en) * | 2002-07-10 | 2011-08-04 | National Instruments Corporation | Incremental deployment and execution of a program on an embedded device |
+US8073926B2 (en) * | 2005-01-07 | 2011-12-06 | Microsoft Corporation | Virtual machine image server |
+US20120005467A1 (en) * | 2010-06-30 | 2012-01-05 | International Business Machines Corporation | Streaming Virtual Machine Boot Services Over a Network |
+-
+2008
+- 2008-04-09 US US12/100,238 patent/US8087017B1/en active Active
+-
+2011
+- 2011-11-29 US US13/306,037 patent/US9038064B2/en active Active
+Patent Citations (21)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5127094A (en) | 1987-11-09 | 1992-06-30 | Hitachi, Ltd. | Virtual storage type computer system |
+US5757919A (en) | 1996-12-12 | 1998-05-26 | Intel Corporation | Cryptographically protected paging subsystem |
+US5920896A (en) * | 1997-03-21 | 1999-07-06 | Intel Corporation | Reducing operating system start-up/boot time through disk block relocation |
+US6202121B1 (en) * | 1998-04-15 | 2001-03-13 | Microsoft Corporation | System and method for improved program launch time |
+US6317875B1 (en) * | 1999-01-15 | 2001-11-13 | Intel Corporation | Application execution performance through disk block relocation |
+US6802006B1 (en) | 1999-01-15 | 2004-10-05 | Macrovision Corporation | System and method of verifying the authenticity of dynamically connectable executable images |
+US6681391B1 (en) | 2000-06-21 | 2004-01-20 | Microsoft Corporation | Method and system for installing software on a computer system |
+US6952797B1 (en) * | 2000-10-25 | 2005-10-04 | Andy Kahn | Block-appended checksums |
+US20040153746A1 (en) * | 2002-04-24 | 2004-08-05 | Talagala Nisha D. | Mechanisms for embedding and using integrity metadata |
+US20110191753A1 (en) * | 2002-07-10 | 2011-08-04 | National Instruments Corporation | Incremental deployment and execution of a program on an embedded device |
+US7607000B1 (en) | 2003-05-13 | 2009-10-20 | Apple Inc. | Method for booting an operating system |
+US20050198517A1 (en) * | 2004-03-05 | 2005-09-08 | Ivanov Lazar I. | System and method for distributed module authentication |
+US7275150B2 (en) | 2004-03-15 | 2007-09-25 | International Business Machines Corporation | Method and system for adding frequently selected applications to a computer startup sequence |
+US7415653B1 (en) * | 2004-04-21 | 2008-08-19 | Sun Microsystems, Inc. | Method and apparatus for vectored block-level checksum for file system data integrity |
+US20070094348A1 (en) * | 2005-01-07 | 2007-04-26 | Microsoft Corporation | BITS/RDC integration and BITS enhancements |
+US20060155735A1 (en) * | 2005-01-07 | 2006-07-13 | Microsoft Corporation | Image server |
+US8073926B2 (en) * | 2005-01-07 | 2011-12-06 | Microsoft Corporation | Virtual machine image server |
+US7836379B1 (en) * | 2006-04-03 | 2010-11-16 | Marvell International Ltd. | Method for computing buffer ECC |
+US7917956B2 (en) * | 2006-04-27 | 2011-03-29 | The Invention Science Fund I, Llc | Multi-network virus immunization |
+US20080082812A1 (en) * | 2006-09-29 | 2008-04-03 | Microsoft Corporation | Accelerated System Boot |
+US20120005467A1 (en) * | 2010-06-30 | 2012-01-05 | International Business Machines Corporation | Streaming Virtual Machine Boot Services Over a Network |
+Non-Patent Citations (6)
+Title |
+---|
+Adya et al., FARSITE: Federated, Available, and Reliable Storage for an Incompletely Trusted Environment, OSDI 2002, Dec. 2002. * |
+Brian Rogers et al:, "Using Address Independent Seed Encryption and Bonsai Merkle Trees to Make Secure Processors OS and Performance-Friendly." Microarchitecture, 2007. Micro 2007. 40.sup.th, Annual IEEE/ACM International Symposium, on, IEEE, Piscataway, NJ, USA, Dec. 1, 2007, pp. 183-196, XP031194141. * |
+Garfinkel et al., "Terra: A Virtual Machine-Based Platform for Trusted Computing", SOSP'03, Oct. 19, 2003. * |
+Moore, ZFS: The Last Word in File Systems, www.cs.utexas.edu/users/dahlin/Classes/GradOS/papers/zfs-lc-preso.pdf, Nov. 18, 2005. * |
+Moore, ZFS: The Last Word in File Systems, www.cs.utexas.edu/users/dahlin/Classes/GradOS/papers/zfs—lc—preso.pdf, Nov. 18, 2005. * |
+Sapuntzakis, Constantine P. et al., "Optimizing the Migration of Virtual Computers", Computer Science department, Stanford University, 2002, Entire document. |
+Also Published As
+Publication number | Publication date |
+---|---|
+US8087017B1 (en) | 2011-12-27 |
+US20120072911A1 (en) | 2012-03-22 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US9038064B2 (en) | Trace assisted prefetching of virtual machines in a distributed system | |
+KR102566416B1 (en) | Database metadata in immutable storage | |
+CN106021256B (en) | De-duplication distributed file system using cloud-based object storage | |
+US9582513B2 (en) | Accessing data in a compressed container through dynamic redirection | |
+US9575927B2 (en) | RDMA-optimized high-performance distributed cache | |
+JP4547264B2 (en) | Apparatus and method for proxy cache | |
+US8073926B2 (en) | Virtual machine image server | |
+US20110022566A1 (en) | File system | |
+US20140359043A1 (en) | High performance, distributed, shared, data grid for distributed java virtual machine runtime artifacts | |
+US9716771B2 (en) | Cache control for web application resources | |
+KR20130139883A (en) | Offload reads and writes | |
+GB2498626A (en) | Optimising the storage allocation in a virtual desktop environment | |
+US20060089936A1 (en) | System and method for a secure, scalable wide area file system | |
+Tsai et al. | How to get more value from your file system directory cache | |
+US11520759B2 (en) | Processing time series metrics data | |
+US11307922B2 (en) | Application crash analysis techniques when memory dump and debug symbols are not co-located | |
+US11681653B2 (en) | Namespace representation and enhanced browsability for replicated file systems | |
+US10872073B1 (en) | Lock-free updates to a data retention index | |
+US11151082B1 (en) | File system operation cancellation | |
+US11144504B1 (en) | Eliminating redundant file system operations | |
+CN113792320A (en) | File encryption method, file encryption access method and computing device | |
+US11294862B1 (en) | Compounding file system metadata operations via buffering | |
+Alsmadi et al. | Disk and Computer Forensics: Lesson Plans | |
+Bhardwaj et al. | Ephemeral apps | |
+Hilgert et al. | Forensic implications of stacked file systems |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: OPEN INVENTION NETWORK, LLC, NORTH CAROLINAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:MOKA5, INC.;REEL/FRAME:036529/0800Effective date: 20150908 |
+|
+FEPP | Fee payment procedure |
+Free format text: PAT HOLDER NO LONGER CLAIMS SMALL ENTITY STATUS, ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: STOL); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: MOKA5, INC, CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:WHALEY, JOHN C.;CHUN, WON-SUK;LAM, MONICA SIN-LING;AND OTHERS;SIGNING DATES FROM 20090831 TO 20091010;REEL/FRAME:057316/0739 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:OPEN INVENTION NETWORK LLC;REEL/FRAME:058657/0744Effective date: 20211201 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

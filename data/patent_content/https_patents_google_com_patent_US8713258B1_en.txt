@@ -1,0 +1,315 @@
+US8713258B1 - Estimating stack distances - Google Patents
+Estimating stack distances Download PDFInfo
+- Publication number
+- US8713258B1 US8713258B1 US13/233,327 US201113233327A US8713258B1 US 8713258 B1 US8713258 B1 US 8713258B1 US 201113233327 A US201113233327 A US 201113233327A US 8713258 B1 US8713258 B1 US 8713258B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- value
+- bucket
+- fingerprint
+- access
+- determining
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F12/00—Accessing, addressing or allocating within memory systems or architectures
+- G06F12/02—Addressing or allocation; Relocation
+- G06F12/08—Addressing or allocation; Relocation in hierarchically structured memory systems, e.g. virtual memory systems
+- G06F12/0802—Addressing of a memory level in which the access to the desired data or data block requires associative addressing means, e.g. caches
+- G06F12/0877—Cache access modes
+Definitions
+- the present disclosure relates to digital data processing and, in particular, to estimating stack distances.
+- Computer systems can use various techniques to estimate the number of unique elements in a set of elements that can include duplicate elements. For sets of elements that have large numbers of elements, it is useful or necessary to estimate the number of unique elements rather than exactly determine the number of unique elements because a computer system can be limited by computing resources, e.g., memory or processing time. Techniques to estimate the number of unique elements in a set of elements have been used to estimate stack distances.
+- a cache system estimates stack distances for a given access to the cache.
+- the system can determine a fingerprint for each access between the given access and a previous access to the same address.
+- the system partitions the range of possible fingerprints into buckets and maintains a (min, max) pair per bucket.
+- the system also maintains a current estimate of the stack distance.
+- the system processes accesses and, for each processed access, adjusts the (min, max) pair for the fingerprint's bucket based on whether the fingerprint of the access falls inside or outside of the (min, max) pair. If the fingerprint falls inside the (min, max) pair, the system increases the current estimate.
+- one aspect of the subject matter described in this specification can be embodied in methods that include the actions of initializing a current estimate value for an estimate of a stack distance of a later access to an address in a cache, the current estimate value indicating an estimate of a number of accesses to the cache having unique addresses between the later access to the address and an earlier access to the address; initializing, for each of K buckets wherein K is greater than zero, a minimum value and a maximum value for the bucket, wherein each bucket corresponds to a range of possible fingerprint values for the accesses, and wherein the minimum value for the bucket is based at least partly on a lowest fingerprint value in the range corresponding to the bucket and the maximum value for the bucket is based at least partly on a highest fingerprint value in the range corresponding to the bucket; processing at least a first access between the earlier access and the later access to update the current estimate value, including: determining a first fingerprint value for the first access; identifying a first bucket of the K buckets for the first access based on the first fingerprint value
+- Increasing the current estimate value comprises increasing the current estimate value by
+- Adjusting the minimum value or the maximum value for the first bucket comprises: if the first fingerprint value minus the minimum value is less than the maximum value minus the first fingerprint value, setting the minimum value to the first fingerprint value; and if the first fingerprint value minus the minimum value is greater than or equal to the maximum value minus the first fingerprint value, setting the maximum value to the first fingerprint value.
+- the actions further include selecting and processing additional accesses between the earlier access and the later access until an end condition is reached.
+- the actions further include estimating a total number of unique accesses between the earlier access and the later access based on the current estimate value and a number of processed accesses.
+- the actions further include determining a plurality of additional estimates of stack distances of different accesses to different addresses; determining a stack distance histogram using the estimates of stack distances; and determining an estimate of a cache miss rate for the cache using the stack distance histogram.
+- one aspect of the subject matter described in this specification can be embodied in methods that include the actions of determining a current estimate value, the current estimate value indicating an estimate of a number of unique elements in a non-empty set of elements; determining, for each of K buckets wherein K is greater than zero, a minimum value and a maximum value for the bucket, wherein each bucket corresponds to a range of possible fingerprint values for the elements, and wherein the minimum value for the bucket is based at least partly on a lowest fingerprint value in the range corresponding to the bucket and the maximum value for the bucket is based at least partly on a highest fingerprint value in the range corresponding to the bucket; processing at least a first element in the set, including: determining a first fingerprint value for the first element; identifying a first bucket of the K buckets for the first element based on the first fingerprint value; and determining that the first fingerprint value is between the minimum value and the maximum value for the first bucket, and in response, increasing the current estimate value and adjusting the minimum value or the maximum value for the
+- Increasing the current estimate value comprises increasing the current estimate value by
+- Adjusting the minimum value or the maximum value for the first bucket comprises: if (the first fingerprint value minus the minimum value) is less than (the maximum value minus the first fingerprint value), setting the minimum value to the first fingerprint value; and if (the first fingerprint value minus the minimum value) is greater than or equal to (the maximum value minus the first fingerprint value), setting the maximum value to the first fingerprint value.
+- the actions further include selecting and processing additional elements from the set until an end condition is reached.
+- the actions further include estimating a total number of unique elements in the set based on the current estimate value and a number of processed elements. Determining the first fingerprint value for the first element comprises hashing the first element. Determining the first fingerprint value for the first element comprises selecting the first element's value. K is selected based on an amount of available memory.
+- the elements are search queries and the set of elements is a set of search queries received by a server over a period of time. Each element corresponds to a cache line of a cache accessed during a window of time, and the actions further include optimizing the cache using the current estimate value.
+- a computer system can determine an estimation of the number of unique elements in a set using limited computing resources.
+- the estimation can be more accurate than estimations made using conventional techniques.
+- the system can use fewer computing resources in reaching an estimation with a certain accuracy.
+- FIG. 1 is a schematic diagram of an example cache system and an example user system that uses the cache system.
+- FIG. 2A is a schematic diagram of an example series of cache accesses.
+- FIG. 2B is a graphical representation of an example stack distance histogram for the example series of cache accesses.
+- FIG. 3 is a flow diagram of an example process for adjusting a cache.
+- FIG. 4 is a flow diagram of an example process for estimating the number of unique elements in a set of elements.
+- FIGS. 5A-5C illustrate processing example elements from a set using the process illustrated in FIG. 4 .
+- FIG. 6 is a schematic diagram of an example computer system configured to determine an estimate of the number of unique elements in a set.
+- FIG. 1 is a schematic diagram of an example cache system 100 and an example user system 110 that uses the cache system 100 .
+- the cache system 100 stores digital data from a data source 120 in cache storage 102 .
+- the user system 110 can access data in the cache system 100 more quickly than it can access data from the data source 120 , so storing data in the cache system 100 can improve the performance of the user system 110 .
+- the user system 110 can be, for example, a system of one or more computers, or a system of one or more processors.
+- the cache system 100 can be, for example, a hardware cache or a software cache.
+- the data source 120 can be a remote computer system or storage device that the user system 110 accesses over a network, and the cache storage 102 can be local storage.
+- the data source 120 can be a hard drive and the cache storage 102 can be Random Access Memory (RAM).
+- the data source 120 can be RAM and the cache storage 102 can be on-chip storage for a processor of the user system 110 .
+- the user system 110 or an optional cache controller 104 can determine what data to store in the cache storage 102 .
+- the cache system 100 will be described as having a cache controller 104 that determines what data to store in the cache storage 102 .
+- the cache controller 104 can also perform other cache management functions, e.g., determining what old data should be removed from the cache storage 102 to make room for new data, or determining how much space to allocate for cache storage 102 .
+- the cache controller 106 includes a stack distance estimator 106 .
+- the stack distance estimator 106 estimates stack distances for cache accesses by the user system 110 . Stack distances are described further below with reference to FIG. 2 . Estimating stack distances is described further below with reference to FIG. 4 .
+- the cache controller 104 uses the stack distance estimates to build a stack distance histogram and estimate a cache miss rate for the cache system 100 .
+- the cache controller 104 uses the cache miss rate to adjust the cache system 100 , e.g., by increasing or decreasing the size of the cache storage 102 . Adjusting a cache system is described further below with reference to FIG. 3 .
+- FIG. 2A is a schematic diagram of an example series 200 of cache accesses. Each access is illustrated as a box marked by a letter. The letter indicates an address for the access. The addresses are of an appropriate granularity (e.g., page addresses, cacheline addresses.) The accesses are time ordered from left to right.
+- the stack distance of a given access A is determined by finding the last access A′ before the given access A having the same address and counting the number of unique accesses between the given access A and the last access A′. If for a given access A there does not exist an earlier access A′ to the same address, the stack distance of the given access A can be given a reserved value, e.g., a value that represents infinity. For example, consider the first and second accesses 202 and 204 to address L. There are four total accesses between the first and second accesses 202 and 204 (B, C, D, and B), and there are three unique accesses (B, C, and D.) So the stack distance of the second access 204 is three.
+- first and second accesses 206 and 208 For another example, consider the first and second accesses 206 and 208 to address C. There are seven total accesses between the first and second accesses 206 and 208 (D, B, L, E, D, F, and B), and there are five unique accesses (B, D, E, F, L.) So the stack distance of the second access 208 is five.
+- FIG. 2B is a graphical representation of an example stack distance histogram 220 for the example series 200 of cache accesses.
+- Stack distances are on the horizontal axis and the number of accesses having each stack distance are on the vertical axis. For example, consider the stack distance two.
+- the stack distance histogram 220 indicates that, for the stack distance two, there was one access having that stack distance.
+- the access is the second access 222 from the example series 200 to the address B. Generating a stack distance histogram does not require creating a graphical representation of the stack distance histogram.
+- FIG. 3 is a flow diagram of an example process 300 for adjusting a cache.
+- the process 300 is performed, for example, by a user system (e.g., user system 110 in FIG. 1 ) or a cache controller (e.g., cache controller 104 in FIG. 1 .)
+- a cache controller e.g., cache controller 104 in FIG. 1 .
+- the process 300 will be described with reference to a cache controller that performs the process.
+- the cache controller determines estimates of stack distances for a number of accesses to the cache ( 302 ).
+- the accesses can be all of the accesses made during a period of time, all of the accesses made by a particular application, a sampling of accesses made during a period of time, and so on.
+- increasing the number of estimates of stack distances results in increased accuracy of the cache miss rate that will be determined in stage 306 .
+- the cache controller can determine an estimate of a stack distance using the process 400 illustrated in FIG. 4 .
+- the cache controller generates a stack distance histogram using the estimates of stack distances ( 304 ).
+- a stack distance histogram is data that represents a collection of stack distances and the number of accesses having those stack distances. For each stack distance of the various estimates of stack distances determined in stage 302 , the cache controller estimates the number of accesses having that stack distance, resulting in the stack distance histogram.
+- the cache controller determines an estimated cache miss rate for the cache using the stack distance histogram ( 306 ).
+- the estimated cache miss rate characterizes the frequency at which accesses will be attempted at the cache but fail because the requested data is not in the cache.
+- the cache miss rate can be expressed as a number of cache misses divided by a total number of accesses. If the cache is a fully-associative cache with a least-recently-used replacement policy, and if the cache has the ability to hold R records of the appropriate type (e.g., pages or cache lines), then the miss rate for the cache can be estimated as the fraction of accesses which have a stack distance of greater than R.
+- the cache controller adjusts the cache using the estimated cache miss rate ( 308 ). For example, the cache controller can increase or decrease the size of the cache using the estimated cache miss rate (e.g., where the size of the cache can be adjusted, e.g. by allocating more memory to the cache.) If the cache miss rate is higher than a desired miss rate, the cache controller can increase the size of the cache.
+- the cache controller can adjust the size of the cache by balancing a cost function against the estimated cache miss rate.
+- the cost function can relate cache sizes to costs, where typically a larger cache will have a larger cost.
+- the marginal benefits e.g., lowering the cache miss rate
+- the marginal benefits of increasing the size of the cache will decrease as the size of the cache is increased.
+- the cache is implemented in hardware, and the size of the cache used in the next generation of hardware can be determined by using the stack distance histograms from the current generation of hardware.
+- the cache is implemented in software, and the software can dynamically modify the size of the cache.
+- FIG. 4 is a flow diagram of an example process 400 for estimating the number of unique elements in a set of elements.
+- the process 400 is performed, for example, by a system of one or more computers.
+- the process 400 will be described with reference to a system that performs the process 400 .
+- An element is anything that can be represented or referred to by a number in a data processing apparatus.
+- the set of elements can be, for example, a set of electronic documents (e.g., web pages, images, audio files, and so on), a set of terms in one or more electronic documents (e.g., titles of web pages), a table including various data entries (e.g., a table of financial data), a set of advertisements, and so on.
+- a set of elements includes one or more elements. Each element in the set is represented by a value. For example, an element that is one or more words can be represented by a value based on characters of the words.
+- the system determines fingerprints for elements in the set. Typically, the system determines fingerprints for some, but not all, of the elements; for example, the system can select elements randomly, or in an order, until an end condition is reached.
+- the system determines fingerprints in a systematic way, e.g., by applying a formula or process to values of elements.
+- a fingerprint of an element is any value that is based on the value of the element according to the systematic process.
+- a fingerprint can be the value for the element (e.g., the value is taken without any further processing), the result of applying a hash function to the value of the element, and so on.
+- One example hash function results in a 64-bit value, where each of the 64 bits is the exclusive-or of a set of bits in the value for the element.
+- Another example hash function views the value for the element as a binary number (based on, e.g., bits in the value for the element) and results in the product of that binary number and a fixed constant modulo a fixed prime number (e.g., a large prime number).
+- the system can use various conventional hash functions and fingerprint functions.
+- Determining fingerprints for the elements results in a range of fingerprint values.
+- the fingerprint values for the elements can be randomly distributed across a range of fingerprint values.
+- Other ranges of fingerprint values are possible.
+- the range of fingerprint values will be described as 1 . . . R, where R is the number of possible fingerprint values. R is based on the range of possible element values and the specific technique used in determining fingerprints for the elements.
+- the system initializes a value for the current estimate of the number of unique elements in a given set ( 402 ). For example, the system can use or define a variable current_estimate and set the initial value of current_estimate to zero.
+- K is a predetermined value.
+- the value selected for K can vary depending the application of the process 400 .
+- K can be based on an amount of memory or other computing resources, for example, or a desired accuracy of the estimate.
+- the desired accuracy can vary across applications, and a higher value for K can produce an estimate of greater accuracy.
+- Each bucket corresponds to a continuous or non-continuous range of possible fingerprint values for the elements. Taken together, the buckets cover the range 0 . . . R of possible fingerprint values.
+- the buckets can cover equally sized ranges.
+- the buckets are not typically overlapping.
+- each bucket is referred to as bucket(i), with a value for (i) designating a specific bucket of the K buckets.
+- the minimum and maximum values for a bucket(i) are referred to as min(i) and max(i).
+- the system initializes min(i) based on the lowest fingerprint value in the range corresponding to bucket(i). For example, the system can set min(i) to one less than the lowest fingerprint value in the range. Similarly, the system can initialize max(i) based on the highest fingerprint value in the range corresponding to bucket(i). For example, the system can set max(i) to one more than the highest fingerprint value in the range.
+- min(i) based on the lowest fingerprint value in the range corresponding to bucket(i). For example, the system can set max(i) to one more than the highest fingerprint value in the range.
+- the system selects an element and determines the fingerprint, f, for the element ( 406 ). For example, if the elements are terms in documents of a corpus of documents, the system can select the next term in a document. If the elements are queries received by a search engine, the system can select the next query received by the search engine. In implementations where the system uses a hash function to determine fingerprint values, then the system applies the hash function to the selected element. Other ways of selecting elements are possible.
+- the system identifies the bucket(i) for the range including the fingerprint value f ( 408 ). For example, the system can search the buckets for the bucket corresponding to the range, e.g., using a conventional search technique. Alternatively, each bucket can correspond to fingerprints that differ in the X least significant bits for some value X, so that the index “i” of the bucket containing the fingerprint can be obtained by discarding the X least significant bits of the fingerprint.
+- the system determines whether the fingerprint value is between min(i) and max(i) for the bucket ( 410 ). If it is not, then the system does not change the value of current estimate, min(i), or max(i) and proceeds to stage 120 . If the fingerprint value is between min(i) and max(i), then the system adjusts the value of current estimate and either min(i) or max(i) by proceeding to stage 112 .
+- the system increases current estimate ( 412 ). In some implementations, the system increases current_estimate by
+- the system adjusts either min(i) or max(i) ( 414 - 418 ). In some implementations, the system determines whether f ⁇ min(i) ⁇ max(i) ⁇ f ( 414 ). If it is, the system sets min(i) to the fingerprint value f. If it is not, the system sets max(i) to the fingerprint value f.
+- the system determines whether an end condition has been reached ( 420 ). For example, the system can determine whether a certain number of elements have been selected, whether the current_estimate value changed more than a threshold amount the last time it was adjusted, whether a certain amount of time has passed, and so on. If the end condition is reached, the process terminates ( 422 ). The current_estimate value provides an estimate of the number of unique elements in the set. Otherwise, the system selects another element (return to 406 ).
+- the system performs additional statistical calculations to determine the estimate. For example, the system can use the current_estimate value and the number of elements processed to determine a final estimate of the number of unique elements in the set.
+- the system uses the final estimate in a number of different ways depending on the application. For example, the system can store the final estimate, transmit the final estimate, or adjust another system parameter based on the final estimate.
+- Using a computer system to estimate the number of unique elements in a set has a wide variety of applications. For example, various database operations rely on counting or estimating the number of unique elements in a column of a relational table of data (e.g., where the elements are financial numbers, operational records, or the like). In another example, a network router gathers statistical information regarding traffic flowing through the router (e.g., the number of unique destination addresses) despite having limited memory.
+- the process 400 can be used (e.g., by the user system 110 or cache controller 104 of FIG. 1 ) to estimate the stack distance of a cache access.
+- An access to the cache (to an address of appropriate granularity) is considered an element. Since the stack distance of an access A to an address L is the number of unique accesses between access A and the previous access A′ to address L, the process 400 can be used to estimate the number of unique accesses between A and A′ and hence the stack distance of A.
+- FIGS. 5A-5C illustrate processing example elements from a set using the process 400 illustrated in FIG. 4 .
+- an example set of elements having a fingerprint range of 1 to 999.
+- the system partitions the range into a single bucket corresponding to the range from 1 to 999.
+- FIG. 5A illustrates the bucket before any elements are processed.
+- a current_estimate value is initialized to zero, min(i) for the bucket is set to 0, and max(i) for the bucket is set to 1000.
+- the fingerprint value is between min(i) and max(i), so current_estimate is increased and either min(i) or max(i) is adjusted. As shown, current_estimate is increased by a value of
+- min(i) is set to the fingerprint value.
+- Other elements having fingerprint values less than min(i) can have been processed prior to processing the element having a fingerprint of 700; however, processing those elements would not have resulted in different values for current_estimate, min(i), or max(i).
+- the fingerprint value of 700 is between min(i) and max(i), so current_estimate is increased and either min(i) or max(i) is adjusted. As shown current_estimate is increased by a value of
+- FIG. 6 is a schematic diagram of an example computer system 602 configured to determine an estimate of the number of unique elements in a set.
+- the system 602 includes one or more data processing apparatus.
+- the system 602 includes various modules, e.g. executable software programs, including an element selector 604 , a bucket matching engine 606 , and an estimate updater 608 .
+- the element selector 604 is configured to select elements from the set.
+- the bucket matching engine 606 is configured to match selected elements with corresponding buckets.
+- the estimate updater 608 is configured to update a current estimate of the number of unique elements based on selected elements.
+- the estimate updater 608 can also be configured to update minimum and maximum values for buckets.
+- Each module runs as part of the operating system on the system 602 , runs as an application on the system 602 , or runs as part of the operating system and part of an application on the system 602 , for instance.
+- the software modules can be distributed on one or more data processing apparatus connected by one or more networks or other suitable communication mediums.
+- the system 602 also includes hardware or firmware devices including one or more processors 612 , one or more additional devices 614 , a computer readable medium 616 , a communication interface 618 , and one or more user (optional) interface devices 620 .
+- Each processor 612 is capable of processing instructions for execution within the system 602 .
+- Each processor 612 is capable of processing instructions stored on the computer readable medium 616 or on a storage device such as one of the additional devices 614 .
+- Examples of user interface devices 620 include a display, a camera, a speaker, a microphone, a tactile feedback device, a keyboard, and a mouse.
+- the system 602 can store instructions that implement operations associated with the modules described above, for example, on the computer readable medium 616 or one or more additional devices 614 , for example, one or more of a floppy disk device, a hard disk device, an optical disk device, or a tape device.
+- additional devices 614 for example, one or more of a floppy disk device, a hard disk device, an optical disk device, or a tape device.
+- Embodiments of the subject matter and the operations described in this specification can be implemented in digital electronic circuitry, or in computer software, firmware, or hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them.
+- Embodiments of the subject matter described in this specification can be implemented as one or more computer programs, i.e., one or more modules of computer program instructions, encoded on computer storage medium for execution by, or to control the operation of, data processing apparatus.
+- the program instructions can be encoded on an artificially-generated propagated signal, e.g., a machine-generated electrical, optical, or electromagnetic signal, that is generated to encode information for transmission to suitable receiver apparatus for execution by a data processing apparatus.
+- a computer storage medium can be, or be included in, a computer-readable storage device, a computer-readable storage substrate, a random or serial access memory array or device, or a combination of one or more of them.
+- a computer storage medium is not a propagated signal, a computer storage medium can be a source or destination of computer program instructions encoded in an artificially-generated propagated signal.
+- the computer storage medium can also be, or be included in, one or more separate physical components or media (e.g., multiple CDs, disks, or other storage devices).
+- the operations described in this specification can be implemented as operations performed by a data processing apparatus on data stored on one or more computer-readable storage devices or received from other sources.
+- the term “data processing apparatus” encompasses all kinds of apparatus, devices, and machines for processing data, including by way of example a programmable processor, a computer, a system on a chip, or multiple ones, or combinations, of the foregoing
+- the apparatus can include special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application-specific integrated circuit).
+- the apparatus can also include, in addition to hardware, code that creates an execution environment for the computer program in question, e.g., code that constitutes processor firmware, a protocol stack, a database management system, an operating system, a cross-platform runtime environment, a virtual machine, or a combination of one or more of them.
+- the apparatus and execution environment can realize various different computing model infrastructures, such as web services, distributed computing and grid computing infrastructures.
+- a computer program (also known as a program, software, software application, script, or code) can be written in any form of programming language, including compiled or interpreted languages, declarative or procedural languages, and it can be deployed in any form, including as a stand-alone program or as a module, component, subroutine, object, or other unit suitable for use in a computing environment.
+- a computer program can, but need not, correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data (e.g., one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (e.g., files that store one or more modules, sub-programs, or portions of code).
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network.
+- the processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform actions by operating on input data and generating output.
+- the processes and logic flows can also be performed by, and apparatus can also be implemented as, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application-specific integrated circuit).
+- processors suitable for the execution of a computer program include, by way of example, both general and special purpose microprocessors, and any one or more processors of any kind of digital computer.
+- a processor will receive instructions and data from a read-only memory or a random access memory or both.
+- the essential elements of a computer are a processor for performing actions in accordance with instructions and one or more memory devices for storing instructions and data.
+- a computer will also include, or be operatively coupled to receive data from or transfer data to, or both, one or more mass storage devices for storing data, e.g., magnetic, magneto-optical disks, or optical disks.
+- mass storage devices for storing data, e.g., magnetic, magneto-optical disks, or optical disks.
+- a computer need not have such devices.
+- a computer can be embedded in another device, e.g., a mobile telephone, a personal digital assistant (PDA), a mobile audio or video player, a game console, a Global Positioning System (GPS) receiver, or a portable storage device (e.g., a universal serial bus (USB) flash drive), to name just a few.
+- Devices suitable for storing computer program instructions and data include all forms of non-volatile memory, media and memory devices, including by way of example semiconductor memory devices, e.g., EPROM, EEPROM, and flash memory devices; magnetic disks, e.g., internal hard disks or removable disks; magneto-optical disks; and CD-ROM and DVD-ROM disks.
+- the processor and the memory can be supplemented by, or incorporated in, special purpose logic circuitry.
+- a computer having a display device, e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor, for displaying information to the user and a keyboard and a pointing device, e.g., a mouse or a trackball, by which the user can provide input to the computer.
+- a display device e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor
+- keyboard and a pointing device e.g., a mouse or a trackball
+- Other kinds of devices can be used to provide for interaction with a user as well; for example, feedback provided to the user can be any form of sensory feedback, e.g., visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, or tactile input.
+- a computer can interact with a user by sending documents to and receiving documents from a device that is used by the user; for example, by sending web pages to a
+- Embodiments of the subject matter described in this specification can be implemented in a computing system that includes a back-end component, e.g., as a data server, or that includes a middleware component, e.g., an application server, or that includes a front-end component, e.g., a client computer having a graphical user interface or a Web browser through which a user can interact with an implementation of the subject matter described in this specification, or any combination of one or more such back-end, middleware, or front-end components.
+- the components of the system can be interconnected by any form or medium of digital data communication, e.g., a communication network.
+- Examples of communication networks include a local area network (“LAN”) and a wide area network (“WAN”), an inter-network (e.g., the Internet), and peer-to-peer networks (e.g., ad hoc peer-to-peer networks).
+- LAN local area network
+- WAN wide area network
+- inter-network e.g., the Internet
+- peer-to-peer networks e.g., ad hoc peer-to-peer networks.
+- the computing system can include clients and servers.
+- a client and server are generally remote from each other and typically interact through a communication network. The relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other.
+- a server transmits data (e.g., an HTML page) to a client device (e.g., for purposes of displaying data to and receiving user input from a user interacting with the client device).
+- client device e.g., for purposes of displaying data to and receiving user input from a user interacting with the client device.
+- Data generated at the client device e.g., a result of the user interaction
+Abstract
+Description
+wherein R is a total number of possible fingerprint values and max(i) is the maximum value for the bucket and min(i) is the minimum value for the bucket. Adjusting the minimum value or the maximum value for the first bucket comprises: if the first fingerprint value minus the minimum value is less than the maximum value minus the first fingerprint value, setting the minimum value to the first fingerprint value; and if the first fingerprint value minus the minimum value is greater than or equal to the maximum value minus the first fingerprint value, setting the maximum value to the first fingerprint value. The actions further include selecting and processing additional accesses between the earlier access and the later access until an end condition is reached. The actions further include estimating a total number of unique accesses between the earlier access and the later access based on the current estimate value and a number of processed accesses. The actions further include determining a plurality of additional estimates of stack distances of different accesses to different addresses; determining a stack distance histogram using the estimates of stack distances; and determining an estimate of a cache miss rate for the cache using the stack distance histogram. The actions further include adjusting the cache using the estimate of the cache miss rate. Determining the first fingerprint value for the first access comprises selecting a first address for the first access. Determining the first fingerprint value for the first access comprises hashing a first address for the first access. K is selected based on an amount of available memory.
+wherein R is a total number of possible fingerprint values and max(i) is the maximum value for the bucket and min(i) is the minimum value for the bucket. Adjusting the minimum value or the maximum value for the first bucket comprises: if (the first fingerprint value minus the minimum value) is less than (the maximum value minus the first fingerprint value), setting the minimum value to the first fingerprint value; and if (the first fingerprint value minus the minimum value) is greater than or equal to (the maximum value minus the first fingerprint value), setting the maximum value to the first fingerprint value. The actions further include selecting and processing additional elements from the set until an end condition is reached. The actions further include estimating a total number of unique elements in the set based on the current estimate value and a number of processed elements. Determining the first fingerprint value for the first element comprises hashing the first element. Determining the first fingerprint value for the first element comprises selecting the first element's value. K is selected based on an amount of available memory. The elements are search queries and the set of elements is a set of search queries received by a server over a period of time. Each element corresponds to a cache line of a cache accessed during a window of time, and the actions further include optimizing the cache using the current estimate value.
+This factor reflects the fact that, as max(i) and min(i) become closer in value, selected elements that fall between max(i) and min(i) represent a greater number of unique elements in the set.
+Because the fingerprint value is closer to min(i) than it is max(i), min(i) is set to the fingerprint value.
+resulting in a current_estimate value of 2.43. Because the fingerprint value is closer to max(i) than it is to min(i), max(i) is set to the fingerprint value.
+Claims (30)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/233,327 US8713258B1 (en) | 2011-09-15 | 2011-09-15 | Estimating stack distances |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/233,327 US8713258B1 (en) | 2011-09-15 | 2011-09-15 | Estimating stack distances |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US8713258B1 true US8713258B1 (en) | 2014-04-29 |
+Family
+ID=50514391
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/233,327 Active 2032-03-29 US8713258B1 (en) | 2011-09-15 | 2011-09-15 | Estimating stack distances |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US8713258B1 (en) |
+Cited By (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US10261915B2 (en) * | 2017-09-15 | 2019-04-16 | Board Of Regents, The University Of Texas System | Intelligently partitioning data cache to allocate space for translation entries |
+CN111338884A (en) * | 2018-12-19 | 2020-06-26 | 北京嘀嘀无限科技发展有限公司 | Cache miss rate monitoring method and device, electronic equipment and readable storage medium |
+US20210124339A1 (en) * | 2019-10-23 | 2021-04-29 | Microsoft Technology Licensing, Llc | Monitoring of device operation by grouping |
+Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7366871B2 (en) | 2004-11-18 | 2008-04-29 | Sun Microsystems, Inc. | Apparatus and method for determining stack distance including spatial locality of running software for estimating cache miss rates based upon contents of a hash table |
+US7373480B2 (en) | 2004-11-18 | 2008-05-13 | Sun Microsystems, Inc. | Apparatus and method for determining stack distance of running software for estimating cache miss rates based upon contents of a hash table |
+-
+2011
+- 2011-09-15 US US13/233,327 patent/US8713258B1/en active Active
+Patent Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7366871B2 (en) | 2004-11-18 | 2008-04-29 | Sun Microsystems, Inc. | Apparatus and method for determining stack distance including spatial locality of running software for estimating cache miss rates based upon contents of a hash table |
+US7373480B2 (en) | 2004-11-18 | 2008-05-13 | Sun Microsystems, Inc. | Apparatus and method for determining stack distance of running software for estimating cache miss rates based upon contents of a hash table |
+Non-Patent Citations (1)
+Title |
+---|
+Bar-Yossef et al; Counting Distinct Elements in a Data Stream; 2002; 10; Proc. 6th Intl. Workshop on Randomization and Approximation Techniques. |
+Cited By (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US10261915B2 (en) * | 2017-09-15 | 2019-04-16 | Board Of Regents, The University Of Texas System | Intelligently partitioning data cache to allocate space for translation entries |
+CN111338884A (en) * | 2018-12-19 | 2020-06-26 | 北京嘀嘀无限科技发展有限公司 | Cache miss rate monitoring method and device, electronic equipment and readable storage medium |
+CN111338884B (en) * | 2018-12-19 | 2023-06-16 | 北京嘀嘀无限科技发展有限公司 | Cache miss rate monitoring method and device, electronic equipment and readable storage medium |
+US20210124339A1 (en) * | 2019-10-23 | 2021-04-29 | Microsoft Technology Licensing, Llc | Monitoring of device operation by grouping |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US10430464B1 (en) | Scalable graph propagation for knowledge expansion | |
+US9183151B2 (en) | Thread cache allocation | |
+US10102482B2 (en) | Factorized models | |
+US10120889B2 (en) | Prospective search of objects using k-d forest | |
+CN107037980B (en) | Method, medium, and computer system for storing time series data | |
+CA2771088C (en) | Context based resource relevance | |
+US10311096B2 (en) | Online image analysis | |
+US10846241B2 (en) | Score-based cache admission and eviction | |
+US10853362B2 (en) | Optimized full-spectrum loglog-based cardinality estimation | |
+EP2407897A1 (en) | Device for determining internet activity | |
+US8495218B1 (en) | Managing system resources | |
+WO2012018694A1 (en) | Predicting a user behavior number of a word | |
+JP2019530046A (en) | Collecting user information from computer systems | |
+CA3085463A1 (en) | Search engine for identifying analogies | |
+CN113853599A (en) | Efficient freshness crawling scheduling | |
+US8713258B1 (en) | Estimating stack distances | |
+US10853367B1 (en) | Dynamic prioritization of attributes to determine search space size of each term, then index on those sizes as attributes | |
+CN104063555A (en) | User model establishing method for intelligent remote sensing information distribution | |
+CN110020129B (en) | Click rate correction method, prediction method, device, computing equipment and storage medium | |
+US11687602B2 (en) | Efficient use of computing resources in responding to content requests | |
+CN114616578A (en) | Content provider suggestions to improve targeting and other settings | |
+US9122705B1 (en) | Scoring hash functions | |
+US11593014B2 (en) | System and method for approximating replication completion time | |
+RU2757592C1 (en) | Method and system for clustering documents | |
+US8621156B1 (en) | Labeled cache system |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:CYPHER, ROBERT;REEL/FRAME:027744/0244Effective date: 20110915 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044277/0001Effective date: 20170929 |
+|
+FEPP | Fee payment procedure |
+Free format text: ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: BIG.) |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551)Year of fee payment: 4 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

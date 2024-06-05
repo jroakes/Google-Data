@@ -1,0 +1,478 @@
+US6658538B2 - Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control - Google Patents
+Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control Download PDFInfo
+- Publication number
+- US6658538B2 US6658538B2 US09/885,997 US88599701A US6658538B2 US 6658538 B2 US6658538 B2 US 6658538B2 US 88599701 A US88599701 A US 88599701A US 6658538 B2 US6658538 B2 US 6658538B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- nodes
+- data
+- node
+- coherency
+- control information
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F12/00—Accessing, addressing or allocating within memory systems or architectures
+- G06F12/02—Addressing or allocation; Relocation
+- G06F12/08—Addressing or allocation; Relocation in hierarchically structured memory systems, e.g. virtual memory systems
+- G06F12/0802—Addressing of a memory level in which the access to the desired data or data block requires associative addressing means, e.g. caches
+- G06F12/0888—Addressing of a memory level in which the access to the desired data or data block requires associative addressing means, e.g. caches using selective caching, e.g. bypass
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F12/00—Accessing, addressing or allocating within memory systems or architectures
+- G06F12/02—Addressing or allocation; Relocation
+- G06F12/08—Addressing or allocation; Relocation in hierarchically structured memory systems, e.g. virtual memory systems
+- G06F12/0802—Addressing of a memory level in which the access to the desired data or data block requires associative addressing means, e.g. caches
+- G06F12/0806—Multiuser, multiprocessor or multiprocessing cache systems
+- G06F12/0813—Multiuser, multiprocessor or multiprocessing cache systems with a network or matrix configuration
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F12/00—Accessing, addressing or allocating within memory systems or architectures
+- G06F12/02—Addressing or allocation; Relocation
+- G06F12/08—Addressing or allocation; Relocation in hierarchically structured memory systems, e.g. virtual memory systems
+- G06F12/10—Address translation
+- G06F12/1009—Address translation using page tables, e.g. page table structures
+Definitions
+- the present invention relates in general to data processing and, in particular, to a non-uniform memory access (NUMA) data processing system. Still more particularly, the present invention relates to a NUMA data processing system having a page table containing node-specific information.
+- NUMA non-uniform memory access
+- the memory subsystem of a typical computer system includes one or more nonvolatile mass storage devices, such as magnetic or optical disks, and a volatile random access memory (RAM), which can include both high speed cache memories and slower system memory.
+- RAM volatile random access memory
+- the processor(s) of the computer system typically utilize a virtual address space including a much larger number of addresses than the number of storage locations that physically exist in RAM. Therefore, to perform memory-mapped I/O or to access RAM, the computer system must translate the virtual addresses utilized by software and the processor hardware into physical addresses assigned to particular I/O devices or physical locations within RAM.
+- PTE Page Table Entry
+- a PTE corresponding to a virtual memory page typically contains the virtual address of the memory page, the associated physical address of the page frame in main memory, and statistical fields indicating if the memory page has been referenced or modified, for example.
+- a processor is able to translate a virtual address within a memory page into a real address.
+- PTEs are stored in RAM in groups called page tables. And because accessing PTEs in RAM to perform each address translation would greatly diminish system performance, each processor in a conventional computer system is also typically equipped with a Translation Lookaside Buffer (TLB) that caches the PTEs most recently accessed by that processor for quick access.
+- TLB Translation Lookaside Buffer
+- address translation schemes can be classified as either hierarchical or direct.
+- An exemplary hierarchical translation scheme employed by the x86 and PentiumTM processors manufactured by Intel Corporation is performed as follows. First, a linear (non-physical) address (which for the sake of discussion is assumed to be 32 bits) is partitioned into a 10-bit directory field, a 10-bit table field, and a 12-bit offset field. The value of the directory field of the linear address is utilized as an offset that, when added to a root address stored in a control register, accesses an entry in a page directory.
+- the accessed page directory entry contains a pointer that identifies the base address of a page table.
+- the value of the table field of the linear address forms an offset pointer that, when added to the value of directory entry, selects a page table entry that specifies the base address of a page frame in memory.
+- the value of offset field then specifies a particular physical address within the page frame. Because loading information from the page directory and page table requires high latency memory accesses, the 20 high order bits of the linear address are also utilized in parallel with the above-described translation process to search for a matching page table entry in the TLB. If a match is found in the TLB, the matching page table entry is utilized to perform linear-to-real address translation in lieu of the page directory and page table.
+- each process has its own respective page table, meaning that all PTEs associated with memory pages referenced by a particular process are grouped in the same page table. And because read-only data can be accessed by multiple processes simultaneously, the page tables of multiple processes may concurrently use PTEs associated with the same page of read-only data.
+- direct translation schemes do not require multiple levels of directories and tables to be accessed in order to locate the PTE required in perform virtual-to-real address translation. Instead, in direct translation schemes, the virtual address is hashed (and possibly concatenated with operating system-specified bits) in order to determine possible physical addresses of the required PTE in the page table.
+- the page table which in both uniprocessor and multiprocessor computer systems is typically a global page table that stores all PTEs, can then be searched to locate the required PTE. Of course, a search of the page table in RAM is required only if the PTE identified by the virtual address to be translated is not resident in the processor's TLB.
+- NUMA non-uniform memory access
+- SMP symmetric multiprocessor
+- NUMA systems Large multiprocessor computer systems, and especially NUMA systems, are frequently utilized to run large applications in which one or more processors function as “producers” of data and one or more other processors function as “consumers” of data.
+- the producer processors process and store (modify) large amounts of data in a set of memory pages. After a producer stores a particular datum, the producer typically never accesses that same datum again. Consumer processors conversely load (read) large amounts of operand data, but typically do not modify (store to) the same data.
+- the present invention recognizes that performance would be enhanced by forcing NUMA nodes containing producers to push modified data down to lower levels of the memory hierarchy since the data will not be accessed again by the producers. Likewise, the present invention recognizes that it would be advantageous to prevent NUMA nodes containing consumers from caching data since the consumers are unlikely to modify the data.
+- the present invention provides a non-uniform memory access (NUMA) data processing system having a page table including node-specific control bits.
+- NUMA non-uniform memory access
+- a non-uniform memory access (NUMA) data processing system in accordance with the present invention includes a plurality of nodes coupled to a node interconnect.
+- the plurality of nodes contain a plurality of processing units and at least one system memory having a table (e.g., a page table) resident therein.
+- the table includes at least one entry for translating a group of non-physical addresses to physical addresses that individually specifies control information pertaining to the group of non-physical addresses for each of the plurality of nodes.
+- the control information may include one or more data storage control fields, which may include a plurality of write through indicators that are each associated with a respective one of the plurality of nodes. When a write through indicator is set, processing units in the associated node write modified data back to system memory in a home node rather than caching the data.
+- the control information may further include a data storage control field comprising a plurality of non-cacheable indicators that are each associated with a respective one of the plurality of nodes. When a non-cacheable indicator is set, processing units in the associated node are instructed to not cache data associated with non-physical addresses within the group translated by reference to the table entry.
+- the control information may also include coherency control information that individually indicates for each node whether or not inter-node coherency for data associated with the table entry will be maintained with software support.
+- FIG. 1 depicts an illustrative embodiment of a NUMA data processing system with which the method and system of the present invention may advantageously be utilized;
+- FIG. 2 is a more detailed block diagram of an illustrative embodiment of a processing unit in the NUMA data processing system illustrated in FIG. 1;
+- FIG. 3 depicts an illustrative embodiment of a page table in the NUMA data processing system illustrated in FIG. 1;
+- FIG. 4 illustrates an exemplary embodiment of a PTE in the NUMA data processing system illustrated in FIG. 1;
+- FIG. 5 is a high level flow diagram of the translation of an effective address to a virtual address and then to a physical address in accordance with the present invention.
+- FIG. 1 there is depicted an exemplary embodiment of a NUMA computer system 10 in accordance with the present invention.
+- the depicted embodiment can be realized, for example, as a workstation, server, or mainframe computer.
+- NUMA computer system 10 includes two or more nodes 12 coupled by a node interconnect 15 , which, as shown, may be implemented as a switch.
+- each of nodes 12 is substantially identical, with each node including one or more processing units 14 coupled to a local interconnect 18 and a node controller 16 coupled between local interconnect 18 and node interconnect 15 .
+- Each node controller 16 serves as a local agent for other nodes 12 by transmitting selected operations received on its local interconnect 18 to other nodes 12 via node interconnect 15 and by transmitting selected operations received via node interconnect 15 on its local interconnect 18 .
+- processing units 14 include a CPU 20 having registers, instruction flow logic and execution units utilized to execute software instructions. Each processing unit 14 further includes a cache hierarchy 22 including one or more levels of on-chip cache utilized to stage data to the associated CPU 20 from data storage throughout NUMA computer system 10 . In addition, processing units 14 each have an interface unit 25 that handles the communication of addresses, data and coherency operations between processing unit 14 and local interconnect 18 and includes response logic 23 that determines a combined response to an operation issued on local interconnect 18 from the various snoop responses to the operation. Finally, processing units 14 each contain a memory controller 24 that controls access to an associated one of the physical system memories 26 distributed among processing units 14 . In alternative embodiments of the present invention, system memory, if any, in each node may be implemented as a single system memory controlled by an associated memory controller coupled to local interconnect 18 .
+- system memory is defined as a physical data storage device addressed utilizing unique addresses that (absent an error condition) are permanently associated with respective storage locations in the physical data storage device.
+- the node 12 that stores a datum at a storage location in its system memory 26 associated with an address utilized to uniquely identify the datum throughout NUMA computer system 10 is defined to be the home node for that datum; conversely, others of nodes 12 are defined to be remote nodes with respect to the datum.
+- LMD local memory directory
+- RMC remote memory cache
+- RMC remote memory directory
+- NUMA computer system 10 can further include additional devices that are not necessary for an understanding of the present invention and are accordingly omitted in order to avoid obscuring the present invention.
+- any of nodes 12 may also support I/O and network adapters, non-volatile storage for storing an operating system and application software, and serial and parallel ports for connection to networks or attached devices.
+- Performance of NUMA computer system 10 is influenced, among other things, by data access latencies. Because the access latency for intra-node data requests is typically much less than that for inter-node data requests, system performance is generally improved if each node 12 containing a processing unit 14 is equipped with a large data storage capacity, thus minimizing inter-node data requests. For example, in an exemplary embodiment in which NUMA computer system 10 includes four nodes that each contain four processing units 14 and four system memories 26 , each of the four system memories 26 may have a capacity of a gigabyte (GB) or more, giving a total system memory storage capacity of multiple gigabytes. Because of the large capacity of system memory, cost considerations would generally dictate the implementation of system memories 26 in a storage technology having low per-byte cost, such as dynamic random access memory (DRAM).
+- DRAM dynamic random access memory
+- system memories 26 may be partitioned (e.g., by the operating system of NUMA computer system 10 ) into one or more address spaces.
+- each system memory 26 includes a system memory address space 28 that is allocated by the operating system of NUMA computer system 10 to various operating system and application processes for storage of instructions and data.
+- at least one system memory 26 in each node 12 having a processor unit 14 contains a RMC 30 for storing data corresponding to that residing in the system memories 26 of one or more other nodes 12 .
+- a remote memory cache for each node 12 is incorporated within one and possibly multiple system memories 26 .
+- the cache lines which are accessible to at least any CPU 20 in the same node 12 , are preferably mapped to particular RMCs 30 by hashing the physical or logical addresses associated with the cache lines.
+- the remote memory cache is implemented in low cost DRAM, the per-byte cost of RMC 30 is dramatically reduced as compared with SRAM implementations, meaning that its size can be greatly increased with little or no additional cost.
+- the remote memory cache by distributing the remote memory cache among multiple system memories in the same node, significant bandwidth improvement is achieved by distributing access control across multiple memory controllers 24 rather than a single node controller.
+- the operating system may choose to allocate some or all of the physical system memory in one or more nodes to the remote memory cache and none of physical system memory to system memory address space.
+- the system memory address space may be localized in one or more nodes implemented, for example, as disk memory drawers in a rack system, while the physical system memory in other nodes containing processing units is allocated as remote memory cache.
+- each memory controller 24 associated with a system memory 26 allocated to hold at least a portion of RMC 30 is provided with a RMD 34 in which the memory controller 24 records the contents of its associated portion of RMC 30 .
+- RMD 34 preferably stores not only address information related to the data in RMC 30 , but also coherency information, replacement information, and optionally additional state information (e.g., inclusivity).
+- RMD 34 may be implemented in high speed SRAM as depicted in FIG. 1 . This implementation advantageously reduces access latency by promoting rapid directory lookups in response to requests.
+- RMC 30 use of SRAM for RMD 34 is expensive and limits the size of RMD 34 (and hence RMC 30 ) for practical systems. Two different approaches may be employed to address such concerns.
+- RMD 34 can implement large sectors (i.e., associate large data blocks with each set of tag and state information) so that use of the SRAM storage capacity is optimized.
+- a second approach is to incorporate RMD 34 into system memory 26 together with RMC 30 . In this manner, the cost of implementing RMD 34 can be greatly reduced, or the size of RMD 34 and RMC 30 can be greatly increased without additional cost.
+- this additional directory access latency can be mitigated by equipping memory controller 24 with a small directory cache containing recently accessed (and therefore likely to be accessed) directory entries.
+- the amount of system memory 26 allocated to RMD 34 and/or RMC 30 by the operating system of NUMA computer system 10 is an important performance consideration since allocating larger RMCs 30 and RMDs 34 necessarily reduces system memory address space 28 .
+- the proportion of system memory 26 allocated to RMC 30 and RMD 34 versus system memory address space 28 can be varied dynamically depending on the needs of the application to be run. For example, if the operating system detects that an application will only need to access the memory within the node 12 in which the application is to be run, the operating system can allocate RMC 30 (and its associated RMD 34 ) a fairly small space compared with system memory address space 28 . Conversely, if the operating system detects that an application will require substantial access to remote memory, the operating system may allocate a larger portion of the system memory to RMC 30 (and its associated RMD 34 ).
+- RMCs 30 can be populated according to at least two alternative methods.
+- RMCs 30 can be implemented as inclusive (or pseudo-inclusive) caches that collectively store a superset of the data from other nodes held in the local cache hierarchies 22 .
+- cache lines are loaded into the RMCs 30 of a node 12 when requested cache lines are received from other nodes 12 .
+- RMCs can be implemented as “victim caches” that only hold cache lines of remote data in a shared or modified coherency state that have been deallocated from local cache hierarchies 22 .
+- NUMA computer system 10 implements one or more compatible cache coherency protocols to maintain coherency (i.e., a coherent view of the aggregate contents of system memory address space 28 ) between cache hierarchies 22 and RMC 30 in nodes 12 .
+- coherency i.e., a coherent view of the aggregate contents of system memory address space 28
+- the cache coherence protocol is implementation-dependent and may comprise, for example, the well-known Modified, Exclusive, Shared, Invalid (MESI protocol or a variant thereof.
+- the coherency protocol(s) utilized by cache hierarchies 22 necessitate the transmission of various implementation-dependent messages across local interconnect 18 and node interconnect 15 to inform cache hierarchies 22 of operations performed by CPUs 20 , to obtain needed data and instructions, to writeback modified data to system memories 26 , and to perform other functions needed to maintain coherency.
+- memory controllers 24 store indications within LMD 32 of the system memory addresses of data (i.e., cache lines) checked out to remote nodes 12 from the associated system memory address space 18 .
+- LMD 32 may have associated with each data granule only an imprecise indication of whether the data granule is “checked out” to at least one remote node 12 .
+- LMD 32 preferably stores, in association with each data granule, an indication of the coherency state of the cache line at each remote node 12 .
+- Per-node coherency states contained in entries of LMD 32 include those summarized in Table I.
+- I M, E, or I Cache line may be modified at a remote node with respect to system memory at home node Shared (S) S or I S or I Cache line may be held non-exclusively at remote node Invalid (I) M, E, S, or I I Cache line is not held by any remote node
+- the knowledge of the coherency states of cache lines held by remote processing nodes can be specified with some degree of imprecision.
+- the degree of imprecision depends upon whether the implementation of the coherency protocol permits a cache line held remotely to make a transition from S to I, from E to I, or from E to M without notifying the LMD 32 at the home node.
+- processing unit 14 comprises a single integrated circuit including various execution units, registers, buffers, memories, and other functional units, which are all formed by integrated circuitry.
+- processing unit 20 includes a CPU 20 , a cache hierarchy 22 , a memory controller 24 and an interface unit (IU) 25 , which couples processing unit 20 to local interconnect 18 .
+- IU 25 is further connected to cache hierarchy 22 , which in the illustrated embodiment includes a unified level two (L 2 ) cache 42 and separate level one (L 1 ) data and instruction caches 44 and 46 .
+- L 2 unified level two
+- L 1 level one
+- Data and instructions stored within the L 1 data cache 44 and L 1 instruction cache 46 are identified and accessed by address tags, which each comprise a selected number of high-order bits of the physical address of the data or instructions in system memory 26 .
+- address tags which each comprise a selected number of high-order bits of the physical address of the data or instructions in system memory 26 .
+- CPU 20 references data and instructions by effective addresses.
+- data memory management unit (DMMU) 48 and instruction memory management unit (IMMU) 50 translate the effective addresses of data and instructions, respectively, into virtual addresses and then into physical addresses that are supplied to caches 42 , 44 and 46 .
+- L 1 instruction cache 46 and IMMU 50 are further coupled to instruction sequencing unit 52 , which fetches instructions for execution from L 1 instruction cache 46 utilizing addresses translated by IMMU 50 .
+- Instruction sequencing unit 52 processes branch instructions internally and temporarily buffers sequential (non-branch) instructions until execution resources for the sequential instructions are available.
+- the sequential execution resources of processor 10 include integer unit(s) (IUs) 62 , load-store unit (LSU) 68 , and floating-point unit (FPU) 74 .
+- Each of execution units 62 , 68 , and 74 typically executes one or more instructions of a particular type of sequential instructions during each processor cycle by reference to operands stored within general purpose registers (GPRs) 66 and floating-point registers (FPRs) 72 .
+- GPRs general purpose registers
+- FPRs floating-point registers
+- completion unit 76 then directs the completion of the instruction and, if necessary, the commitment of the data results to the state of CPU 20 .
+- instruction sequencing unit 52 and LSU 68 of each CPU 20 in NUMA data processing system 10 reference instructions and data utilizing 32-bit effective addresses, meaning that CPUs 20 have a 4 Gbyte (2 32 ) effective address space.
+- This effective address space is a subset of a much larger virtual address space referenced by 52-bit virtual addresses.
+- This virtual address space which is shared by all CPUs 20 in NUMA data processing system 10 , is partitioned into a number of (e.g., 4 Kbyte) memory pages, which each have an Page Table Entry (PTE) address descriptor that associates the base virtual address of the memory page with the corresponding physical address of the memory page in one of system memories 26 .
+- PTE Page Table Entry
+- Each of the multiple nodes 12 including a system memory 26 has one or more page tables residing in its system memories 26 .
+- the PTEs contained in each page table are organized by the operating system of NUMA data processing system 10 utilizing one of two hashing functions.
+- the processing units 14 in a particular processing node 12 preferably access and cache only PTEs in the page tables within local system memory 26 and do not access page tables in other nodes 12 .
+- Page table 19 is a variable-sized data structure comprised of a number of Page Table Entry Groups (PTEGs) 80 , which can each contain a number of PTEs 82 .
+- PTEGs Page Table Entry Groups
+- Each PTE 82 can be assigned to any location in either of a primary PTEG 84 or a secondary PTEG 86 in page table 19 depending upon whether a primary hashing function or a secondary hashing function is utilized by operating system 21 to set up the associated memory page in memory when paged in from non-volatile storage.
+- the addresses of primary PTEG 84 and secondary PTEG 86 serve as entry points for page table search operations by tablewalk controller 78 of FIG. 2 .
+- each PTE 82 includes a valid bit 90 indicating whether the PTE entry 82 is valid, a Virtual Segment ID (VSID) 92 specifying the high-order bits of a virtual page number, a hash function identifier (H) 94 indicating which of the primary and secondary hash functions was utilized to create the PTE 82 , and an Abbreviated Page Index (API) 96 specifying the low order bits of the virtual page number.
+- VSID Virtual Segment ID
+- H hash function identifier
+- API Abbreviated Page Index
+- Hash function identifier 94 and the virtual page number specified by VSID 92 and API 96 are used to locate a particular PTE 82 during a search of page table 19 or Translation Lookaside Buffers (TLBs) 49 and 51 maintained by DMMU 48 and IMMU 50 .
+- TLBs Translation Lookaside Buffers
+- each PTE 82 further include a Physical Page Number (PPN) 98 identifying the corresponding physical memory page frame, referenced (R) bit 100 and changed (C) bit 102 indicating whether the memory page has been accessed or modified since these bits have been reset, memory access attribute (WIMG) bits 104 specifying memory update modes for the memory page, and page protection (PP) bits 106 defining access protection constraints for the memory page.
+- PPN Physical Page Number
+- WIMG memory access attribute
+- PP page protection bits 106 defining access protection constraints for the memory page.
+- each PTE 82 includes three new node-specific fields introduced by the present invention: Node Write Through (NWT) field 108 , Node No-Intent-to-Cache (NNC) field 110 , and Node Local Read-with-Intent-to-Modify (NLM) field 112 .
+- NWT Node Write Through
+- NNC Node No-Intent-to-Cache
+- NLM Node Local Read-with-Intent-to-Modify
+- NWT field 108 contains one bit for each node 12 in NUMA computer system 10 , which each control whether processing units 14 in the associated node 12 will operate in a write-through mode for data belonging to the memory page associated with the PTE 82 if the data are resident in the system memory address space 28 of the system memory 26 in another node 12 .
+- the CPU 20 upon finding the bit for node 1 set in the PTE 8 , the CPU 20 sends the store data to its associated cache and memory hierarchy in conjunction with a NWT indicator that instructs the cache hierarchy 22 not to hold the modified data if the home node for the modified data is a node 12 other than node 1 .
+- the cache hierarchy 22 associated with the CPU 20 will determine by reference to memory configuration registers set by the operating system whether the local node is the home node for the store data. If so, the cache hierarchy handles the store data according to the prior art access control (WIMG) bits 104 , which typically means that cache hierarchy 22 caches the store data. In this manner, cache hierarchy 22 can subsequently supply the store data to other requesters by modified intervention.
+- WIMG prior art access control
+- cache hierarchy 22 issues a Write transaction on its local interconnect 18 to writeback the modified data to a system memory 26 in the home node 12 .
+- the memory controller 24 at the home node 12 does not have to demand the writeback of the modified data back from a remote node 12 through separate coherency communication, thus improving the access latency of subsequent Read requests by consumers.
+- the operating system of NUMA computer system 10 typically sets the NWT bit for each node 12 containing producers and does not set the NWT bit(s) for node(s) 12 containing consumers.
+- NWT field 108 does not replace the prior art write-through (W) bit belonging to access control (WIMG) bits 104 so that backward compatibility is maintained. Instead, if the W bit is set, NWT field 108 is ignored.
+- W write-through
+- WIMG access control
+- NNC field 110 preferably contains one bit for each node 12 in NUMA computer system 10 .
+- Each bit within NNC field 110 function as a Read-With-No-Intent-To-Cache (RWNITC) flag for its associated node 12 .
+- RWNITC Read-With-No-Intent-To-Cache
+- cache hierarchy 22 responds to the Read request and NNC indicator by issuing a RWNITC request (e.g., a Read request having a NNC flag set) on its local interconnect 18 instead of a conventional Read request.
+- a RWNITC request e.g., a Read request having a NNC flag set
+- the RWNITC request may be transmitted by the local node controller 16 to another node 12 for servicing.
+- the NNC flag in the RWNITC request informs coherency management logic within cache hierarchies 22 and memory controllers 24 receiving the request that the requested data will not be held within the requesting cache hierarchy 22 after satisfying the CPU's load request. Consequently, the coherency state of copies of the requested data residing in other cache hierarchies 22 need not be updated in response to the RWNITC request, and if the request is serviced by the home node 12 of the requested data, no update to the LMD 32 of the home node 12 is required.
+- the memory controller 24 of the system memory 26 at the home node 12 in which the data reside does not have to invalidate any copy of the data at node 2 , thus reducing inter-node coherency traffic and increasing performance.
+- the operating system of NUMA computer system 10 preferably sets the NNC bit for each node 12 including consumers and does not set the NNC bit for nodes 12 containing producers.
+- the NLM field 112 within each PTE 82 preferably contains one bit associated with each node 12 in NUMA computer system 10 .
+- Each NLM bit serves as a global/local indicator of whether hardware in the associated node 12 must maintain global coherency through NUMA computer system 10 for addresses within the corresponding memory page or only local coherency within the single node 12 (i.e., whether software will assist the coherency hardware by performing global coherency management).
+- a CPU 20 in node 1 issues a store to a location in a memory page that is marked within NLM field 112 as “local” for node 1
+- the CPU 20 sends an NLM local indicator with the store data to its associated cache hierarchy 22 .
+- the NLM local indicator instructs the cache hierarchy 22 to append the NLM local indicator to the RWITM request that is issued by the cache hierarchy 22 to access the target cache line.
+- the appropriate memory controller 24 in the home node 12 Upon receiving the RWITM request containing the NLM local indicator, the appropriate memory controller 24 in the home node 12 sources the requested cache line, but ignores the RWITM request from a coherency standpoint because the setting of the indicator to “local” indicates that it is the responsibility of software to handle the global coherency of the target memory page. Thus, the memory controller 24 will not update LMD 32 . Hardware will, however, continue to manage coherency within the requesting node 12 .
+- NLM 112 typically, a bit within NLM 112 is set to the “local” state in operating scenarios in which execution of an application is restricted to the associated node 12 .
+- the inter-node communication latency of NUMA computer system 10 for data and coherency transfers can be quite large (e.g., 2000 CPU cycles or more)
+- performance benefits can be obtained by permitting software to assist in coherency management in such operating scenarios since the software has access to additional information about the addresses for which high latency global coherency operations may be omitted without losing coherency.
+- NLM bit is set to the “local” state at a time
+- multiple NLM bits can be set to the “local” state concurrently, but such embodiments would introduce significant additional complexity in the software, thus lessening the performance benefit.
+- FIG. 5 there is illustrated a high level flow diagram of the address translation process utilized by each CPU 20 to translate effective addresses (EAs) utilized by CPUs into virtual addresses and then into physical addresses utilized to access cache hierarchies 22 , system memory 26 , and memory mapped I/O devices.
+- EAs effective addresses
+- LSU 68 transmits the 32-bit EA of each data access request to DMMU 48 .
+- instruction sequencing unit 52 transmits the 32-bit EA of each instruction fetch request to IMMU 50 .
+- DMMU 48 and IMMU 50 each translate such EAs utilizing the process depicted in FIG. 5 .
+- similar address translation processes may be employed to translate 64-bit or 128-bit addresses.
+- bits 0 - 3 of a 32-bit EA 120 to be translated are utilized to select one of the 16 segment registers 112 within either DMMU 48 (for data) or IMMU 50 (for instructions).
+- a 64-bit EA implementation would preferably utilize a different segmentation mechanism than shown, with the remainder of the address translation differing only in the size of the various fields.
+- the 24-bit VSID stored in the selected one of segment registers 122 which together with the 16-bit page index and 12-bit byte offset of EA 120 form a 52-bit virtual address 124 , is passed to the appropriate one of DTLB 49 or ITLB 51 , which in an illustrative embodiment are each implemented as a two-way set associative PTE cache.
+- Bits 15 - 19 of EA 120 then select two PTEs stored within a particular line of the TLB. Bits 10 - 14 of EA 120 are compared to the address tags associated with each of the selected PTEs and the VSID field and API field (bits 4 - 9 of the EA) are compared with corresponding fields in the selected PTEs. In addition, the valid (V) bit of each selected PTE is checked.
+- the PP bits of the matching PTE 82 are checked for an exception, and if these bits do not cause an exception, the 20-bit PPN (Physical Page Number) contained in matching PTE 82 is passed to the appropriate one of L 1 data cache 44 and L 1 instruction cache 46 (together with an NWT, NNC or NLM indication, if appropriate) to determine if the requested data or instructions are resident. As shown in FIG. 5, concatenating the 20-bit PPN with the 12-bit byte offset specified by EA 120 produces a 32-bit physical address 126 of the requested data or instructions in system memory 26 .
+- performing an address translation may require tablewalk controller 78 to locate the required PTE 82 in a cache hierarchy 22 or a system memory 26 using known methods.
+- the present invention provides a NUMA data processing system having a page table including PTEs that contains node-specific storage and coherency control information.
+- PTEs that contains node-specific storage and coherency control information.
+Abstract
+Description
+TABLE I | |||
+Coherence | Possible | Possible | |
+directory | state(s) in | state(s) in | |
+state | local cache | remote cache | Meaning |
+Modified (M) | I | M, E, or I | Cache line may be modified |
+at a remote node with | |||
+respect to system memory | |||
+at home node | |||
+Shared (S) | S or I | S or I | Cache line may be held |
+non-exclusively at remote | |||
+node | |||
+Invalid (I) | M, E, S, or I | I | Cache line is not held by |
+any remote node | |||
+Claims (14)
+Priority Applications (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/885,997 US6658538B2 (en) | 2001-06-21 | 2001-06-21 | Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control |
+JP2002170907A JP3924206B2 (en) | 2001-06-21 | 2002-06-12 | Non-uniform memory access (NUMA) data processing system |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/885,997 US6658538B2 (en) | 2001-06-21 | 2001-06-21 | Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20030009640A1 US20030009640A1 (en) | 2003-01-09 |
+US6658538B2 true US6658538B2 (en) | 2003-12-02 |
+Family
+ID=25388154
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/885,997 Expired - Lifetime US6658538B2 (en) | 2001-06-21 | 2001-06-21 | Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control |
+Country Status (2)
+Country | Link |
+---|---|
+US (1) | US6658538B2 (en) |
+JP (1) | JP3924206B2 (en) |
+Cited By (34)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20040123051A1 (en) * | 2002-12-20 | 2004-06-24 | Lloyd Robert F. | Method and system for coordinating the access of data by two computer processes |
+US6981120B1 (en) * | 2002-11-04 | 2005-12-27 | Savaje Technologies, Inc. | Method and apparatus for virtual memory segmentation |
+US20070061521A1 (en) * | 2005-09-13 | 2007-03-15 | Mark Kelly | Processor assignment in multi-processor systems |
+US7222221B1 (en) * | 2004-02-06 | 2007-05-22 | Vmware, Inc. | Maintaining coherency of derived data in a computer system |
+US20070126756A1 (en) * | 2005-12-05 | 2007-06-07 | Glasco David B | Memory access techniques providing for override of page table attributes |
+US20070180197A1 (en) * | 2006-02-01 | 2007-08-02 | Wright Gregory M | Multiprocessor system that supports both coherent and non-coherent memory accesses |
+US20090157977A1 (en) * | 2007-12-18 | 2009-06-18 | International Business Machines Corporation | Data transfer to memory over an input/output (i/o) interconnect |
+US20090157979A1 (en) * | 2007-12-18 | 2009-06-18 | International Business Machines Corporation | Target computer processor unit (cpu) determination during cache injection using input/output (i/o) hub/chipset resources |
+US20100106921A1 (en) * | 2006-11-01 | 2010-04-29 | Nvidia Corporation | System and method for concurrently managing memory access requests |
+US8347064B1 (en) | 2006-09-19 | 2013-01-01 | Nvidia Corporation | Memory access techniques in an aperture mapped memory space |
+US8352709B1 (en) * | 2006-09-19 | 2013-01-08 | Nvidia Corporation | Direct memory access techniques that include caching segmentation data |
+US8484420B2 (en) | 2010-11-30 | 2013-07-09 | International Business Machines Corporation | Global and local counts for efficient memory page pinning in a multiprocessor system |
+US8504794B1 (en) | 2006-11-01 | 2013-08-06 | Nvidia Corporation | Override system and method for memory access management |
+US8533425B1 (en) | 2006-11-01 | 2013-09-10 | Nvidia Corporation | Age based miss replay system and method |
+US8543792B1 (en) | 2006-09-19 | 2013-09-24 | Nvidia Corporation | Memory access techniques including coalesing page table entries |
+US8601223B1 (en) | 2006-09-19 | 2013-12-03 | Nvidia Corporation | Techniques for servicing fetch requests utilizing coalesing page table entries |
+US8607008B1 (en) | 2006-11-01 | 2013-12-10 | Nvidia Corporation | System and method for independent invalidation on a per engine basis |
+US8700865B1 (en) | 2006-11-02 | 2014-04-15 | Nvidia Corporation | Compressed data access system and method |
+US8700883B1 (en) | 2006-10-24 | 2014-04-15 | Nvidia Corporation | Memory access techniques providing for override of a page table |
+US8707011B1 (en) | 2006-10-24 | 2014-04-22 | Nvidia Corporation | Memory access techniques utilizing a set-associative translation lookaside buffer |
+US8706975B1 (en) | 2006-11-01 | 2014-04-22 | Nvidia Corporation | Memory access management block bind system and method |
+US8966187B2 (en) | 2011-12-01 | 2015-02-24 | International Business Machines Corporation | Flexible replication with skewed mapping in multi-core chips |
+US9229878B2 (en) | 2013-06-10 | 2016-01-05 | Red Hat Israel, Ltd. | Memory page offloading in multi-node computer systems |
+US9256534B2 (en) | 2014-01-06 | 2016-02-09 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US9274835B2 (en) | 2014-01-06 | 2016-03-01 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+EP3060993A1 (en) * | 2013-10-21 | 2016-08-31 | Marvell World Trade Ltd. | Final level cache system and corresponding method |
+US9880846B2 (en) | 2012-04-11 | 2018-01-30 | Nvidia Corporation | Improving hit rate of code translation redirection table with replacement strategy based on usage history table of evicted entries |
+US10108424B2 (en) | 2013-03-14 | 2018-10-23 | Nvidia Corporation | Profiling code portions to generate translations |
+US10146545B2 (en) | 2012-03-13 | 2018-12-04 | Nvidia Corporation | Translation address cache for a microprocessor |
+US10241810B2 (en) | 2012-05-18 | 2019-03-26 | Nvidia Corporation | Instruction-optimizing processor with branch-count table in hardware |
+US10324725B2 (en) | 2012-12-27 | 2019-06-18 | Nvidia Corporation | Fault detection in instruction translations |
+US11176040B2 (en) * | 2016-04-25 | 2021-11-16 | Netlist, Inc. | Method and apparatus for uniform memory access in a storage cluster |
+US11556469B2 (en) | 2018-06-18 | 2023-01-17 | FLC Technology Group, Inc. | Method and apparatus for using a storage system as main memory |
+US11822474B2 (en) | 2013-10-21 | 2023-11-21 | Flc Global, Ltd | Storage system and method for accessing same |
+Families Citing this family (35)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8320241B2 (en) | 2002-07-30 | 2012-11-27 | Brocade Communications System, Inc. | Fibre channel network employing registered state change notifications with enhanced payload |
+US8185602B2 (en) | 2002-11-05 | 2012-05-22 | Newisys, Inc. | Transaction processing using multiple protocol engines in systems having multiple multi-processor clusters |
+JP4252828B2 (en) * | 2003-03-19 | 2009-04-08 | 株式会社日立製作所 | Cache control method, node device, and program |
+ATE491991T1 (en) * | 2003-04-04 | 2011-01-15 | Oracle America Inc | MULTI-NODE SYSTEM WHERE THE GLOBAL ADDRESS GENERATED BY A PROCESSING SUBSYSTEM INCLUDES GLOBAL-TO-LOCAL TRANSLATION INFORMATION |
+US7765381B2 (en) * | 2003-04-04 | 2010-07-27 | Oracle America, Inc. | Multi-node system in which home memory subsystem stores global to local address translation information for replicating nodes |
+US7085897B2 (en) * | 2003-05-12 | 2006-08-01 | International Business Machines Corporation | Memory management for a symmetric multiprocessor computer system |
+US6981072B2 (en) * | 2003-06-05 | 2005-12-27 | International Business Machines Corporation | Memory management in multiprocessor system |
+US7546357B2 (en) * | 2004-01-07 | 2009-06-09 | Microsoft Corporation | Configuring network settings using portable storage media |
+US7509521B2 (en) * | 2004-08-23 | 2009-03-24 | Microsoft Corporation | Memory dump generation with quick reboot |
+US7970980B2 (en) * | 2004-12-15 | 2011-06-28 | International Business Machines Corporation | Method and apparatus for accessing memory in a computer system architecture supporting heterogeneous configurations of memory structures |
+US8407424B2 (en) | 2005-11-07 | 2013-03-26 | Silicon Graphics International Corp. | Data coherence method and apparatus for multi-node computer system |
+US7512742B2 (en) * | 2006-01-17 | 2009-03-31 | International Business Machines Corporation | Data processing system, cache system and method for precisely forming an invalid coherency state indicating a broadcast scope |
+US7770056B2 (en) * | 2006-10-18 | 2010-08-03 | Hewlett-Packard Development Company, L.P. | System and method for dynamic page classification for memory dumping |
+US8239879B2 (en) * | 2008-02-01 | 2012-08-07 | International Business Machines Corporation | Notification by task of completion of GSM operations at target node |
+US8214604B2 (en) * | 2008-02-01 | 2012-07-03 | International Business Machines Corporation | Mechanisms to order global shared memory operations |
+US8200910B2 (en) * | 2008-02-01 | 2012-06-12 | International Business Machines Corporation | Generating and issuing global shared memory operations via a send FIFO |
+US8146094B2 (en) * | 2008-02-01 | 2012-03-27 | International Business Machines Corporation | Guaranteeing delivery of multi-packet GSM messages |
+US7873879B2 (en) * | 2008-02-01 | 2011-01-18 | International Business Machines Corporation | Mechanism to perform debugging of global shared memory (GSM) operations |
+US8484307B2 (en) * | 2008-02-01 | 2013-07-09 | International Business Machines Corporation | Host fabric interface (HFI) to perform global shared memory (GSM) operations |
+US8275947B2 (en) * | 2008-02-01 | 2012-09-25 | International Business Machines Corporation | Mechanism to prevent illegal access to task address space by unauthorized tasks |
+US8255913B2 (en) * | 2008-02-01 | 2012-08-28 | International Business Machines Corporation | Notification to task of completion of GSM operations by initiator node |
+US20090240874A1 (en) * | 2008-02-29 | 2009-09-24 | Fong Pong | Framework for user-level packet processing |
+JP4609521B2 (en) | 2008-04-21 | 2011-01-12 | ソニー株式会社 | Information processing apparatus, information processing method, and computer program |
+US9032101B1 (en) | 2008-12-10 | 2015-05-12 | Nvidia Corporation | Chipset support for binding and migrating hardware devices among heterogeneous processing units |
+US9015446B2 (en) * | 2008-12-10 | 2015-04-21 | Nvidia Corporation | Chipset support for non-uniform memory access among heterogeneous processing units |
+US8719547B2 (en) | 2009-09-18 | 2014-05-06 | Intel Corporation | Providing hardware support for shared virtual memory between local and remote physical memory |
+US9436616B2 (en) * | 2013-05-06 | 2016-09-06 | Qualcomm Incorporated | Multi-core page table sets of attribute fields |
+US9465669B2 (en) | 2013-08-13 | 2016-10-11 | Vmware, Inc. | NUMA scheduling using inter-vCPU memory access estimation |
+JP6582367B2 (en) | 2014-07-18 | 2019-10-02 | 富士通株式会社 | Information processing apparatus, information processing apparatus control method, and information processing apparatus control program |
+US9665489B2 (en) * | 2015-02-11 | 2017-05-30 | Qualcomm Incorporated | Methods of selecting available cache in multiple cluster system |
+US10489303B2 (en) * | 2016-03-10 | 2019-11-26 | Arm Limited | Multi-range lookup in translation lookaside buffer |
+US11340945B2 (en) * | 2016-06-23 | 2022-05-24 | Vmware, Inc. | Memory congestion aware NUMA management |
+US10452593B1 (en) * | 2018-05-03 | 2019-10-22 | Arm Limited | High-performance streaming of ordered write stashes to enable optimized data sharing between I/O masters and CPUs |
+JP7197545B2 (en) * | 2020-09-29 | 2022-12-27 | 株式会社日立製作所 | Storage system and storage system control method |
+US20230080480A1 (en) * | 2021-09-13 | 2023-03-16 | International Business Machines Corporation | Pipeline parallel computing using extended memory |
+Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5247639A (en) * | 1989-06-20 | 1993-09-21 | Nec Corporation | Microprocessor having cache bypass signal terminal |
+US5353428A (en) * | 1989-07-06 | 1994-10-04 | Hitachi, Ltd. | Information processing apparatus in which a cache memory can be operated in both store-in and store-through modes |
+US5680576A (en) * | 1995-05-05 | 1997-10-21 | Silicon Graphics, Inc. | Directory-based coherence protocol allowing efficient dropping of clean-exclusive data |
+US5787476A (en) * | 1995-05-05 | 1998-07-28 | Silicon Graphics, Inc. | System and method for maintaining coherency of virtual-to-physical memory translations in a multiprocessor computer |
+US6286090B1 (en) * | 1998-05-26 | 2001-09-04 | Compaq Computer Corporation | Mechanism for selectively imposing interference order between page-table fetches and corresponding data fetches |
+US6332169B1 (en) * | 1996-07-01 | 2001-12-18 | Sun Microsystems, Inc. | Multiprocessing system configured to perform efficient block copy operations |
+US6449700B2 (en) * | 1997-09-05 | 2002-09-10 | Sun Microsystems, Inc. | Multiprocessing computer system employing a cluster protection mechanism |
+-
+2001
+- 2001-06-21 US US09/885,997 patent/US6658538B2/en not_active Expired - Lifetime
+-
+2002
+- 2002-06-12 JP JP2002170907A patent/JP3924206B2/en not_active Expired - Fee Related
+Patent Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5247639A (en) * | 1989-06-20 | 1993-09-21 | Nec Corporation | Microprocessor having cache bypass signal terminal |
+US5353428A (en) * | 1989-07-06 | 1994-10-04 | Hitachi, Ltd. | Information processing apparatus in which a cache memory can be operated in both store-in and store-through modes |
+US5680576A (en) * | 1995-05-05 | 1997-10-21 | Silicon Graphics, Inc. | Directory-based coherence protocol allowing efficient dropping of clean-exclusive data |
+US5787476A (en) * | 1995-05-05 | 1998-07-28 | Silicon Graphics, Inc. | System and method for maintaining coherency of virtual-to-physical memory translations in a multiprocessor computer |
+US6332169B1 (en) * | 1996-07-01 | 2001-12-18 | Sun Microsystems, Inc. | Multiprocessing system configured to perform efficient block copy operations |
+US6449700B2 (en) * | 1997-09-05 | 2002-09-10 | Sun Microsystems, Inc. | Multiprocessing computer system employing a cluster protection mechanism |
+US6286090B1 (en) * | 1998-05-26 | 2001-09-04 | Compaq Computer Corporation | Mechanism for selectively imposing interference order between page-table fetches and corresponding data fetches |
+Cited By (51)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6981120B1 (en) * | 2002-11-04 | 2005-12-27 | Savaje Technologies, Inc. | Method and apparatus for virtual memory segmentation |
+US7017015B2 (en) * | 2002-12-20 | 2006-03-21 | Rockwell Automation Technologies, Inc. | Method and system for coordinating the access of data by two computer processes |
+US20040123051A1 (en) * | 2002-12-20 | 2004-06-24 | Lloyd Robert F. | Method and system for coordinating the access of data by two computer processes |
+US7783838B1 (en) | 2004-02-06 | 2010-08-24 | Vmware, Inc. | Maintaining coherency of derived data in a computer system |
+US7222221B1 (en) * | 2004-02-06 | 2007-05-22 | Vmware, Inc. | Maintaining coherency of derived data in a computer system |
+US7895596B2 (en) | 2005-09-13 | 2011-02-22 | Hewlett-Packard Development Company, L.P. | Processor assignment in multi-processor systems |
+US20070061521A1 (en) * | 2005-09-13 | 2007-03-15 | Mark Kelly | Processor assignment in multi-processor systems |
+US20070126756A1 (en) * | 2005-12-05 | 2007-06-07 | Glasco David B | Memory access techniques providing for override of page table attributes |
+US8359454B2 (en) | 2005-12-05 | 2013-01-22 | Nvidia Corporation | Memory access techniques providing for override of page table attributes |
+US20070180197A1 (en) * | 2006-02-01 | 2007-08-02 | Wright Gregory M | Multiprocessor system that supports both coherent and non-coherent memory accesses |
+US7653789B2 (en) * | 2006-02-01 | 2010-01-26 | Sun Microsystems, Inc. | Multiprocessor system that supports both coherent and non-coherent memory accesses |
+US8601223B1 (en) | 2006-09-19 | 2013-12-03 | Nvidia Corporation | Techniques for servicing fetch requests utilizing coalesing page table entries |
+US8543792B1 (en) | 2006-09-19 | 2013-09-24 | Nvidia Corporation | Memory access techniques including coalesing page table entries |
+US8347064B1 (en) | 2006-09-19 | 2013-01-01 | Nvidia Corporation | Memory access techniques in an aperture mapped memory space |
+US8352709B1 (en) * | 2006-09-19 | 2013-01-08 | Nvidia Corporation | Direct memory access techniques that include caching segmentation data |
+US8707011B1 (en) | 2006-10-24 | 2014-04-22 | Nvidia Corporation | Memory access techniques utilizing a set-associative translation lookaside buffer |
+US8700883B1 (en) | 2006-10-24 | 2014-04-15 | Nvidia Corporation | Memory access techniques providing for override of a page table |
+US8601235B2 (en) | 2006-11-01 | 2013-12-03 | Nvidia Corporation | System and method for concurrently managing memory access requests |
+US8504794B1 (en) | 2006-11-01 | 2013-08-06 | Nvidia Corporation | Override system and method for memory access management |
+US8533425B1 (en) | 2006-11-01 | 2013-09-10 | Nvidia Corporation | Age based miss replay system and method |
+US8347065B1 (en) | 2006-11-01 | 2013-01-01 | Glasco David B | System and method for concurrently managing memory access requests |
+US20100106921A1 (en) * | 2006-11-01 | 2010-04-29 | Nvidia Corporation | System and method for concurrently managing memory access requests |
+US8607008B1 (en) | 2006-11-01 | 2013-12-10 | Nvidia Corporation | System and method for independent invalidation on a per engine basis |
+US8706975B1 (en) | 2006-11-01 | 2014-04-22 | Nvidia Corporation | Memory access management block bind system and method |
+US8700865B1 (en) | 2006-11-02 | 2014-04-15 | Nvidia Corporation | Compressed data access system and method |
+US8510509B2 (en) | 2007-12-18 | 2013-08-13 | International Business Machines Corporation | Data transfer to memory over an input/output (I/O) interconnect |
+US7958314B2 (en) | 2007-12-18 | 2011-06-07 | International Business Machines Corporation | Target computer processor unit (CPU) determination during cache injection using input/output I/O) hub/chipset resources |
+US20090157979A1 (en) * | 2007-12-18 | 2009-06-18 | International Business Machines Corporation | Target computer processor unit (cpu) determination during cache injection using input/output (i/o) hub/chipset resources |
+US20090157977A1 (en) * | 2007-12-18 | 2009-06-18 | International Business Machines Corporation | Data transfer to memory over an input/output (i/o) interconnect |
+US8484420B2 (en) | 2010-11-30 | 2013-07-09 | International Business Machines Corporation | Global and local counts for efficient memory page pinning in a multiprocessor system |
+US8966187B2 (en) | 2011-12-01 | 2015-02-24 | International Business Machines Corporation | Flexible replication with skewed mapping in multi-core chips |
+US9026743B2 (en) | 2011-12-01 | 2015-05-05 | International Business Machines Corporation | Flexible replication with skewed mapping in multi-core chips |
+US10146545B2 (en) | 2012-03-13 | 2018-12-04 | Nvidia Corporation | Translation address cache for a microprocessor |
+US9880846B2 (en) | 2012-04-11 | 2018-01-30 | Nvidia Corporation | Improving hit rate of code translation redirection table with replacement strategy based on usage history table of evicted entries |
+US10241810B2 (en) | 2012-05-18 | 2019-03-26 | Nvidia Corporation | Instruction-optimizing processor with branch-count table in hardware |
+US10324725B2 (en) | 2012-12-27 | 2019-06-18 | Nvidia Corporation | Fault detection in instruction translations |
+US10108424B2 (en) | 2013-03-14 | 2018-10-23 | Nvidia Corporation | Profiling code portions to generate translations |
+US9229878B2 (en) | 2013-06-10 | 2016-01-05 | Red Hat Israel, Ltd. | Memory page offloading in multi-node computer systems |
+US11822474B2 (en) | 2013-10-21 | 2023-11-21 | Flc Global, Ltd | Storage system and method for accessing same |
+US11360894B2 (en) | 2013-10-21 | 2022-06-14 | Flc Global, Ltd. | Storage system and method for accessing same |
+EP3060993A1 (en) * | 2013-10-21 | 2016-08-31 | Marvell World Trade Ltd. | Final level cache system and corresponding method |
+EP3060993B1 (en) * | 2013-10-21 | 2023-03-08 | FLC Global, Ltd. | Final level cache system and corresponding method |
+US9274835B2 (en) | 2014-01-06 | 2016-03-01 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US10534544B2 (en) | 2014-01-06 | 2020-01-14 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US10671292B2 (en) | 2014-01-06 | 2020-06-02 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US10521128B2 (en) | 2014-01-06 | 2019-12-31 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US9952777B2 (en) | 2014-01-06 | 2018-04-24 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US9256534B2 (en) | 2014-01-06 | 2016-02-09 | International Business Machines Corporation | Data shuffling in a non-uniform memory access device |
+US11176040B2 (en) * | 2016-04-25 | 2021-11-16 | Netlist, Inc. | Method and apparatus for uniform memory access in a storage cluster |
+US11556469B2 (en) | 2018-06-18 | 2023-01-17 | FLC Technology Group, Inc. | Method and apparatus for using a storage system as main memory |
+US11880305B2 (en) | 2018-06-18 | 2024-01-23 | FLC Technology Group, Inc. | Method and apparatus for using a storage system as main memory |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20030009640A1 (en) | 2003-01-09 |
+JP2003067357A (en) | 2003-03-07 |
+JP3924206B2 (en) | 2007-06-06 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6658538B2 (en) | Non-uniform memory access (NUMA) data processing system having a page table including node-specific data storage and coherency control | |
+US8966219B2 (en) | Address translation through an intermediate address space | |
+US6105113A (en) | System and method for maintaining translation look-aside buffer (TLB) consistency | |
+EP0945805B1 (en) | A cache coherency mechanism | |
+US4985829A (en) | Cache hierarchy design for use in a memory management unit | |
+US8909871B2 (en) | Data processing system and method for reducing cache pollution by write stream memory access patterns | |
+US6408362B1 (en) | Data processing system, cache, and method that select a castout victim in response to the latencies of memory copies of cached data | |
+US7363462B2 (en) | Performing virtual to global address translation in processing subsystem | |
+US7765381B2 (en) | Multi-node system in which home memory subsystem stores global to local address translation information for replicating nodes | |
+JP2833062B2 (en) | Cache memory control method, processor and information processing apparatus using the cache memory control method | |
+US6189074B1 (en) | Mechanism for storing system level attributes in a translation lookaside buffer | |
+EP1941375B1 (en) | Caching memory attribute indicators with cached memory data | |
+EP0062165A2 (en) | Multiprocessors including private and shared caches | |
+US11023376B2 (en) | System and methods for efficient virtually-tagged cache implementation | |
+JPH0555898B2 (en) | ||
+US5809562A (en) | Cache array select logic allowing cache array size to differ from physical page size | |
+US6292872B1 (en) | Cache coherency protocol having hovering (H) and recent (R) states | |
+US6311253B1 (en) | Methods for caching cache tags | |
+US20050080998A1 (en) | Method and apparatus for coherent memory structure of heterogeneous processor systems | |
+US7360056B2 (en) | Multi-node system in which global address generated by processing subsystem includes global to local translation information | |
+KR100326632B1 (en) | Cache coherency protocol including an h_r state | |
+US6442653B1 (en) | Data processing system, cache, and method that utilize a coherency state to indicate the latency of cached data | |
+EP0170525B1 (en) | Cache hierarchy design for use in a memory management unit | |
+US20020002659A1 (en) | System and method for improving directory lookup speed | |
+US20050144391A1 (en) | Cache memory management |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:ARIMILLI, RAVI KUMAR;DODSON, JOHN STEVEN;FIELDS, JAMES STEPHEN JR.;REEL/FRAME:011955/0857Effective date: 20010619 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+CC | Certificate of correction | ||
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026894/0001Effective date: 20110817 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

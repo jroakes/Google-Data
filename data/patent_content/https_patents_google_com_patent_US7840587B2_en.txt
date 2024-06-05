@@ -1,0 +1,429 @@
+US7840587B2 - Query caching for travel planning systems - Google Patents
+Query caching for travel planning systems Download PDFInfo
+- Publication number
+- US7840587B2 US7840587B2 US10/456,980 US45698003A US7840587B2 US 7840587 B2 US7840587 B2 US 7840587B2 US 45698003 A US45698003 A US 45698003A US 7840587 B2 US7840587 B2 US 7840587B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- cached
+- answers
+- result
+- query
+- validity
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Fee Related, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06Q—INFORMATION AND COMMUNICATION TECHNOLOGY [ICT] SPECIALLY ADAPTED FOR ADMINISTRATIVE, COMMERCIAL, FINANCIAL, MANAGERIAL OR SUPERVISORY PURPOSES; SYSTEMS OR METHODS SPECIALLY ADAPTED FOR ADMINISTRATIVE, COMMERCIAL, FINANCIAL, MANAGERIAL OR SUPERVISORY PURPOSES, NOT OTHERWISE PROVIDED FOR
+- G06Q50/00—Systems or methods specially adapted for specific business sectors, e.g. utilities or tourism
+- G06Q50/10—Services
+- G06Q50/14—Travel agencies
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2455—Query execution
+- G06F16/24552—Database cache management
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2455—Query execution
+- G06F16/24553—Query execution of query operations
+- G06F16/24561—Intermediate data storage techniques for performance improvement
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06Q—INFORMATION AND COMMUNICATION TECHNOLOGY [ICT] SPECIALLY ADAPTED FOR ADMINISTRATIVE, COMMERCIAL, FINANCIAL, MANAGERIAL OR SUPERVISORY PURPOSES; SYSTEMS OR METHODS SPECIALLY ADAPTED FOR ADMINISTRATIVE, COMMERCIAL, FINANCIAL, MANAGERIAL OR SUPERVISORY PURPOSES, NOT OTHERWISE PROVIDED FOR
+- G06Q10/00—Administration; Management
+- G06Q10/02—Reservations, e.g. for tickets, services or events
+Definitions
+- This invention relates to travel scheduling and pricing, and more particularly to processing low-fare-search queries for air travel planning computer systems.
+- LFS queries In travel planning such as for air travel scheduling, flight pricing and low-fare-search, queries are posed by users from travel agent systems, airline reservation agent systems, travel web sites, and airline-specific web sites.
+- Low-fare-search (LFS) queries typically include origin and destination information, time constraints, and additional information including passenger profiles and travel preferences. Travel planning systems respond to these LFS queries and typically return a list of possible tickets that satisfy the query, each a flight combination with price information. Some travel planning systems return answers in a compact form such as through a pricing graph.
+- Travel planning systems expend considerable computational resources responding to LFS queries. It is not uncommon for a travel planning system to spend more than 30 seconds responding to an LFS query, even for a relatively straightforward round-trip query leaving and returning from specific airports on specific dates. Since travel planning systems may need to answer tens or hundreds of queries per second, they are typically built from expensive farms of hundreds or thousands of computers. It is therefore desirable to reduce the computational and economic costs of responding to LFS queries. It is also desirable to reduce query latency, so that answers are returned to the user as quickly as possible.
+- caching of airline seat availability data is caching of airline seat availability data. With airline seat availability data query responses become stale if some change takes place in the remote databases accessed over the network (the airlines' seat availability databases).
+- a method for testing freshness of query results in a travel planning query cache includes retrieving a result for a query from a cache database; if a cached result is found, testing the retrieved result to determine whether at least one answer in the result is stale or sufficiently fresh to be returned as an answer to the query, and if at least some of the answers are stale or if no result is found, indicating a cache miss.
+- a computer program product residing on a computer readable medium for testing freshness of query results in a travel planning query cache includes instructions for causing a computer to retrieve a result for a query from a cache database; if a cached result is found, test the retrieved result to determine whether at least one answer in the result is stale or sufficiently fresh to be returned as an answer to the query, and if at least some of the answers are stale or if no result is found, indicate a cache miss.
+- a travel planning query cache includes a cache database and a management process that retrieves cached results from the cache database in response to a user query and if a retrieved cached result is found that satisfies the query, tests the retrieved cached result to determine whether at least one answer in the result is stale or sufficiently fresh to be returned as an answer to the query, and if at least some of the answers are stale or if no result is found, indicates a cache miss.
+- the computational cost of travel queries can be reduced by caching queries and their results in a database, and reusing the results for subsequent identical or similar queries.
+- query caching is not straightforward, nor universally advantageous.
+- the set of possible queries (the query “space”) is sufficiently large relative to the number of queries actually posed that there is little chance of duplicate queries, and therefore no computational benefit to caching as queries will never “hit” the cache.
+- the travel database used by a travel planning system to answer queries is in constant flux, as schedules, fares (prices), and seat availability change in real time. For this reason, the response to a query may be stale (may no longer be the correct result) at the time of the next identical query.
+- aspects of this invention enable query caching to be a valuable and effective tool for reducing computational load in travel planning systems, especially LFS queries in air travel planning systems, for which the computational cost of answering a query is extremely high.
+- FIG. 1 is a flow chart of query caching.
+- FIG. 2 is a flow chart of a cache test.
+- FIG. 3 is a flow chart of a query cache process with preemptive cache fill.
+- FIG. 4 is a flow chart depicting query-caching widening
+- FIG. 5 is a flow chart depicting a direct test filter process.
+- FIG. 6 is a flow chart depicting a re-query test filter process.
+- FIG. 7 is a flow chart depicting a re-query test filter with updating process.
+- FIG. 8 is a flow chart depicting a re-query test filter with restrictive LFS queries.
+- FIG. 9 is a flow chart depicting a shallow search with merging.
+- FIG. 10 is a block diagram depicting an architecture for travel planning.
+- a travel planning system query cache arrangement 10 is shown.
+- a user sends a query that is received 12 by a cache test mechanism 14 .
+- the cache test mechanism 14 looks for a cached query result in a cache database 16 . If the cache query result is found in the cache database 16 , (a cache hit) the result is retrieved 18 . Otherwise if no result is cached in the database 16 (a cache miss), a query 12 is posed 20 to the travel planning system 20 to produce an actual result. The actual result is stored 22 in the cache database 16 and returned 24 to the user.
+- a query 12 is a request by a user, for a travel accommodation.
+- the query generally has information such as origins, destination, travel dates and other preferences or conditions of travel requested by the user, e.g., nonstop, first class, etc.
+- An answer is a particular travel plan that satisfies the request, generally a combination of flights and fares.
+- the answer includes information such as flights, (flight number, airline, etc.) and fares that can be used with the flights.
+- a query result is a set of such answers.
+- a cached result is a query result stored in the database.
+- the cached results in the database are obtained in response to earlier queries, either performed preemptively or in response to user supplied queries.
+- a cached result is substituted for an actual result that would be received from a travel planning system (TPS) had the TPS actually processed the query
+- TPS travel planning system
+- a cache mechanism tests the freshness of a result received from a cache database 16 .
+- a retrieval mechanism 32 searches for a result for the query in the cache database 16 . If no result is found 34 the cache test mechanism indicates a cache “miss.” As was mentioned in FIG. 1 a query is made to a TPS, 20 and the result and query are stored 22 in the cache database 16 . If a cached result is found, “a cache hit”, then the result is passed to a staleness test mechanism 36 , which uses the query, cached result and age 38 of the cached result to determine whether the result is stale 37 or sufficiently fresh 39 to be returned to the user.
+- An optional implementation of query caching shown in FIG. 2 allows for cached answers to be sent to a filter 40 to be filtered or otherwise modified prior to being returned to the querier.
+- query caching if the cache query result is found in the cache database 16 , (a cache hit), and the result is determined to be fresh (i.e., not sufficiently stale to warrant posing a new query to the TPS), the result is sent to the cache filter 40 .
+- the cache test and filter 40 may be a sophisticated process that filters stale answers or replaces stale answers with fresh ones.
+- the staleness test 36 can be eliminated and the cache can return the cached answer, or return a filtered version of the cached answer regardless, without the alternative of performing a search if it is stale.
+- a cache filling process 50 can independently update the cache database 16 , either prior to or concurrently with the use of the caching arrangement 10 .
+- the cache can be preemptively filled by filling process 50 to increase the likelihood of cache hits. If a TPS preemptively fills a cache then a greater proportion of queries may hit the cache, further reducing average query latency at the potential expense of unnecessarily computing answers for queries that may never be posed.
+- LFS query caching for TPSes can reduce the total computational resources expended by a TPS over an extended set of queries by eliminating duplicate work and reduce the latency of queries that hit the cache, since for such queries the process of retrieving the result from the cache is substantially quicker than that of having the TPS re-execute the query.
+- LFS query caching is especially, valuable when LFS queries are used as part of more general travel planning applications, such as flexible-date queries, flexible-destination queries, and fare monitoring and alerting applications, since in many cases these applications perform many duplicate or similar LFS queries.
+- a fare monitoring and alerting application that on a regular schedule (perhaps daily) performs LFS queries on behalf of multiple users in markets specified by those users, alerting each user if prices in his or her markets have dropped or are particularly low.
+- Such an application may pose the same queries many times over an extended period, both because different users may specify the same markets, and because the same queries are re-posed regularly (daily) to keep abreast of changes to prices, flights and seat availability.
+- the effectiveness of query caching depends on the proportion of duplicate queries posed to a TPS, since query caching is a technique for reducing the computational expense of duplicate queries and does not improve queries that are only posed once.
+- air travel web sites typically submit travel planning queries that include for a round-trip LFS generally at least: one or more origin airports or cities; one or more destination airports or cities; an outbound departure date, or set of dates; a return departure date, or set of dates; number of different types of passengers (e.g., adult, child, infant, etc).
+- the distribution of travel queries from the query space is normally heavily skewed. Since many airports are very small, within North America fewer than 10,000 location pairs account for a vast majority of queries, and in some situations, such as use of a TPS by a travel agent that targets a small number of markets, the skew is even greater. As an example, a travel agent that caters to cruises may pose only queries with a very small set of coastal destinations and reservation agents for a small airline may only pose queries for the small subset of airports that the airline flies to. Furthermore, travel dates tend to concentrate in the immediate future: the majority of queries are posed for travel within a month or two of query time, and most trip durations are less than two weeks. Additionally, LFS queries tend to involve a small number of passenger configurations, such as one adult, or two adults, or two adults and a child.
+- LFS queries further reduce the size of the query space. For example, so-called “calendar” or “flexible date” queries may have fewer possible date specifications (“a weekend in a specified month”, i.e., 12 date possibilities, or “a week-long trip starting on specified date”, i.e., 330 date possibilities). So-called “anywhere” or “flexible destination” queries may have fewer possible destination specifications.
+- query caching can be used to reduce computational load and latency.
+- a second factor contributes to the proportion of repeated queries.
+- Many users of TPSes pose the same query multiple times, often over a short period. For example, a vacationer may pose the same exploratory query every day to find out whether prices to their favorite destinations have changed. Or a web-site user moving between web pages may find it necessary to re-pose a query after the original result has been lost; many travel web sites also “time out” sessions after short periods, forcing a user who has paused to repose a query prior to purchasing a ticket. Also, as mentioned previously, some applications like fare alerting and monitoring repose the same queries regularly.
+- a query widening process 70 is shown. If the space of possible travel queries is very large, and if queries include fine details (such as desired hours of travel, or traveler ages) then it is less likely the same query will be replicated. Query widening process 70 is a technique for preventing overly fine queries from causing cache misses. Query widening process 70 can be used to eliminate travel restrictions in searching the query cache 16 to improve the rate of cache hits.
+- a query is received 72 from the travel planning system.
+- the query widening process 70 generates 74 a wider query from the original query.
+- the wider query is used by a cache test process 76 to determine whether a valid result for the query is stored in the cache database 16 .
+- the result of the wider query is retrieved, 78 and sent to a result filter to filter 80 the result.
+- the filtered result can be sent to a staleness test 82 .
+- the filter can be any of the techniques described below such as statistical or age tests, direct tests, re-query tests, re-query with updating, and so forth. If the results are fresh, the fresh results are sent to a filter that filters 84 the results based on the original query, by eliminating answers that do not meet the original query's restrictions, producing 82 a final result that is returned to the user 86 .
+- the wide query 71 is sent to the travel planning system to produce 88 a wide result, which is stored 90 in the cache database 16 , indexed by the wide query 71 .
+- the wide result 81 is also sent to the result filter 84 , which uses the original query 12 to produce the final result.
+- a travel query is posed that imposes departure time restrictions finer than whole days (e.g., depart June 23rd 9 am to 11 am)
+- a wider whole-day query is posed (depart June 23rd any time), preferably in a form that causes answers to be returned for every hour of day.
+- the wider query's result is cached.
+- the result is filtered to extract answers for the restricted time range, and this filtered result is returned to the querier.
+- Subsequent queries for the same departure date, with or without time restrictions will hit the cache entry, which is filtered as appropriate for the subsequent queries.
+- Query widening is not restricted to eliminating time restrictions but can similarly be used to eliminate airport restrictions (for example, by always considering all airports within a city), airline restrictions (by always searching over all airlines), and number-of-stop and cabin-class restrictions, among others.
+- query widening can replace the passenger information in the original query so that the wide query specifies a default mixture of passengers (1 adult, 1 infant, 1, child and 1 senior citizen, for example). Then the wide result will contain prices for each common passenger type, which can be added as appropriate to construct prices for whatever passenger distribution was in the original query. Some care may be necessary to handle details associated with prices that depend on knowing all the passengers at once, such as so-called companion fares; one way to deal with such cases is to prohibit the wide query from using companion fares.
+- the query widener may generate the following wide query, still sufficiently narrow to be solvable by a normal TPS:
+- the “from” airport has been expanded into a set of several airports, the departure time has been widened to a whole day, the passenger set has been replaced with a default set of passengers, the non-stop restriction has been eliminated, and the number of answers has been increased to allow for the wider query and the possibility that future queries might request more answers.
+- the result filter 84 filters the wide result to obtain only answers that match original query's restrictions (answers 3 and 4, in this case). It re-calculates prices to reflect the original query's passenger distribution, and returns the number of answers originally requested:
+- a TPS is capable of efficiently answering very wide queries (such as queries over many days, or many origins or destinations) it may be desirable to choose very coarse granularities when widening, such as single queries over many months of possible departure dates, or over an entire country of possible destination airports.
+- Travel planning systems typically search over a dynamic database of schedules (flight, bus, boat, train), fares (prices) and seat availability, hereafter referred to as the “travel database”.
+- the travel database changes rapidly as schedules and prices are modified and seats sold. But typically only a small portion of the travel database changes over any short time period. For example, while seats on flights are sold many times a second, the availability of a particular seat type (booking code) on a particular flight may only change once or twice over a many-month period. Since the response to a travel-planning query depends on the ever-changing travel database, cached answers become stale. The correctness of a cached result for a particular query depends on whether the particular flights, fares and seats that affect that result have changed.
+- One component of a query caching system is a process for determining or estimating when a cached result is stale, and needs to be re-computed. There are several possible mechanisms for testing staleness.
+- One technique is to make estimations based on the query and the age of the cached result, and potentially other aspects of the query result, but without explicitly checking for staleness by comparing the query or response to the travel database. For example, experiments can be done off-line to build a statistical table of how frequently cached results of a certain age are incorrect, and this table can be used to determine whether to re-compute a query (using a threshold on the probability).
+- Another, generally more reliable method, for determining whether a cached result is stale is to compare the cached result to the travel database at the time of the subsequent query.
+- a TPS When a TPS answers an LFS query it typically examines a very large number of flights, fares and seats in its travel database, but the answers it produces (typically several of the cheapest or most convenient, or a small diverse set of attractive answers) usually contain only a small set of flights, fare and seats. In the extreme case where a TPS returns only one (best) answer for an LFS query, the result may only contain two or three flights and fares even though the TPS examined many thousands or tens of thousands during its search. Thus even if a cached result is old there is a substantial chance that all of the small number of travel database elements used in the result's answers remain valid.
+- a direct test technique includes recording with the cached result information identifying all the travel database elements used in the result's answers (the flights, fares, fare rules, seat availability and any other critical elements). Upon receipt of a subsequent cached query the travel database is searched to determine whether all of the database elements contained in the cached result remain unchanged in the current database. If so, then the result's answers remain valid, and if not the proportion of invalid answers can be estimated and used to decide whether to re-compute the query result.
+- the direct testing can be implemented in the cached answer filter 76 ( FIG. 4 ).
+- the cached result is passed 92 to the direct test filter 100 , which filters the answers of the cached result using a direct test.
+- Direct testing will retrieve 93 the answer in the cache database 16 and retrieves answer components 94 from a travel database 17 associated with a TPS.
+- the direct test verifies 95 that all components of the answer (the flights, fares, seats, fare rules, etc) that came from the travel database 17 remain in the cache database 16 , so that the cached answer is considered to be valid. If valid, the answer is added 96 to a list of valid answers, otherwise, the process 100 loops 97 for all answers in the cache.
+- the set of valid answers from the cached result are passed 98 on to the user.
+- a representative staleness test for use with direct testing may take into account the proportion or quality of answers that have been filtered.
+- the staleness test considers a cached result to be stale if the result is too old, if too many answers have been filtered (an indirect indication that the result is too old), or if too few valid answers remain to satisfy the original query.
+- Standard statistical sampling techniques may be used so that not all answers from the cached result are tested to determine whether the result is stale; for example a random subset of the answers may be tested and if more than a certain proportion fail the result is considered stale.
+- a second technique for determining whether a cached result is invalid is a re-query test filter 100 .
+- the re-query filter 100 retrieves 102 the answer in the cache.
+- the re-query test filter 100 poses 106 new queries to the TPS based upon the answers returned from the cached result. For example, for each answer in the cached result of an LFS query the flights in that answer can be used to pose so-called “pricing” or “flight pricing” queries to the TPS. Flight pricing queries find the best price for a specified flight combination. If the TPS indicates that the queried flights no longer exist, or returns a price for the flights that differs from the cached answer, 108 then the cached answer is no longer valid.
+- a TPS may be able to answer flight pricing queries for each answer in the cached result much faster than it could re-calculate the result itself (which requires searching over many flight possibilities beyond those in the cached result). If valid, the answer is added 110 to a list of valid answers, otherwise, the process 80 loops 112 for all answers in the cache. The set of valid answers from the cached result are passed 116 on to the user. Additionally, the process 87 can determine if there are a sufficient number of valid answers and if not re-query using the original or a widened query as in FIG. 4 .
+- a re-query test filter 100 is similar to the direct test filter of FIG. 5 except that the test of whether an answer is invalid is performed by posing queries 102 to a TPS based on key information from the cached answer (in this case, flight pricing queries based on the flights of the cached answer).
+- LFS results include many answers it may be inefficient to pose re-query tests for all answers.
+- the re-query test filter 100 can be modified to test only a subset of all cached answers and thus provide a statistical estimate of the number of answers that are valid. This estimate can be used in the staleness test to estimate whether the result as a whole is stale and should be re-computed.
+- One advantage of re-query testing over direct testing is that there is no need to record in the cached result all the travel database elements that contributed to the result. For example, it may only be necessary to store the flight information necessary to support flight pricing queries, as opposed to storing flights, fares, fare rules, and seat availability, as would be necessary for direct tests. This is especially important if the correctness of an answer depends on travel database elements that are not normally considered part of the answer.
+- HIP checks International Air Travel Association
+- IATA checks International Air Travel Association
+- HIP checks Higher Intermediate Point checks are a ticket restriction mandated by airlines for international travel, that prevents one from using a fare published between two terminal points of travel if there is an intermediate point of travel without first checking if the airline publishes a “comparable” fare at a higher price between the intermediate point and one of the terminal points of the trip.
+- re-query testing if a HIP check applies it may not be possible to determine the validity of a ticket having an origin A intermediate stop B and destination C using an price between A-C without checking comparable fares that don't appear on the ticket.
+- a second type 100 a of re-query testing produces valid answers even when the cached answers are invalid.
+- the cached answers are re-queried (e.g., by posing flight pricing queries), so long as those aspects of the cached answers that are part of the re-query (the flights) remain valid, 108 the re-query should produce a valid answer. If the new answer is different than the cached answer (the price for those flights has changed) then the cached answer is invalid, but the new answer can be substituted 111 in its place.
+- FIG. 7 depicts a relationship to referenced elements 102 , 106 and 116 of FIG. 6 .
+- a direct test of the cached answer would determine that the cached answer is invalid (since the original “Y” fare no longer exists).
+- a re-query test that re-posed the cached answer's flights as a flight-pricing query would generate a new answer:
+- cached answers can be used to produce a list of routes (airport sequences, or airport and airline sequences). If a travel planning system supports LFS queries constrained by route restrictions then these routes derived from the cached answers can be used to pose constrained LFS queries, just as flights can be used to pose flight pricing queries.
+- routes airport sequences, or airport and airline sequences.
+- a TPS may be able to execute LFS queries constrained to particular routes much faster than a full (unconstrained) LFS.
+- the answers to the constrained LFS queries can be collected to generate the response to the subsequent query.
+- a modified re-query process 120 based on restricted LFS queries is shown.
+- the re-query process 120 uses the flights of the cached results to avoid performing a full LFS.
+- Re-query process 120 receives a cached result 122 and retrieves 124 answers from the cache database 16 .
+- the process 120 extracts 126 routes from cached answers, and adds 128 routes to a cached routes list. If there are more answers in the cache 130 the process 120 retrieves 124 the next answer, otherwise the procedure will pose 132 restrictive LFS queries to a TPS based on routes in the cached routes list.
+- the process 120 adds 134 new answers to a valid answers file and tests 136 if there are more routes in the cached routes file. If there are not more routes, the procedure can exit.
+- the validity of an answer may be directly dependent on the time the query was posed. For example, in air travel planning it is common for fares to have so-called “advance purchase” restrictions that restrict the purchase time of tickets. Since travel-planning systems typically use the query time as a substitute for the purchase time in advance purchase calculations, the validity of a query result is directly dependent on the query time. In effect, the query time is an implicit part of the query.
+- a third manner for testing optimality of cached results is to perform a “shallow” but quick query and compare its answers with the cached result.
+- travel-planning systems permit some control over the trade-off between search time and search quality, especially for LFS queries.
+- LFS queries it is not advantageous to perform a full LFS for every query, as this would defeat the purpose of caching.
+- a TPS it may be possible for a TPS to perform a shallower LFS at substantially smaller computational expense than a normal LFS, and have reasonably high confidence that if the result is not better than the cached result, then the cached result is probably still optimal. This is because for most LFS queries the best answers are simple and can be found by a shallow restricted LFS that might, for example, only consider a smaller number of flight possibilities than a normal LFS.
+- the TPS supports a controlled tradeoff between search quality, as measured by the probability of finding the cheapest answer and computation time.
+- the querier is able to query for a shallow (and quick) search that on average consumes 2 seconds of time but is less likely to find the cheapest answer, or a “full” (or “deep”) search that on average consumes 10 seconds of time and is nearly certain to find the cheapest answer.
+- the caching system upon subsequent receipt of a cached query the caching system performs a shallow LFS, and takes one of two actions depending on the relationship between Q and C:
+- Action 1 performs a full LFS and return the result
+- Action 2 use a direct or re-query or re-query-with-updating filter to filter invalid answers from the cached result; merge the result with the results of the shallow search, and return the merged combination.
+- Action 1 consumes an additional 10 seconds but guarantees the correct answer.
+- Action 2 is assumed to require insignificant computational resources, but it is not guaranteed to find the best answer (it is however guaranteed never to return invalid answers).
+- the following Table 2 summarizes several strategies for choosing Action 1 or Action 2 based on the relationship between Q and C.
+- the “Ave. Time” column contains the average computation time taken by the strategy, and the “Probability of finding best” column contains the probability of finding the best answer.
+- the relative desirability of strategies A, B and C depends on the particular manner in which prices evolve and the effectiveness of shallow searches.
+- shallow search 150 with merging is shown.
+- the query is received 152 and results are retrieved 154 from the cache database 16 .
+- the cache is tested 156 . If a cache miss occurred (no entry is found) then as in FIG. 1 , a full search is performed and cached 158 . If a cache hit occurs a quicker shallow search is performed by a shallow search process 162 that modifies the query as appropriate for a shallow search and sends it to the travel planning system, producing a valid search result that may or may not include the best answers.
+- the cached result is passed through any type of cached answer filter 164 , but preferably a re-query filter with updating, as depicted in FIG. 7 .
+- Passing through the filter 164 produces a filtered (and possibly updated) result.
+- the shallow search result, cached result and filtered result are directed to a staleness test 166 to determine if a full search should be performed 158 . If not stale, the shallow search result and filtered result are directed to a result merger 168 that combines the two sets of results (by eliminating duplicates) to produce a final merged result returned to the user.
+- the staleness test 166 may be based on the age of the cache result or other properties of the cached result, though if so it may be desirable to optimize an implementation by incorporating a non-shallow-query based staleness test into the retrieval mechanism 154 so as to avoid unnecessary work by immediately performing a full query 158 .
+- the staleness test 166 may also test properties of the filtered results.
+- the staleness test 166 may incorporate a different strategy by taking path 158 if the best answer in the shallow result has a different value than the best answer in the cached result.
+- the staleness test 166 may be omitted, so that path 158 is never taken.
+- Such an architecture uses the cached answers to improve the quality of the shallower but shallower search results that are performed “on-line” when queries are received. This is particularly effective when the cached answer filter is a re-query filter with updating as in FIG. 7 or 8 .
+- Some travel planning systems can perform flight pricing queries in conjunction with an LFS query using fewer resources than if the different queries had been performed separately, by sharing work between the queries.
+- the TPS described in U.S. Pat. No. 6,295,521 and assigned to the assignee of the present invention answers LFS queries by enumerating a set of possible flight combinations for the query; and while finding prices for all the flight combinations, thus sharing work between the multiple flight combinations.
+- Such a TPS can be extended so that the flight combinations from separate flight pricing queries are added to the flight combinations generated by the normal LFS flight combination enumeration process, so that the pricing stage of the LFS simultaneously calculates prices for both the LFS and the flight pricing queries.
+- a TPS with such capabilities permits an optimized caching architecture in which the LFS performed by the shallow search process is also performed with any re-querying performed by the cached answer filter.
+- the TPS can preemptively pose likely queries and cache the results, so that subsequent queries are more likely to hit the cache (resulting in low query latencies).
+- the choice of what queries to pose is best guided by the distribution of queries likely to be made by users and the staleness of queries currently in the cache. Since the primary cause of staleness is the changing travel database, one possible strategy for filling the cache is to index cache entries (either the queries or the results) by the database entries they are likely to be highly dependent on. For example, if the fares or flights in a particular market change then queries in that market should be targeted for re-querying, since those queries are the ones most likely to have become stale. Alternatively and more directly, queries could be targeted if the answers included in their results use database elements that have changed.
+- a travel planning system is used for flexible date queries where the only components of the query are the origin airport, destination airport, and month of travel (for a total of perhaps 120,000 possible queries). If the TPS can answer 3 queries per second, then during underutilized portions of the day the TPS can iterate through the 120,000 possible queries, preemptively computing and caching answers. However since it will take many hours to finish all possible queries, it makes sense to prioritize them based on the likelihood that the queries will be posed (perhaps by favoring queries between heavily-populated cities) and the likelihood the queries are stale (perhaps determined by the time since the query was last cached, and whether any of the fares or flights published between the query's endpoints have changed since the query was last cached).
+- resources When resources are idle it may be more practical to search deeply (consuming more resources) than when the TPS is being heavily used. This is an especially advantageous approach when the cached results are re-queried and when the shallow search with merging strategy is used. The net effect is to benefit from deeper searches without the computational expense of performing them for every query.
+- preemptive cache filling is effective when query widening is used, because query widening reduces the number of preemptive queries that need to be performed to achieve a given cache hit rate.
+- shallow search with merging is most effective when the cached result is tested using re-query tests.
+- re-query tests based on routes are especially effective when full searches are only performed rarely, as with preemptive cache filling, since route information is likely to remain stable over longer periods than flight information.
+- the caching techniques can be used either by a client program (such as a travel web site) that poses queries to a travel planning system (such as a airline computer reservation system), or by the travel planning system.
+- a client program such as a travel web site
+- a travel planning system such as a airline computer reservation system
+- the travel planning system may be better able to take advantage of caching than the client program because it accepts queries from multiple clients and therefore has a higher query rate, and thus a greater chance of encountering duplicate queries.
+- Directly testing for the staleness of queries against the travel database is most efficiently performed by the travel planning system since it has easier access to the travel database but this does not preclude client programs from using direct testing if the travel planning system provides its clients with access to the travel database.
+- TPS client programs may find estimation tests and re-querying to be more practical methods for detecting the staleness of results.
+- a system architecture 200 for travel planning includes a caching arrangement 10 ( FIGS. 1-9 ) to cache travel query answers 216 .
+- a user such as a traveler, travel agent or airline reservation agent enters trip information typically including date and airport (i.e. origin and destination) information from a client system 204 into a travel application 206 .
+- the client 204 can run a browser or other interface and can be a travel agent terminal, an Internet web browser connected to a travel web site, and so forth. Queries 208 from the client are fed via a network 205 to the travel application 206 .
+- Network 205 can be any type of network such as a public network such as the Internet or telephone system or a private network such as a local area network (LAN), wide area network (WAN), virtual private network (VPN), and so forth.
+- the travel application 206 typically resides on a web server 207 . To process the queries, the travel application 206 can retrieve answers from a cache arrangement 10 ( FIGS. 1-9 ) of answers 216 to queries or send the query to the travel-planning computer for processing by a search engine 211 . Thus, either the travel planning computer 210 or the cache 10 can return results.
+- the travel application 206 interprets queries 208 that arrive from the client 204 , sends the queries 208 to a travel planning computer 210 or the cache 10 (as discussed above) and, organizes the results from the travel computer 210 or cache 10 into a formatted output such as HTML, and sends the results back to the client 204 .
+- the travel application 206 composes query information into an appropriately formatted query, e.g., a low-fare-search query 208 , which is sent to a travel planning system 210 or cache 10 .
+- the travel planning system 210 includes a search engine or search process 211 that searches for flight and fare combinations that satisfy the query, when the results from the query cache are not reliable or where there is a cache miss.
+- the search engine could of course provide results, letting the arrangement 200 bypass the cache.
+- the search performed by the search engine 211 in the travel planning systems 210 can use any of several known techniques.
+Abstract
+Description
+-
+- Flight: UA 123 BOS-LAX (departing 6 am)
+- Flight: UA 456 BOS-LAX (departing 9 am)
+- Fare: UA “Y” BOS-LAX $800 (good anytime)
+- Fare: UA “Q” BOS-LAX $400 (good on afternoon flights)
+-
+- Flight: UA 123 BOS-LAX,
+- Fare: UA “Y” BOS-LAX $800
+which is cached. Suppose that between this (original) query and a subsequent identical query the flights and fares change such that the new travel database is: - Flight: UA 123 BOS-LAX (departing 6 am)
+- Flight: UA 456 BOS-LAX (departing 1 pm)
+- Fare: UA “F” BOS-LAX $900 (good anytime)
+- Fare: UA “Q” BOS-LAX $400 (good on afternoon flights)
+-
+- Flight: UA 123 BOS-LAX, Fare: UA “F” BOS-LAX $900
+-
+- Flight: UA 456 BOS-LAX, Fare: UA “Q” BOS-LAX $400
+that is cheaper than either the cached answer or the answer that results from re-querying the original answer's flights (flight UA 123). While it would be correct to return the answer that is generated by re-querying the cached answer's flights, it is more desirable to recognize that the cached result is stale and re-compute the LFS, since it will result in a cheaper answer.
+- Flight: UA 456 BOS-LAX, Fare: UA “Q” BOS-LAX $400
+-
+- 1) any new direct flights have been added from A to B; or
+- 2) any new seats have become available on direct flights from A to B; or
+- 3) any new fares from A to B with price less than $100 have been added.
+-
+- C=value of the best answer at time of cached query
+- S=value of the best answer at time of subsequent query
+- Q=value of the best answer found by shallow LFS performed at time of subsequent query (thus S<=Q)
+then the following contingency table depicts the possible relationships between C, S and Q along with their probabilities. The vertical axis depicts the relationship between Q and C, the two quantities that would be accessible to a caching system that performed a shallow LFS upon receipt of a cached query. The horizontal axis is headed by the relationship between S and C (i.e., whether prices have risen or dropped between queries). The final column, p(S=Q), is the probability that the shallow LFS returns the best answer.
+TABLE 1 | |||||
+S < C | S = C | S > |
+|||
+20% | 60% | 20% |
+16% | 4% | 48% | 12% | 16% | 4% | p(S = Q) | ||
+Q < C 16-20% | S = Q < C | S < Q < C | >=75% | ||||||
+Q = C 48-52% | S < Q = C | S = Q = C | >=92% | ||||||
+Q > C 32-36% | S < C < Q | S = C < Q | C < S = Q | C < S < Q | <=50% | ||||
+TABLE 2 | |||||
+Probability of | |||||
+Q < C | Q = C | Q > C | Ave. Time | finding best | |
+No caching | =10.0 | =1.0 | |||
+full | |||||
+No caching | =2.0 | =.8 | |||
+shallow | |||||
+Strategy A: | Action 2 | Action 2 | Action 2 | =2.0 | =.89 |
+Strategy B: | Action 2 | Action 2 | Action 1 | ~5.4 | >=.96 |
+Strategy C: | Action 1 | Action 2 | Action 1 | ~7.0 | >=.96 |
+Claims (36)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/456,980 US7840587B2 (en) | 2003-06-06 | 2003-06-06 | Query caching for travel planning systems |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/456,980 US7840587B2 (en) | 2003-06-06 | 2003-06-06 | Query caching for travel planning systems |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20040249798A1 US20040249798A1 (en) | 2004-12-09 |
+US7840587B2 true US7840587B2 (en) | 2010-11-23 |
+Family
+ID=33490274
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/456,980 Expired - Fee Related US7840587B2 (en) | 2003-06-06 | 2003-06-06 | Query caching for travel planning systems |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7840587B2 (en) |
+Cited By (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20130166501A1 (en) * | 2011-12-22 | 2013-06-27 | David-Olivier Saban | Method and system for data filing systems |
+Families Citing this family (25)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20060064333A1 (en) * | 2004-09-20 | 2006-03-23 | Razza Anne M | Product availability tracking and notification system and method |
+US8364670B2 (en) | 2004-12-28 | 2013-01-29 | Dt Labs, Llc | System, method and apparatus for electronically searching for an item |
+US20060149713A1 (en) * | 2005-01-06 | 2006-07-06 | Sabre Inc. | System, method, and computer program product for improving accuracy of cache-based searches |
+US20080167908A1 (en) * | 2007-01-05 | 2008-07-10 | Carl De Marcken | Notification service for presenting travel information |
+EP2118842A2 (en) * | 2007-01-05 | 2009-11-18 | ITA Software, Inc. | Providing travel information using cached query answers |
+US20080167886A1 (en) * | 2007-01-05 | 2008-07-10 | Carl De Marcken | Detecting errors in a travel planning system |
+US20080167910A1 (en) * | 2007-01-05 | 2008-07-10 | De Marcken Carl | Providing travel information using a notification service |
+US7711587B2 (en) * | 2007-01-05 | 2010-05-04 | Ita Software, Inc. | Providing travel information using cached query answers |
+US20080167906A1 (en) * | 2007-01-05 | 2008-07-10 | De Marcken Carl | Support for flexible travel planning |
+US20080167907A1 (en) * | 2007-01-05 | 2008-07-10 | Carl De Marcken | Cache poller for providing travel planning information |
+US20080167912A1 (en) * | 2007-01-05 | 2008-07-10 | De Marcken Carl | Providing travel information using cached summaries of travel options |
+US20080167909A1 (en) * | 2007-01-05 | 2008-07-10 | De Marcken Carl | Updating a database of travel information |
+JP4891111B2 (en) * | 2007-02-16 | 2012-03-07 | 富士フイルム株式会社 | Zoom lens |
+US20100332493A1 (en) * | 2009-06-25 | 2010-12-30 | Yahoo! Inc. | Semantic search extensions for web search engines |
+GB2487992A (en) * | 2011-01-31 | 2012-08-15 | Sita Information Networking Computing Uk Ltd | Inventory control system |
+US20160171008A1 (en) * | 2012-08-14 | 2016-06-16 | Amadeus S.A.S. | Updating cached database query results |
+US9900314B2 (en) | 2013-03-15 | 2018-02-20 | Dt Labs, Llc | System, method and apparatus for increasing website relevance while protecting privacy |
+US20170124205A1 (en) * | 2014-05-28 | 2017-05-04 | GoEuro Corporation | Smart cache for travel search computer system hosting a travel meta-search engine |
+CN106682202B (en) * | 2016-12-29 | 2020-01-10 | 北京奇艺世纪科技有限公司 | Search cache updating method and device |
+FR3099598B1 (en) * | 2019-07-31 | 2021-08-27 | Amadeus | DISTRIBUTED AUTOMATIC LEARNING FOR THE VALIDITY OF ANTI-STORED DATA |
+US20220075877A1 (en) | 2020-09-09 | 2022-03-10 | Self Financial, Inc. | Interface and system for updating isolated repositories |
+US11475010B2 (en) | 2020-09-09 | 2022-10-18 | Self Financial, Inc. | Asynchronous database caching |
+US11641665B2 (en) | 2020-09-09 | 2023-05-02 | Self Financial, Inc. | Resource utilization retrieval and modification |
+US11853381B2 (en) * | 2020-11-13 | 2023-12-26 | Google Llc | Hybrid fetching using a on-device cache |
+US20240046383A1 (en) * | 2022-08-03 | 2024-02-08 | Wwsg Travel, Inc. D/B/A Vacayou | Vacation packaging configurator |
+Citations (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6119094A (en) * | 1996-02-29 | 2000-09-12 | Electronic Data Systems Corporation | Automated system for identifying alternate low-cost travel arrangements |
+US6295521B1 (en) * | 1998-07-02 | 2001-09-25 | Ita Software, Inc. | Travel planning system |
+US6307572B1 (en) * | 1998-07-02 | 2001-10-23 | Ita Software, Inc. | Graphical user interface for travel planning system |
+US20020016724A1 (en) * | 2000-07-28 | 2002-02-07 | Yue-Heng Yang | System and method for booking international multiple-stop tickets |
+US6377932B1 (en) * | 1998-07-02 | 2002-04-23 | Ita Software, Inc. | Rules validation for travel planning system |
+US6381578B1 (en) * | 1998-07-02 | 2002-04-30 | Ita Software, Inc. | Factored representation of a set of priceable units |
+US6418413B2 (en) * | 1999-02-04 | 2002-07-09 | Ita Software, Inc. | Method and apparatus for providing availability of airline seats |
+US6609098B1 (en) * | 1998-07-02 | 2003-08-19 | Ita Software, Inc. | Pricing graph representation for sets of pricing solutions for travel planning system |
+US6839679B1 (en) * | 1996-03-18 | 2005-01-04 | Electronic Data Systems Corporation | Automated travel pricing system |
+-
+2003
+- 2003-06-06 US US10/456,980 patent/US7840587B2/en not_active Expired - Fee Related
+Patent Citations (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6119094A (en) * | 1996-02-29 | 2000-09-12 | Electronic Data Systems Corporation | Automated system for identifying alternate low-cost travel arrangements |
+US6839679B1 (en) * | 1996-03-18 | 2005-01-04 | Electronic Data Systems Corporation | Automated travel pricing system |
+US6295521B1 (en) * | 1998-07-02 | 2001-09-25 | Ita Software, Inc. | Travel planning system |
+US6307572B1 (en) * | 1998-07-02 | 2001-10-23 | Ita Software, Inc. | Graphical user interface for travel planning system |
+US6377932B1 (en) * | 1998-07-02 | 2002-04-23 | Ita Software, Inc. | Rules validation for travel planning system |
+US6381578B1 (en) * | 1998-07-02 | 2002-04-30 | Ita Software, Inc. | Factored representation of a set of priceable units |
+US6609098B1 (en) * | 1998-07-02 | 2003-08-19 | Ita Software, Inc. | Pricing graph representation for sets of pricing solutions for travel planning system |
+US6418413B2 (en) * | 1999-02-04 | 2002-07-09 | Ita Software, Inc. | Method and apparatus for providing availability of airline seats |
+US20020016724A1 (en) * | 2000-07-28 | 2002-02-07 | Yue-Heng Yang | System and method for booking international multiple-stop tickets |
+Non-Patent Citations (6)
+Title |
+---|
+Arthur M. Keller and Julie Basu, "A predicate-based caching scheme for client-server database architectures", 1996, The VLBD Journal vol. 5, pp. 35-47. * |
+Louis Degenaro, Arun Iyengar, Ilya Lipkind, and Isabelle Rouvellou, "A Middleware System Which Intelligently Caches Query Results", 2000, LNCS 1795, pp. 24-44. * |
+Paul Francis and Shin-ya Sato, "Design of a Database and Cache Management Strategy for a Global Information Infrastructure", 1997, IEEE, pp. 283-290. * |
+U.S. Appl. No. 10/456,975, filed Jun. 6, 2003, Carl G. de Marcken and Justin Boyan. |
+U.S. Appl. No. 10/456;975, filed Jun. 6, 2003, Carl G. de Marcken and Justin Boyan. |
+U.S. Appl. No. 10/457,016, filed Jun. 6, 2003, Carl G. de Marcken and Justin Boyan. |
+Cited By (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20130166501A1 (en) * | 2011-12-22 | 2013-06-27 | David-Olivier Saban | Method and system for data filing systems |
+US8700565B2 (en) * | 2011-12-22 | 2014-04-15 | Amadeus S.A.S. | Method and system for data filing systems |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20040249798A1 (en) | 2004-12-09 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US20040249682A1 (en) | Filling a query cache for travel planning | |
+US7840587B2 (en) | Query caching for travel planning systems | |
+US20040249683A1 (en) | Query widening for query caches for travel planning systems | |
+US20040249799A1 (en) | Query caching for travel planning systems | |
+US8781864B2 (en) | Anticipatory presentation of travel information | |
+US7562027B1 (en) | Availability processing in a travel planning system | |
+CN104471573B (en) | Update the database query result of cache | |
+EP2842085B1 (en) | Database system using batch-oriented computation | |
+US20080167887A1 (en) | Anticipatory presentation of travel information | |
+US20080168093A1 (en) | Providing travel information using a layered cache | |
+US20090271226A1 (en) | Cache poller for providing travel planning information | |
+US20060149713A1 (en) | System, method, and computer program product for improving accuracy of cache-based searches | |
+US20080167886A1 (en) | Detecting errors in a travel planning system | |
+US20080167909A1 (en) | Updating a database of travel information | |
+US20080167906A1 (en) | Support for flexible travel planning | |
+WO2008086154A2 (en) | Providing travel information using a notification service | |
+US20080167908A1 (en) | Notification service for presenting travel information | |
+US20080167912A1 (en) | Providing travel information using cached summaries of travel options | |
+US20080167910A1 (en) | Providing travel information using a notification service | |
+EP2698729B1 (en) | Updating cached database query results | |
+WO2008086153A2 (en) | Providing travel information using cached summaries of travel options |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: ITA SOFTWARE, INC., MASSACHUSETTSFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:DEMARCKEN, CARL G.;BOYAN, JUSTIN A.;REEL/FRAME:014544/0401;SIGNING DATES FROM 20030904 TO 20030922 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: ITA SOFTWARE LLC, DELAWAREFree format text: CHANGE OF NAME;ASSIGNOR:ITA SOFTWARE, INC.;REEL/FRAME:026768/0268Effective date: 20110609 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:ITA SOFTWARE LLC;REEL/FRAME:026817/0482Effective date: 20110817 |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044101/0405Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552)Year of fee payment: 8 |
+|
+FEPP | Fee payment procedure |
+Free format text: MAINTENANCE FEE REMINDER MAILED (ORIGINAL EVENT CODE: REM.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+LAPS | Lapse for failure to pay maintenance fees |
+Free format text: PATENT EXPIRED FOR FAILURE TO PAY MAINTENANCE FEES (ORIGINAL EVENT CODE: EXP.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCH | Information on status: patent discontinuation |
+Free format text: PATENT EXPIRED DUE TO NONPAYMENT OF MAINTENANCE FEES UNDER 37 CFR 1.362 |
+|
+FP | Lapsed due to failure to pay maintenance fee |
+Effective date: 20221123 |

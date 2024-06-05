@@ -1,0 +1,449 @@
+US7287144B2 - Hit ratio estimation device, hit ratio estimation method, hit ratio estimation program and recording medium - Google Patents
+Hit ratio estimation device, hit ratio estimation method, hit ratio estimation program and recording medium Download PDFInfo
+- Publication number
+- US7287144B2 US7287144B2 US10/970,857 US97085704A US7287144B2 US 7287144 B2 US7287144 B2 US 7287144B2 US 97085704 A US97085704 A US 97085704A US 7287144 B2 US7287144 B2 US 7287144B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- session
+- hit ratio
+- value
+- data reading
+- cache
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Fee Related, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/90—Details of database functions independent of the retrieved data types
+- G06F16/95—Retrieval from the web
+- G06F16/957—Browsing optimisation, e.g. caching or content distillation
+- G06F16/9574—Browsing optimisation, e.g. caching or content distillation of access to content, e.g. by caching
+Definitions
+- the present invention relates to a hit ratio estimation device for estimating the information regarding a hit ratio of a cache upon a Web page transmission request from a client in a Web server with the cache, a hit ratio estimation method, a hit ratio estimation program and a recording medium, and more particularly to a hit ratio estimation device for estimating the information regarding a hit ratio of a cache upon a Web page transmission request while making a Web server active and suppressing the overhead, a hit ratio estimation method, a hit ratio estimation program and a recording medium.
+- JMS Java ⁇ Message Service
+- a database, JMS (Java ⁇ Message Service) server is defined as an external storage unit to provide data of HTTP session with permanence, and session data is read out through a session data cache prepared for each Web application.
+- JMS Java ⁇ Message Service
+- PMI Data Counter a statistical quantity regarding the performance held by the IBM Web server, the cache hit ratio is estimated when the cache size is changed, and the appropriate cache size is obtained.
+- a device of patent document 1 is concerned with a cache interposed between CPU and main storage but not the cache of server.
+- the cache system option direct map/set associative
+- the cache line size are settable to enable the application itself to maximize the hit ratio so that an application may know the hit ratio during execution of a job.
+- a device of patent document 2 is concerned with a cache of server, in which the empirical expression f(x) regarding the occurrence number includes a predetermined feature parameter, the size and entry number of session data actually employed in the total size of cache are recorded at regular intervals, the occurrence order x and the occurrence number f(x) corresponding to x are obtained based on the recorded data, the predetermined feature parameter is detected based on the obtained value of f(x), the cache hit ratio and the entry number S are estimated from the feature parameter, and an appropriate cache size is calculated based on the estimated cache hit ratio and entry number S.
+- the empirical expression f(x) regarding the occurrence number includes a predetermined feature parameter
+- the size and entry number of session data actually employed in the total size of cache are recorded at regular intervals
+- the occurrence order x and the occurrence number f(x) corresponding to x are obtained based on the recorded data
+- the predetermined feature parameter is detected based on the obtained value of f(x)
+- a device of patent document 3 does not involve the cache of the server but involves the cache interposed between CPU and main storage.
+- the block size of cache is virtually changed during execution of application, to calculate the hit number, and decide the size of data transfer based on the hit number, thereby improving the hit ratio of cache.
+- a device of patent document 4 does not involve the cache of the server but involves the cache interposed between CPU and main storage.
+- the total execution clock number for a program of evaluation object is obtained in consideration of the cache hit ratio.
+- Patent Document 1
+- Patent Document 2
+- HTTP session data has such a permanence that even when one server is down in the cluster configuration, a session processed by one server is taken over by another server.
+- JMS server defined as an external storage unit, each server makes reference or update of session data through a session data cache prepared for each Web application.
+- the session data has a paired set of attribute and value (e.g., user ID and its value). Reference is made to the attribute value, and the attribute value is updated. However, whether reference or update, it is firstly required that the session data is taken out, whereby the same operation is performed for the cache. That is, getSession( ) is a method for getting session data, in which it is a concern that the session data is hit in the cache at the time, but it does not matter for the cache whether the content of session data after extraction is referred to or updated.
+- getSession( ) is a method for getting session data, in which it is a concern that the session data is hit in the cache at the time, but it does not matter for the cache whether the content of session data after extraction is referred to or updated.
+- the cache size To improve the performance of server, it is required to set the cache size to an appropriate value.
+- the optimal size since the optimal size is different with the arrival pattern of HTTP request to the Web application, the optimal size must be decided based on not only the structure of application but also the access pattern during operation.
+- the performance index such as cache hit ratio is relatively easily obtained through the simulation by analyzing the features, when the cache size is changed. Taking the detailed log during operation causes a large overhead and is virtually impossible.
+- the IBM Web server has PMI that is defined as a data collection function of the performance index during operation, and holds various kinds of statistical amount (PMI Data Counter) with relatively small overhead (about 2% at the normal setting). If the cache hit ratio is accurately evaluated from this PMI data counter, the access pattern during operation is reflected and evaluated.
+- the statistical amounts regarding the PMI session include the number of reading the session data, and the average and variance of time intervals.
+- reading the session data does not occur once for each HTTP request, but when one Servlet calls another Servlet or JSP, there is a possibility that session data reading may occur multiple times, the time interval being very short. Accordingly, the measured time interval contains a large deviation, and if the average value and variance held by the PMI are directly employed, the correct evaluation is difficult to attain.
+- the number of reading depends on data, but the number of data reading sessions is often not known by analyzing the Servlet or JSP, except during execution.
+- the hit ratio or hit number involves reading all the session data, in which when session data are read for multiple times one HTTP request, the hit ratio only for the first data reading session is not detectable while the overhead is suppressed.
+- the device of patent document 2 calculates the appropriate cache size, but the empirical expression regarding the occurrence number is defined as requisite, whereby it is difficult to apply it to the case where the hit ratio only for the first data reading session for each Web page transmission request is detected while the overhead is suppressed.
+- FIG. 1 is a diagram showing the relationship between a predetermined Web server and plural clients that are connected over the network;
+- FIG. 2 is a diagram showing a temporal distribution of data reading sessions in one session
+- FIG. 3 is an explanatory diagram showing that the hit ratio by parameter conversion and the hit ratio by observation are defined by a relational expression
+- FIG. 4 is a functional block diagram showing a hit ratio estimation device
+- FIG. 5 is a detailed functional block diagram showing true value searching means
+- FIG. 6 is a detail functional block diagram showing simulation means
+- FIG. 7 is a flowchart showing a hit ratio estimation method
+- FIG. 8 is a detailed diagram of a searching step by a fix point computing method of FIG. 7 ;
+- FIG. 9 is a first specific flowchart showing a simulation step
+- FIG. 10 is a second specific flowchart showing the simulation step
+- FIG. 11 is a third specific flowchart showing the simulation step
+- FIG. 12 is a hardware configuration diagram for executing the program
+- FIG. 13 is a functional block diagram of a hit ratio estimation device mounted for the purpose of optimizing the size of a session cache in an IBM Web server in a cache configuration adviser project;
+- FIG. 14 is a table listing the parameters of a model computed from the measured values of PMI in a first experiment
+- FIG. 15 is a graph showing the relationship between a hit ratio observed value in a first experiment and a hit ratio estimated by simulation based on the first experimental data;
+- FIG. 16 is a table showing the parameters of a model computed from the measured values of PMI in a second experiment
+- FIG. 17 is a graph showing the relationship between a hit ratio observed value in the second experiment and a hit ratio estimated by simulation based on the second experimental data.
+- FIG. 18 is a table showing a locality factor estimated from the hit ratio observed value in the first and second experiments.
+- This invention provides a hit ratio estimation device for estimating a hit ratio in a session data cache, in which a Web server sets up said session data cache of preset size for each Web application, reads said session data from said session data cache or a permanent store, depending on whether a cache hit for session data in said session data cache or a cache miss, and refers to or updates an attribute value of read data.
+- a leave probability as the reciprocal of an average value of the number of data reading sessions per session is defined as p 1
+- the time interval of data reading sessions adjacent to each other in a time axis direction within the same session is called a think time
+- the average value and variance of the think time are defined as m and s 2
+- the cache hit ratio for data reading sessions is defined as r.
+- the Web server mounts one or more counters for counting predetermined count information capable of calculating p 1 , m, s 2 and r.
+- One or more data reading sessions corresponding to one Web page transmission request within the same session are called a group of data reading sessions, and a first data reading session among said group of data reading sessions is called a first reading session of the group of data reading sessions.
+- the hit ratio estimation device estimates the hit ratio ra in the cache only for the first reading session of the group of data reading sessions.
+- This invention provides a hit ratio estimation method for estimating a hit ratio in a session data cache, in which a Web server sets up said session data cache of preset size for each Web application, reads said session data from said session data cache or a permanent store, depending on whether a cache hit for session data in said session data cache or a cache miss, and refers to or updates an attribute value of read data.
+- a leave probability as the reciprocal of an average value of the number of data reading sessions per session is defined as p 1
+- the time interval of data reading sessions adjacent to each other in a time axis direction within the same session is called a think time
+- the average value and variance of the think time are defined as m and s 2
+- the cache hit ratio for data reading sessions is defined as r.
+- the Web server mounts one or more counters for counting predetermined count information capable of calculating p 1 , m, s 2 and r.
+- One or more data reading sessions corresponding to one Web page transmission request within the same session are called a group of data reading sessions, and a first data reading session among said group of data reading sessions is called a first reading session of the group of data reading sessions.
+- the hit ratio estimation method involves estimating the hit ratio ra in the cache only for the first reading session of the group of data reading sessions.
+- the invention provides a hit ratio estimation program that is executed on a computer to perform each step of said hit ratio estimation method as described above and in the embodiments as hereinafter described. Or the hit ratio estimation program of the invention may enable the computer to operate as each means of the hit ratio estimation device as described above and in the embodiments.
+- the invention provides a computer readable recording medium that records said hit ratio estimation program.
+- the precise hit ratio and the appropriate cache size can be detected for the Web application.
+- the counter for measuring the hit ratio for the first reading session of the group of data reading sessions is not installed, but the counter is capable of calculating the hit ratio for all the session data reading, whereby the overhead is reduced.
+- FIG. 1 is a diagram showing the relationship between a predetermined Web server 10 and plural clients 11 , 11 , . . . that are connected over a network.
+- This Web server 10 has internally a session data cache 12 assigned in a preset size for each Web application, and has a permanent store 13 consisting of a database and a JMS server, which is defined as an external storage.
+- the Web server 10 accepts an HTTP request as a Web page transmission request from a plurality of clients 11 , 11 , . . . via the Internet 15 , and transmits an HTML file as a Web page display file corresponding to the accepted HTTP request to the client 11 , 11 , having issued the HTTP request.
+- the Web server 10 reads session data required for creation of the HTML file from a session data cache 12 as a general rule, and reads it from a permanent store 13 only when a cache miss occurs.
+- the permanent store 13 may be connected via the Internet 15 to the Web server 10 .
+- the locality of reading the HTTP session data occurs when a servlet calls another servlet, or JSP retrieves the output of another JSP to read session data in one HTTP request many times.
+- a PMI data counter computes a statistical quantity by monitoring the session data that are defined as independently read session data.
+- a parameter (a locality factor a as will be described later) representing this locality (how many times reference or update is consecutively called for one HTTP request) is introduced, and the statistical quantity of a PMI data counter (PMI Data Counter) is appropriately converted to obtain the hit ratio of correct cache.
+- the locality factor is estimated by a well-known fix point computing method, employing the current hit ratio obtained from the PMI data counter.
+- the distribution of data reading sessions has locality.
+- one or more session data readings are issued for one HTTP request as one Web page transmission request, plural session data readings corresponding to the same HTTP request have short time interval, temporally dense session data readings constitute group of data reading sessionss G 1 , G 2 , G 3 , . . .
+- the first data reading session is denoted by O 1
+- session data reading at the second time and beyond is denoted by O 2 .
+- ag (number of O 1 +number of O 2 ) in each group of data reading sessions G 1 , G 2 , G 3 , G 4 is 3, 4, 3, 2.
+- the locality as seen in the reference or update pattern of session data has a feature that a multiplicity of very short time intervals occurs in the time interval for which HTTP request arrives.
+- pattern of session data read instruction pattern for execution of data reading sessions
+- the hit ratio is considered as 100%.
+- the session data reading at the second time and beyond is temporarily ignored, and if the session data reading O 1 at the first time, defined as the session data reading pattern, is only dealt with, it is possible to reduce excessive deviations in the temporal distribution considerably.
+- LFU Least Frequently Used
+- LRU Least Recently Used
+- the average value of ag is defined a.
+- PMI the statistical quantity including the session data reading O 2 at the second time and beyond is held.
+- the time interval of the first data reading session O 1 is equal to the time interval of HTTP request from one user, and called as a think time.
+- the reciprocal of an average visit number at which the user visits the Web application in one session is defined as a leave probability, the following parameter conversion Fa is required by introducing the locality factor a.
+- p 1 , m and s 2 are leave probability, the average value and variance of the think time for reading all session data in one session
+- p 1 a , ma and s 2 a are leave probability, the average value and variance of the think time for reading the first session data in one session.
+- FIG. 3 is an explanatory diagram showing that the hit ratio ra by the parameter conversion Fa and the hit ratio by observation are defined by a relational expression.
+- the relationship between the explanatory view of FIG. 3 and the fix point computing method will be described below.
+- a procedure for computing new a by defining a function of a is considered, because a is obtained in the fix point computation.
+- a function for obtaining ra clockwise from a left upper part is defined as simulation (Fa (m, s 2 , p 1 )).
+- the hit ratio for any cache size is evaluated based on the locality factor.
+- the locality factor may be decided only at the time of execution, in which if the locality factor is estimated by some method, the applicable range is extended.
+- the locality factor is estimated employing the current hit ratio.
+- the new value of a is obtained from ra and r, employing the above relation, in which ra is computed from the initial value (e.g., 1) of appropriate locality factor a.
+- This procedure is defined as procedure 1 below. The procedure 1 is repeated until the value of a converges, whereby the locality factor a is estimated.
+- FIG. 4 is a functional block diagram showing a hit ratio estimation device 20 .
+- the Web server 10 sets up a session data cache of preset size for each Web application, reading the session data from the session data cache and the permanent store 13 , depending on whether a cache hit for session data in the session data cache or a cache miss, and referring to and updating an attribute value regarding read data.
+- a leave probability that is a reciprocal of an average value of the number of data reading sessions per session is defined as p 1
+- the time interval between session data reading adjacent to each other in a time axis direction within the same session is called a think time
+- the average value and variance of the think time are defined as m and s 2
+- the cache hit ratio for session data reading is defined as r.
+- the Web server 10 has one or more counters for counting predetermined count information capable of calculating p 1 , m, s 2 and r.
+- One or more session data readings corresponding to one Web page transmission request within the same session are called a group of data reading sessions, and a first data reading session among the group of data reading sessions is called a first reading session of the group of data reading sessions.
+- the hit ratio estimation device 20 estimates a hit ratio ra in the session data cache 12 only for the first reading session of the group of data reading sessions.
+- the hit ratio estimation device 20 comprises computational expression setting means 21 , true value searching means 22 and estimation means 23 .
+- a leave probability p 1 a , average value ma of think time and variance s 2 a of think time are defined only for the first reading session of the group of data reading sessions, and the average value of the number of data reading sessions included in the group of data reading sessions is defined as a.
+- Estimation means 23 estimates ra based on searched value of a.
+- the hit ratio estimation device 20 will be described below. The following individual specific constitution may be added to the hit ratio estimation device 20 of FIG. 4 in any combination.
+- FIG. 5 is a detailed functional block diagram showing the true value searching means 22 .
+- the true value searching means 22 comprises first computing means 28 , second computing means 29 , third computing means 30 , determination means 31 , output creating means 32 and original value replacing means 33 .
+- the first computing means 28 performs a computation based on the first computational expression upon input of original value of a.
+- the second computing means 29 performs a computation based on the second computational expression upon inputs of p 1 a , ma and s 2 a from the first computing means 28 .
+- the third computing means 30 performs a computation based on the third computational expression upon input of ra from the second computing means 29 .
+- the determination means 31 determines whether or not the new value of a is recognized as the almost true value of a.
+- the output creating means 32 creates the new value of a as output of the true value searching means 22 , if the determination result is “positive”.
+- the original value replacing means 33 appends the new value of a as the original value of a to the first computing means 28 , if the determination result is “negative”.
+- the determination means 31 determines that the answer is “positive” if the absolute value of a difference between original value of a and new value of a is smaller than a predetermined value, and “negative” if the absolute value is greater than or equal to the predetermined value.
+- the first computing means 28 has the first original value of a as a preset initial value.
+- the second computing means 29 comprises simulation means 37 ( FIG. 6 ) for obtaining the new value of a by simulating the scheme of the session data cache in the Web server.
+- FIG. 6 is a detail functional block diagram showing the simulation means 37 .
+- the Web server 10 mounts one or more counters for counting count information capable of calculating a probability distribution (e.g., normal distribution N(m, s 2 )) for the time interval at which the user visits the Web server, and a probability PI at which the user notifies an explicit log-out to the Web server 10 .
+- the simulation means 37 comprises trigger means 38 , user simulation means 39 , observation means 40 , and observation hit ratio output means 41 .
+- the trigger means 38 generates a trigger based on the time interval probability distribution.
+- the user simulation means 39 simulates session data reading based on the probability distribution with ma and s 2 a , p 1 a and PI in each simulation session, the simulation session being started upon a trigger.
+- the observation means 40 observes the cache hit for session data reading in the user simulation means.
+- the observation hit ratio output means 41 outputs ra during simulation period based on observation of the observation means 40 .
+- the user simulation means 39 defines the number of data reading sessions in each session with a Markov model.
+- FIG. 7 is a flowchart showing a hit ratio estimation method.
+- leave probability p 1 a average value ma of think time, and variance s 2 a of think time are defined only for the first reading session of the group of data reading sessions, and the average value of the number of data reading sessions included in the group of data reading sessions is defined as a.
+- ra is estimated based on search value of a.
+- FIG. 8 is a detailed flowchart showing step S 46 by the fix point computing method of FIG. 7 .
+- S 46 has S 52 to S 57 .
+- a computation is performed based on the first computational expression upon input of original value of a.
+- a computation is performed based on the second computational expression upon inputs of p 1 a , ma and s 2 a from S 52 .
+- a computation is performed based on the third computational expression upon input of ra from S 53 .
+- it is determined whether or not the new value of a is recognized as the almost true value of a. If the determination result is “positive”, the new value of a is made as output of S 46 at S 56 . Also, if the determination result is “negative” at S 55 , the new value of a is made as the original value of a, and the operation returns to S 52 .
+- the first original value of a is a preset initial value.
+- a simulation step ( FIGS. 9 to 11 ) for calculating the new value of a by simulating the scheme of the session data cache in the Web server 10 is included.
+- FIGS. 9 to 11 are the specific flowcharts of simulation steps. The simulation steps are decomposed into three routines corresponding to FIGS. 9 to 11 . Routines regarding flowcharts of FIGS. 9 and 11 are executed upon time interrupt. A routine regarding a flowchart of FIG. 10 is an interrupt routine executed upon occurrence of a predetermined trigger in FIG. 10 .
+- a trigger is generated based on the time interval probability distribution (e.g., normal distribution N(m, s 2 )). That is, at S 61 , it is determined whether or not a trigger occurrence time occurs based on the time interval probability distribution. If the determination result is “positive”, a trigger is generated at S 62 . This trigger causes the routine of FIG. 10 to be executed.
+- the time interval probability distribution e.g., normal distribution N(m, s 2 )
+- the routine of FIG. 10 is executed for each simulation session, and consequently executed by the number of sessions in the simulation over one simulation.
+- the routine starts the simulation session based on the trigger, in which each simulation session simulates session data reading based on the probability distribution with ma and s 2 a , p 1 a and PI. That is, at S 65 , the simulation session is started upon the trigger.
+- Each simulation session simulates session data reading based on the probability distribution with ma and s 2 a , p 1 a and PI.
+- the session data reading in the corresponding simulation session is simulated.
+- the hit ratio ra in simulation period is output based on the result of observing the cache hit in the session data reading in simulating the session data reading (S 65 to S 67 ). That is, at S 70 , it is determined whether or not the simulation at the present time is ended, based on whether or not the simulation time reaches a predetermined value, or the number of executing the simulation session reaches a predetermined value, for example. If the determination result is “positive”, the hit ratio ra is output at S 71 .
+- the number of reading the session data in each session is defined with a Markov model.
+- This invention is implemented as hardware, software, or a combination thereof.
+- a predetermined program is executed in a computer system as a typical example.
+- the predetermined program is loaded into the computer system and executed to control the computer system to perform the processings of the invention.
+- This program has groups of instructions that are representable in any language, code and notation. The groups of instructions are executed after the system performs a particular function directly, or one or both of 1) conversion into another language, code or notation and 2) copying into another medium.
+- this invention covers not only the program itself, but also the medium recording the program in its scope.
+- the program for performing the functions of the invention may be stored in any computer readable recording medium such as a flexible disk, MO, CD-ROM, DVD, hard disk unit, ROM, MRAM or RAM.
+- This program may be downloaded from another computer connected via a communication line, or copied from another recording medium for storage into the recording medium. Also, this program may be compressed, or divided into plural pieces, and stored in a single recording medium or plural recording media.
+- FIG. 12 is a diagram showing the hardware configuration for executing the program.
+- a hit ratio estimation program for executing each step (including a sub-step) of the hit ratio estimation method on the computer is executed, employing the hardware as shown in FIG. 12 , for example.
+- the program for enabling the computer to operate as each means of the hit ratio estimation device 20 is executed, employing the hardware as shown in FIG. 12 , for example.
+- a CPU 81 , a main storage unit 82 and an input/output control unit 83 are connected to a system bus 80 .
+- the above means or step is executable as a coded program.
+- the input/output control unit 83 comprises a hard disk interface, in which various kinds of programs executed by the CPU 81 are stored in the hard disk unit.
+- the program is stored in the main storage unit 82 , before execution in the CPU 81 .
+- the CPU 81 sequentially reads instruction lines from the main storage unit 82 to execute the program.
+- FIG. 13 is a functional block diagram of the hit ratio estimation device 90 mounted for the purpose of optimizing the size of a session cache in the IBM Web server in a cache configuration adviser (Cache Configuration Advisor) project.
+- this hit ratio estimation device 90 a session data reading pattern and an actual behavior of the cache are modeled, with a function of calculating the hit ratio with the cache size given by simulation defined as a nucleus.
+- the hit ratio estimation device has three components 91 to 93 , in which the components 91 and 92 are parts for modeling the session data reading pattern, and a component 93 is a part for modeling the behavior of cache.
+- the PMI data for deciding the parameters of the components 91 and 92 is employed.
+- Trigger generator 91 the time interval (trigger Rate) at which new user visits is defined with probability distribution.
+- the probability distribution may be an exponential distribution (m 1 , s 1 ), for example.
+- the maximum event in one simulation is supposed to be 100,000.
+- User model (User Model) 92 the leave probability (leaveProbability) as the reciprocal of the number of referring to session data by one user (i.e., number of perusing the Web page) is defined with a simple Markov model, and the think time (thinkTime) as the time interval of reference is defined by a probability distribution (e.g., normal distribution (m 2 , s 2 )). Also, a probability (invalidateProb) of invalidating session data explicitly when leaving the Web site (corresponding to logout) is given. The invalidate probability is conditional probability, and indicates the rate of logging out explicitly when the user leaves the Web site, in which an invalidate set is completely included in a leaving set. Also, invalidating explicitly means pressing the link of logout (if any).
+- LRU cache (LRU Cache) 93 the cache for session data with LRU as replacement algorithm is modeled.
+- the cache size is 500, and the time out is 1,800 seconds.
+- the LRU cache and the cache size are given in the number of units as shown in FIGS. 14 to 18 .
+- the application server is mounted with Java ⁇ (registered trademark), and the cache object is Java ⁇ object.
+- Java ⁇ since the memory area can not be explicitly managed, the maximum number of cache objects is specified. Of course, the size of each object is not decided, whereby the total amount of consumed memory is indefinite.
+- the estimated value of ra is output from the LRU cache.
+- the PMI data counter regarding the session is defined as the statistical amount in the following.
+- a data counter (Data Counter) giving the average value internally holds the number of measurements, sum, square sum, maximum value and minimum value, whereby the variance is calculated.
+- the left side of “:” is data counter name and the right side is counting data.
+- createdSessions number of created sessions
+- activeSessions number of concurrently active sessions. When the IBM Web server processes a request for using a session at present, the session is active.
+- liveSession number of sessions put into cache of memory at the same time.
+- cacheDiscards number of session objects compulsorily removed from the cache (LRU removes the old entry and secures a space for new session and cache miss.) Only applicable to persistent session.
+- externalReadTime time taken to read session data from the permanent store (milliseconds). In the plural line session, metric is for attribute, and in a single line session, metric is for whole session. Only applicable to persistent session.
+- JMS permanent store When JMS permanent store is employed, the user can select whether or not copied data is serialized. When the user selects not to serialize the data, the counter is not used.
+- externalReadSize size of session data read from the permanent store. Only applicable to (serialized) persistent session. Same as externalReadTime.
+- externalWriteTime time taken to write session data from the permanent store (milliseconds). Only applicable to (serialized) persistent session. Same as externalReadTime.
+- affinityBreaks number of requests received in session accessed lastly from another Web application.
+- serializableSessObjSize size (bytes) of session (with serializable attribute) in memory. Only count session object including at least one serializable attribute object. Note that serializable attribute and unserializable attribute may be contained in one session. Size (bytes) is at the session level.
+- timeSinceLastActivated time difference (milliseconds) in time stamp between previous access time and current access time. Session time out is not included.
+- InvalidatedViaTimeout number of session requests in which CountStatistic does not exist possibly due to session time out.
+- attemptToActivateNotExistentSession number of session requests not existent possibly due to session time out. This counter is usable to check whether the time out is too short or not.
+- the simulation model is obtained in the following way.
+- this model identifies an action of the user referring to the Web page with an action of the user referring to or updating session data. Accordingly, since it is not supposed that reference or update of session data occurs locally concentratively, there is a disparity between the hit ratio estimated by simulation and the actual hit ratio.
+- FIGS. 14 and 15 involve the first experiment (test case 1) and FIGS. 16 and 17 involve the second experiment (test case 2)) were performed, and the PMI data counter values were acquired for every 10 seconds with Tivoli Performance Monitor at the same time, whereby the hit ratio was obtained by simulation from the acquired values.
+- FIGS. 11 and 13 are tables showing the model parameters computed from the measured values of PMI
+- FIGS. 15 and 17 are graphs showing the hit ratio (polygonal line) estimated by simulation and the actually measured value (1 sign).
+- the solid line, broken line and dashed line represent the hit ratio in simulation when the hit ratio is 1.0, 2.0 and 3.0.
+- FIG. 18 is a table showing the results of estimating the locality factor employing the hit ratio obtained by the above experiment and the hit ratio by simulation.
+- the think time and the leave probability after conversion are also listed with value a. From the experimental conditions, the correct values are attained such that the average think time is 10 seconds, the variance (SD) is 5.74, and the leave probability is 6%, and shown in the last line for comparison. Also, the test case with * affixed after test case name is that the repeated estimation was not converged and stopped beyond a permissible range of the locality factor in FIG. 18 .
+- This invention involves the method for estimating the hit ratio of cache when the cache size is changed based on PMI as the data acquisition function mounted in the IBM Web server.
+- PMI collects the beneficial information within a range of relatively small overhead to acquire various kinds of statistical amounts from the active server. If the hit ratio is correctly evaluated from those information, the optimal cache size can be obtained at any time while the access pattern to the active server is being monitored online even when the access pattern is changed. Therefore, the system configuration regarding the HTTP session is optimized dynamically and adaptively.
+Abstract
+Description
+ma=a×m (1)
+s 2 a=a×(s 2+m 2)−m 2 a (2)
+p 1 a=a×p 1 (3)
+1−ra=a×(1−r) (4)
+externalReadSize: size of session data read from the permanent store. Only applicable to (serialized) persistent session. Same as externalReadTime.
+externalWriteTime: time taken to write session data from the permanent store (milliseconds). Only applicable to (serialized) persistent session. Same as externalReadTime.
+affinityBreaks: number of requests received in session accessed lastly from another Web application. This indicates a possibility of a fail over process or broken plug-in configuration.
+serializableSessObjSize: size (bytes) of session (with serializable attribute) in memory. Only count session object including at least one serializable attribute object. Note that serializable attribute and unserializable attribute may be contained in one session. Size (bytes) is at the session level.
+timeSinceLastActivated: time difference (milliseconds) in time stamp between previous access time and current access time. Session time out is not included.
+InvalidatedViaTimeout: number of session requests in which CountStatistic does not exist possibly due to session time out.
+attemptToActivateNotExistentSession: number of session requests not existent possibly due to session time out. This counter is usable to check whether the time out is too short or not.
+-
+- createdSessions (rate of increase)
+- invalidatedSessions (rate of increase)
+- sessionLifeTime (mean and variance)
+- externalReadTime (count and mean)
+- externalWriteTime (count and mean)
+- timeSinceLastActivated (count, mean and variance)
+- invalidatedViaTimeout (rate of increase)
+-
+- maxInMemorySessionCount: size of session cache
+- sessionTimeout: time since last reference till invalidation
+- writeInterval: time interval for asynchronous updating to external storage
+-
+- hitRatio: hit ratio
+1-externalReadTimeCount/timeSinceLastActivatedCount - invalidateRate: explicitly invalidated frequency
+invalidatedSessionsRate−invalidatedViaTimeoutRate - timeoutRate: invalidated frequency by time out
+invalidatedViaTimeoutRate - totalRate: total invalidated frequency of above two amounts
+invalidatedSessionsRate - userLifetime: total time for which the user visits the Web site
+(sessionLifeTimeMean*totalRate−timeoutInterval*timeoutRate)/totalRate - userLifetimeVar: userLifetime variance
+((sessionLifeTimeVar+sessionLifeTimeMean*sessionLifetimeMean)*totalRate−2*timeoutInterval*sessionLifeTimeMean*timeoutRate−timeoutInterval*timeoutInterval*timeoutRate)/totalRate - userLifetimeSD: userLifetime standard deviation
+sqrt(userLifetimeVar) - activeUser: average number of users visiting the Web site at a certain time
+userLifetime*createdSessionsRate - activeUserSD: variance of the number of users
+userLifetimeSD*createdSessionsRate - averageVisit: average number of times by which one user peruses the Web page
+userLifetime/timeSinceLastActivatedMean
+- hitRatio: hit ratio
+-
+- triggerRate: average time interval for which new session starts (new user arrives)
+1/createdSessionRate - leaveProb: probability at which the user leaves the Web site
+1/averageVisit - invalidateProb: probability at which session is invalidated explicitly when the user leaves the Web site
+invalidateRate/totalRate - userThinkTime: average time interval for which the user moves across the Web page
+timeSinceLastActivatedMean - userThinkTimeVar: time interval variance
+timeSinceLastActivatedVar
+- triggerRate: average time interval for which new session starts (new user arrives)
+- 10 . . . Web server
+- 12 . . . Session data cache
+- 13 . . . Permanent store
+- 19 . . . Counter
+- 20 . . . Hit ratio estimation device
+- 21 . . . Computational expression setting means
+- 22 . . . True value searching means
+- 23 . . . Estimation means
+- 28 . . . First computation means
+- 29 . . . Second computation means
+- 30 . . . Third computation means
+- 31 . . . Determination means
+- 32 . . . Output generating means
+- 33 . . . Original value replacing means
+- 37 . . . Simulation means
+- 38 . . . Trigger means
+- 39 . . . User simulation means
+- 40 . . . Observation means
+- 41 . . . Observation hit ratio output means
+Claims (18)
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+JP2003-386440 | 2003-11-17 | ||
+JP2003386440A JP4144005B2 (en) | 2003-11-17 | 2003-11-17 | Hit rate estimation device, hit rate estimation method, hit rate estimation program, and recording medium |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20050108327A1 US20050108327A1 (en) | 2005-05-19 |
+US7287144B2 true US7287144B2 (en) | 2007-10-23 |
+Family
+ID=34567410
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/970,857 Expired - Fee Related US7287144B2 (en) | 2003-11-17 | 2004-10-20 | Hit ratio estimation device, hit ratio estimation method, hit ratio estimation program and recording medium |
+Country Status (2)
+Country | Link |
+---|---|
+US (1) | US7287144B2 (en) |
+JP (1) | JP4144005B2 (en) |
+Cited By (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20070136238A1 (en) * | 2005-12-09 | 2007-06-14 | International Business Machines Corporation | System and method to improve processing time of databases by cache optimization |
+US20080071987A1 (en) * | 2006-09-20 | 2008-03-20 | International Business Machines Corporation | Cache Configuration in a Database System |
+US8549472B1 (en) * | 2007-06-12 | 2013-10-01 | Fair Isaac Corporation | System and method for web design |
+CN111932043A (en) * | 2020-10-12 | 2020-11-13 | 广州赛特智能科技有限公司 | Early warning method for robot distribution time |
+US20220050783A1 (en) * | 2018-12-21 | 2022-02-17 | Paypal, Inc. | Controlling Cache Size and Priority Using Machine Learning Techniques |
+Families Citing this family (8)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US9105005B2 (en) * | 2007-03-27 | 2015-08-11 | Jianqing Wu | Online computing system |
+US9330051B1 (en) * | 2007-11-27 | 2016-05-03 | Sprint Communications Company L.P. | Collection of web server performance metrics to a centralized database for reporting and analysis |
+JP5199165B2 (en) * | 2009-03-31 | 2013-05-15 | 株式会社エヌ・ティ・ティ・ドコモ | Communication terminal and communication control method |
+US9563532B1 (en) * | 2011-12-02 | 2017-02-07 | Google Inc. | Allocation of tasks in large scale computing systems |
+US10235399B2 (en) * | 2014-11-05 | 2019-03-19 | Hewlett Packard Enterprise Development Lp | Methods and systems for determining hardware sizing for storage array systems |
+CN108259528B (en) * | 2016-12-28 | 2021-01-12 | 华为技术有限公司 | Resource caching method and device |
+CN108616564A (en) * | 2018-03-08 | 2018-10-02 | 阿里巴巴集团控股有限公司 | The acquisition methods and device of data in the page |
+CN110955607B (en) * | 2019-12-16 | 2023-03-28 | 广州品唯软件有限公司 | Monitoring method, monitor and readable storage medium for simulation test tool |
+Citations (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH05225060A (en) | 1992-02-14 | 1993-09-03 | Nec Corp | Information processor |
+JPH10133902A (en) | 1996-10-29 | 1998-05-22 | Nec Yonezawa Ltd | Performance evaluating method for computer system |
+JP2000155713A (en) | 1998-11-24 | 2000-06-06 | Sony Corp | Cache size controller |
+JP2000250809A (en) | 1999-02-25 | 2000-09-14 | Nec Corp | Cache memory device |
+US6278449B1 (en) * | 1998-09-03 | 2001-08-21 | Sony Corporation | Apparatus and method for designating information to be retrieved over a computer network |
+US6546473B2 (en) * | 2001-05-29 | 2003-04-08 | Hewlett-Packard Company | Method for cache replacement of web documents |
+US20030088739A1 (en) * | 2001-11-02 | 2003-05-08 | John Wilkes | Adaptive data insertion for caching |
+US6651141B2 (en) * | 2000-12-29 | 2003-11-18 | Intel Corporation | System and method for populating cache servers with popular media contents |
+US20050071599A1 (en) * | 2003-09-30 | 2005-03-31 | Modha Dharmendra Shantilal | Storage system and method for dynamically allocating cache space among different workload classes |
+-
+2003
+- 2003-11-17 JP JP2003386440A patent/JP4144005B2/en not_active Expired - Fee Related
+-
+2004
+- 2004-10-20 US US10/970,857 patent/US7287144B2/en not_active Expired - Fee Related
+Patent Citations (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JPH05225060A (en) | 1992-02-14 | 1993-09-03 | Nec Corp | Information processor |
+JPH10133902A (en) | 1996-10-29 | 1998-05-22 | Nec Yonezawa Ltd | Performance evaluating method for computer system |
+US6278449B1 (en) * | 1998-09-03 | 2001-08-21 | Sony Corporation | Apparatus and method for designating information to be retrieved over a computer network |
+JP2000155713A (en) | 1998-11-24 | 2000-06-06 | Sony Corp | Cache size controller |
+JP2000250809A (en) | 1999-02-25 | 2000-09-14 | Nec Corp | Cache memory device |
+US6651141B2 (en) * | 2000-12-29 | 2003-11-18 | Intel Corporation | System and method for populating cache servers with popular media contents |
+US6546473B2 (en) * | 2001-05-29 | 2003-04-08 | Hewlett-Packard Company | Method for cache replacement of web documents |
+US20030088739A1 (en) * | 2001-11-02 | 2003-05-08 | John Wilkes | Adaptive data insertion for caching |
+US20050071599A1 (en) * | 2003-09-30 | 2005-03-31 | Modha Dharmendra Shantilal | Storage system and method for dynamically allocating cache space among different workload classes |
+Cited By (8)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20070136238A1 (en) * | 2005-12-09 | 2007-06-14 | International Business Machines Corporation | System and method to improve processing time of databases by cache optimization |
+US7512591B2 (en) * | 2005-12-09 | 2009-03-31 | International Business Machines Corporation | System and method to improve processing time of databases by cache optimization |
+US20080071987A1 (en) * | 2006-09-20 | 2008-03-20 | International Business Machines Corporation | Cache Configuration in a Database System |
+US7788449B2 (en) | 2006-09-20 | 2010-08-31 | International Business Machines Corporation | Cache configuration in a database system |
+US8549472B1 (en) * | 2007-06-12 | 2013-10-01 | Fair Isaac Corporation | System and method for web design |
+US20220050783A1 (en) * | 2018-12-21 | 2022-02-17 | Paypal, Inc. | Controlling Cache Size and Priority Using Machine Learning Techniques |
+US11934316B2 (en) * | 2018-12-21 | 2024-03-19 | Paypal, Inc. | Controlling cache size and priority using machine learning techniques |
+CN111932043A (en) * | 2020-10-12 | 2020-11-13 | 广州赛特智能科技有限公司 | Early warning method for robot distribution time |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20050108327A1 (en) | 2005-05-19 |
+JP2005149184A (en) | 2005-06-09 |
+JP4144005B2 (en) | 2008-09-03 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7287144B2 (en) | Hit ratio estimation device, hit ratio estimation method, hit ratio estimation program and recording medium | |
+US7912947B2 (en) | Monitoring asynchronous transactions within service oriented architecture | |
+Brevik et al. | Automatic methods for predicting machine availability in desktop grid and peer-to-peer systems | |
+Hu et al. | Web service recommendation based on time series forecasting and collaborative filtering | |
+US8612573B2 (en) | Automatic and dynamic detection of anomalous transactions | |
+CN112306881B (en) | Analog data generation method, device, equipment and storage medium | |
+KR20120039616A (en) | Generating test data | |
+JP2008536218A (en) | Computer system for creating probabilistic models | |
+US10411969B2 (en) | Backend resource costs for online service offerings | |
+CN110046155B (en) | Method, device and equipment for updating feature database and determining data features | |
+CA3167981C (en) | Offloading statistics collection | |
+JP2018165857A (en) | Analyzing apparatus, analyzing system, analyzing method, and analyzing program | |
+US8108350B2 (en) | End-to-end tracing for database applications | |
+JP2016058082A (en) | Method and system for selecting public data source | |
+US8732323B2 (en) | Recording medium storing transaction model generation support program, transaction model generation support computer, and transaction model generation support method | |
+KR101405309B1 (en) | Apparatus and method for estimation of disease transmission situation using social network service data | |
+KR20100119333A (en) | Apparatus and method for extracting user session information by realtime web log analysis | |
+KR100868852B1 (en) | Visiting hours measurement method in web log analysis system | |
+Jugo et al. | Analysis and evaluation of web application performance enhancement techniques | |
+US7873715B1 (en) | Optimized instrumentation of web pages for performance management | |
+US8949832B2 (en) | Techniques for workload toxic mapping | |
+CN113849576A (en) | Specific group analysis method and system based on knowledge graph | |
+Smith | Performance engineering for software architectures | |
+CN114185736B (en) | Active data-based anomaly monitoring method, device and medium | |
+CN114707729B (en) | Population quantity prediction method and device for old people, computer equipment and storage medium |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:HAMA, TOSHIYUKI;REEL/FRAME:015925/0496Effective date: 20040914 |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+SULP | Surcharge for late payment | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026894/0001Effective date: 20110817 |
+|
+REMI | Maintenance fee reminder mailed | ||
+LAPS | Lapse for failure to pay maintenance fees | ||
+STCH | Information on status: patent discontinuation |
+Free format text: PATENT EXPIRED DUE TO NONPAYMENT OF MAINTENANCE FEES UNDER 37 CFR 1.362 |
+|
+FP | Lapsed due to failure to pay maintenance fee |
+Effective date: 20151023 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044142/0357Effective date: 20170929 |

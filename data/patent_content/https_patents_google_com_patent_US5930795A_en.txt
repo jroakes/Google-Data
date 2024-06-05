@@ -1,0 +1,619 @@
+US5930795A - Supporting dynamic tables in SQL query compilers - Google Patents
+Supporting dynamic tables in SQL query compilers Download PDFInfo
+- Publication number
+- US5930795A US5930795A US08/786,603 US78660397A US5930795A US 5930795 A US5930795 A US 5930795A US 78660397 A US78660397 A US 78660397A US 5930795 A US5930795 A US 5930795A
+- Authority
+- US
+- United States
+- Prior art keywords
+- dynamic
+- time
+- actual
+- run
+- entity
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/242—Query formulation
+- G06F16/2433—Query languages
+- G06F16/2448—Query languages for particular applications; for extensibility, e.g. user defined types
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2453—Query optimisation
+- G06F16/24534—Query rewriting; Transformation
+- G06F16/24549—Run-time optimisation
+Definitions
+- This invention relates to a database management system for processing SQL queries for relational databases, and more specifically to compiling the queries and processing the queries at run-time where the queries reference a table entity that is unknown at compile time.
+- Databases are computerized information storage and retrieval systems.
+- RDBMS relational database management system
+- DBMS database management system
+- Relational databases are organized into tables which consist of rows and columns of data. The rows are formally called tuples.
+- a database will typically have many tables and each table will typically have multiple columns.
+- the tables are typically stored on random access storage devices (DASD) such as magnetic or optical disk drives for semi-permanent storage.
+- DASD random access storage devices
+- a DBMS is structured to accept commands to store, retrieve, and delete data.
+- One widely used and well known set of commands is called the Structured Query Language (SQL).
+- SQL Structured Query Language
+- the current SQL standard is known informally as SQL92.
+- a new proposed standard is referred to as SQL3.
+- An SQL query can declaratively specify the contents of a view.
+- a view is essentially a virtual table having virtual rows and virtual columns of data.
+- views can be used for retrieval as if the data they represent is actually stored.
+- a view can be used to present to a user a single logical view of information that is actually spread across multiple tables.
+- Tables are at the center of a relational database engine; and a major goal of the underlying query compiler is to provide a suite of mechanisms so that user data can be easily stored and efficiently manipulated.
+- a base table can be either user-defined for storing user data or system-defined for storing information about objects created in user databases.
+- User-defined base tables are created explicitly by means of the create table statement, while system-defined base tables, usually referred to as catalogs, are implicitly created at the time when a user database is created.
+- derived tables are defined in terms of existing base tables and other derived tables. They can be defined implicitly by the system or explicitly by users. Implicitly defined derived tables are created during the execution of table operations to store intermediate results, and explicitly defined derived tables are specified by users through the use of the create view statement.
+- DML Data Manipulation Language
+- SQL Data Manipulation Language
+- tables can be defined by means of a set-valued function written in SQL/PSM or in a host language such as C, C++, or Visual Basic.
+- This concept is referred to as a "table function". It not only provides a more general way to compose new tables from existing tables (than through the use of view definitions), but it also allows accesses to external data using the same query mechanisms. (However, it should be noted that the usage of external table functions is restricted so that data integrity can be guaranteed.)
+- the SQL92 standard and the upcoming SQL3 standard have defined various kinds of new table concepts that include: table functions, user-defined temporary tables, and table parameters and table result of table functions. These new table concepts create a new scenario of table usage.
+- the actual table entity referenced by a table reference can not be known at compile-time. Any such table that is unknown at compile time that is being referenced is referred to herein as a dynamic table.
+- Such a new table concept engenders a new challenge to both the existing query compiler for the treatment of un-resolved table references and to the existing run-time environment for the resolution of such references.
+- the SQL standards have defined various kinds of new table concepts that include table functions, user-defined temporary tables, and table parameters and table result of table functions. Also, it has been proposed that in a future release of the IBM DB2 Common Server that the standard trigger declaration be extended to allow the access of transition tables in the trigger body written in an external host language. For these new table concepts, referred to as dynamic tables herein, the actual table entity being referenced can not be known at compile-time. Hence, the system, method and program of this invention provides the capability for a dynamic table linkage to take place at run-time.
+- the system, method and program of this invention provides a generic framework for supporting dynamic tables in existing query compilers. All dynamic tables are viewed as table functions by the compiler. Broker functions are added into the run-time environment to establish the dynamic linkage.
+- the generic framework of the invention can be applied to support different types of dynamic tables including external transition tables, external table functions, user-defined temporary tables, and table parameters and table result.
+- the actual table object can not be identified at compile-time. This is different from base tables that are known. It is also different from derived tables that are known at compile time through redirection; since it is the compiler that creates the derived tables.
+- the signature (i.e., interface) of the table is known, such as the number and type of columns, but is not known where the table is or who produces the table at run-time.
+- the system, method and program of this invention addresses both the compile-time and run-time issues involved in this type of problem.
+- the compile-time issue is addressed by enhancing the existing parser representation (a query representation of a table (QTB) which is one type of object within the more general query graph model QGM) to indicate that the table object being referenced is a temporary object, i.e., a template of an actual table object not yet identified.
+- QTB query representation of a table
+- QGM temporary object
+- the run-time aspect of the invention addresses the issue of how dynamic tables can be implemented efficiently in a run-time environment.
+- the implication is that every part of the run-time environment may be affected in the sense that whatever operation is being performed has to be aware of each new kind of table and how to handle each type of table.
+- Each run-time operation is subjected to being examined to determine if the type of table has to be checked and how the operation will perform for each type of table.
+- the present invention minimizes, if not avoids, this type of overhead. Regardless of whether the table is a base table, derived table or a dynamic table including a table function, it will be derived into an extended table object (TAOB). Once a compiler generates an executable plan, there is only one representation for all types of tables, the extended TAOB.
+- the architecture of the invention herein is not difficult to implement, it minimizes any potential increase in overhead, and it provides favorable overall performance.
+- the compile-time and run-time components of the invention are as follows.
+- the query compiler will parse the table reference and create a parsed representation QTB for the table that includes an identification of the type of dynamic table.
+- the code generator will create executable plans containing temporary run-time table object representations (TAOB), from the parsed representations, that will also contain the type of dynamic table.
+- TAOB temporary run-time table object representations
+- the TAOB that is generated is basically a template for the TAOB of the actual table entity not yet known.
+- the TAOB is extended to provide for parameters that are definable at run-time, including a table ID of the actual table entity being referenced.
+- a dynamic broker routine is embedded in a run-time routine (e.g., the OPEN run-time routine) that checks the type of dynamic table in the template TAOB and dispatches control to a routine to perform the dynamic linking.
+- control is dispatched to one of a plurality of corresponding routines depending upon the type of dynamic table. That is, if it is a transition table, then a transition table specific linkage routine is implemented. If it is a global temporary table, then global temporary specific linkage routines are carried out.
+- the routine to which control is dispatched will use the extended TAOB to dynamically link the table reference to the actual table entity such as by looking for the actual TAOB at the top of a run-time stack or by looking up the actual table entity in a symbol table, depending upon the type of dynamic table. Once the actual table entity has been linked to the table reference, query processing continues as if that table were a base or derived table.
+- the process of table linkage takes place at run-time during an OPEN.
+- the cost associated with an OPEN is minimal since an OPEN operation occurs only once compared to a FETCH operation which occurs many, if not millions of, times per each OPEN. In this sense, there is virtually no impact on the existing run-time environment.
+- the system, method, and program of this invention provides a single unified architectural framework for supporting any type of dynamic table or table function.
+- the invention is integrated harmonically with the current run-time environment. The impact on the run-time support is minimal; and providing an extended table object to accommodate these dynamic tables is easy to support.
+- FIGS. 1A and 1B is an example to illustrate dynamic linking where FIG. 1A is at compile time and FIG. 1B is at run-time;
+- FIG. 2A is a query processing system
+- FIG. 2B illustrates a database management system in a networked environment
+- FIG. 3 illustrates the compile-time enhancements to the query processing system of FIG. 2 where dynamic tables are mapped to table functions and extended table objects (TAOBs);
+- TAOBs extended table objects
+- FIG. 4 illustrates the enhancements to the run-time system environment including the dynamic table broker
+- FIG. 5 illustrates extended TAOBs for transition tables
+- FIG. 6 is a run-time configuration and dynamic linking after trig1 is entered
+- FIG. 7 is a run-time configuration and dynamic linking after trig2 is entered.
+- FIG. 8 illustrates an extended TAOB for a global temporary table.
+- An SQL query processing system is described with reference to FIGS. 2A and 2B.
+- An application 201 issues SQL queries 203 that are parsed by the SQL parser component 205.
+- the parser 205 generates an internal representation of the query called a query graph, i.e. a data structure (query graph model, QGM) 206.
+- a parsed representation of a table is referred to as a QTB which is one type of object within the query graph model QGM.
+- the QGM 206 is passed to the query global semantics 212, the query rewrite component 207, and the plan optimization 216.
+- the query rewrite engine 207 applies transformations to rewrite the query. After the rewrite phase, 207, the query graph 206 is revised and used by the optimization phase 216.
+- Each query is then translated into an executable plan 219 through a threaded code generator 218.
+- FIG. 2B shows the context of the query engine 200 in a database management system (DBMS) 240 in a processing system 1 having memory 221 and at least one cpu 222.
+- the system 1 could be connected to other systems 2 via a network 230.
+- the application 201 could be resident on any of the systems 1, 2, in the network or could be any user connected to any one of the systems via input/output user interface devices (e.g., keyboard, display, etc.).
+- the system, method and program of this invention is applicable to any type of database management system whether it is contained within a single system or is within a networked environment including parallel processing systems, client/server processing systems, distributed systems, etc.
+- the invention herein is described in reference to relational database management systems, dynamic linking of external references is applicable and adaptable to other database systems including object oriented systems.
+- the system, method and program of this invention is also applicable to triggers.
+- the standard trigger declaration be extended to allow the access of transition tables in the trigger body written in external host languages as well as the SQL language.
+- Transition tables defined in the trigger declaration will be referenced in the external trigger body by their names as the way that they are referenced in SQL-only trigger bodies. Since the external trigger body is separately compiled from the trigger declaration by its host language processor, the SQL compiler will be invoked as before to prepare its embedded SQL statements.
+- the SQL compiler when a reference to the transition table is encountered at prep-time, the SQL compiler only knows about the column definitions of the transition table, without knowing when and how the table will be created. Following the dynamic binding convention used in programming languages, the SQL compiler will need to "mark" transition table references as unresolved and have them resolved at the time when the trigger body is given the actual table entities for execution. Such a new way of table references in external triggers can not be handled simply and efficiently by the present level of functionality in both the existing query compiler for dealing with transition table references and the run-time environment for resolving them.
+- T1 101 is a base table
+- T2 102 is a compiler-generated derived table for intermediate results
+- T3, 103 is a table which is created at run-time (such as a transition table or a global temporary table).
+- T2 and T3 have an attribute pointing to the real target table object, T2*, 112, and T3*, 113, respectively. This indirection is used so that when the actual target table is known, only the TAOB of T2*, 112, (or T3*, 113) has to be updated.
+- the exact target table, 121, of T1, 101 can be determined at compile time, while the real target table of T2, 102, and T3, 103, can not.
+- the data manager creates a temporary table, 122, for T2* and fills in the entity in its TAOB, 112.
+- the entity, 123, of T3*, 113 might have been created by some other plan, or other part of the run-time system, and a run-time support must establish the needed link.
+- This process of linking table references 103 to its real table entity 123, such as the case of T3, called dynamic linking, is the subject of the invention presented herein.
+- the system, method, and program of this invention provides a generic mechanism by which dynamic linking can be efficiently performed for various dynamic tables through aspects of their commonality.
+- a preferred embodiment of the invention uses the DB2 Common Server code base for table functions, external triggers, and global temporary tables.
+- the invention addresses compile-time issues and run-time issues associated with the problem of linking table references to their real table entity.
+- the compile-time issue involves the kind of representation QTB that the parser will generate.
+- a dynamic table reference can be viewed as an invocation to a table function whose functionality is fully determined by the type of the dynamic table. Therefore, by mapping a dynamic table reference to the representation of the corresponding table function during the parser component, the existence of dynamic tables can be made transparent to the other components of the compiler.
+- the run-time issue involves how the dynamic linking can be efficiently performed with minimal impact on the existing run-time environment.
+- a new functional component, dynamic broker is invoked to dynamically link unresolved table references.
+- the dynamic broker is invoked if and only if a dynamic table is manipulated (normally opened) for the first time. By this way, there is little impact on the existing run-time code.
+- a preferred embodiment will be discussed by illustrating in detail how transition tables and user-defined temporary tables can be supported using the framework of this invention.
+- the compile time support for dynamic tables is also discussed.
+- An extended run-time environment for the dynamic linkage of various dynamic tables is also shown and described.
+- the table function is generalized to cover the scenario of dynamic tables.
+- a table function is a function that produces a table. The function is typically written by a user in whatever language the user chooses, so it is sitting outside of the database. At compile time, the actual table object of the table function is not known. Different types of dynamic tables all share this same type of scenario. In this invention, all types of dynamic tables are unified by using table functions.
+- the compiler marks the QTB for a table function to classify the type of dynamic table that it is (e.g., a real table function, a transition table, a global temporary table, etc.). As shown in FIG.
+- each SQL statement is compiled into an access section (executable plan) that consists of a set of run-time objects operated by a thread of operators. From a dataflow's view point, the main logic of a thread is to progressively construct intermediate tables by applying its operators on the incoming tables which are already materialized. Therefore, all of the table objects of an access section form a directed graph where nodes are table objects.
+- a directed edge exists between two nodes if and only if they are dataflow-connected. For convenience, nodes that have no incoming edge are called terminal tables, and nodes with at least one incoming edge are called intermediate tables.
+- a terminal table corresponds to a base table.
+- a terminal table can also be a constant table, such as one from a constant VALUES clause.
+- An intermediate table corresponds to a derived table produced by table operations such as fetch, insert, delete, update, sort, join, etc. The execution of an access section proceeds bottom-up from the output of terminal tables to the output of the top table. Since terminal tables are pre-materialized tables, the access section is self-contained and fully specifies a materialization plan for the output table of an SQL statement.
+- a table object is a run-time descriptor for the corresponding table reference.
+- Some of the table attributes are known and set in the TAOB at compile-time (from the catalog or the SQL statement context). These table attributes include the table type and table ID of a base table, the active column buffer areas, the associated SARGable predicate, etc. (Note, a SARGable predicate is a predicate that can be pushed down to the DMS run-time for performance reasons.)
+- Some other TAOB attributes are used to keep track of the run-time state of a table, such as current record ID, number of fetched records, status of last operation, etc.
+- basic, base table specifics, temporary table specifics, and run-time are examples of the important table attributes grouped into four categories for the convenience of presentation: basic, base table specifics, temporary table specifics, and run-time.
+- Basic attributes apply to all types of TAOBs.
+- the type of a TAOB is indicated by the type attribute. Possible values of a type attribute are temporary and base. Regardless of its type, a TAOB also holds its own buffer area for the data accessed at run-time; the number -- of -- columns attribute and the column -- array attribute are used for this purpose.
+- Each created table in the system is associated with a table -- id, as an unique identification in the underlying database. For base tables, the table ID is known at compile-time and is set in the TAOB by the code generator. On the other hand, the actual table ID for a temporary table is set at run-time when the temporary table is actually created.
+- a base table TAOB In addition to the basic attributes, a base table TAOB always contains the schema name (schema -- name) and the table name (table -- name) of the subject table.
+- table operations are scan-based in the sense that the target table has to be scanned (relation scan or index scan) before the desired location can be located. Such operations include (but are not limited to) fetch, delete, update, sort and join.
+- DMS component of DB2 Common Server creates a handle structure at the time the target table is opened. This handle structure keeps track of the position-sensitive information at the data access level. Therefore, after a table is opened, the handle attribute will be used as the identification to the target table for scan-based operations.
+- the table ID is used exclusively as the identification of the target table.
+- record -- id attribute that keeps the last record id fetched.
+- status attribute that keeps the current status of the table operation, for example, table -- closed, table -- opened, record -- found, reset -- scan -- to -- group -- start, end -- of -- table, and end -- of -- group.
+- table functions take as inputs a set of "parameters" which are obtained at compile-time from the context of the SQL statement or from the system catalog. They are encapsulated in the underlying abstract representation and eventually recorded in the executable plan as part of the corresponding TAOB.
+- the kind of information that needs to be passed into the table function varies:
+- UOB function object
+- transition tables The type of transition table (old or new), the associated trigger name, and the associated base table name.
+- user-defined temporary tables The type of the temporary table (global, local, or declared local) and associated table name.
+- table parameters and table result The type of the parameter (in, out, inout, or result) and the column definitions of the parameter.
+- the present invention extends the TAOB as follows.
+- the type attribute is overloaded with new values.
+- a dynamic table descriptor, dt -- cb is also added to the TAOB as the common control block for dynamic tables. For base tables and derived tables, this is set to null.
+- the dynamic table descriptor contains the following information:
+- the subtype attribute is an extension to the table type.
+- the subtype attribute indicates whether it is an internal or an external table function.
+- the subtype takes one of the following values: input, output, inout, and result.
+- the subtype is either new or old.
+- the subtype of a user-defined temporary table can be either global, local, or declared local.
+- this attribute further describes the schema name and trigger name of the trigger where it is declared.
+- This attribute points to the UFOB function descriptor of the corresponding external function invocation.
+- FIG. 4 illustrates the extended run-time environment for supporting dynamic tables.
+- external table functions 453 are treated as one type of dynamic table 454.
+- operations on base tables and derived tables 451 will be processed as usual; i.e., the interpreter 460 invokes the corresponding RDS run-time routine 470 which will in turn invoke the DMS routines 480 to perform the necessary data access to the database files 491.
+- the interpreter 460 invokes the corresponding RDS run-time routine 470 which will in turn invoke the DMS routines 480 to perform the necessary data access to the database files 491.
+- the TAOBs of the subject tables have already "linked" to the corresponding table entity at compiled-time (for base tables) or at run-time (for derived tables), no special treatment is needed on behalf of the underlying table operation.
+- operations on dynamic tables can not be performed before the target TAOB is resolved to the desired table entity.
+- the broker component 402 in FIG. 4 carries out such a dynamic linking process for dynamic tables 454.
+- Table entities, base or derived, need to be created before any operation is applied.
+- Base tables are created by the time the underlying SQL statement is compiled. Therefore, the actual table ID is stored in the corresponding TAOBs by the query compiler.
+- derived tables are "computed" from other tables and hence are created at run-time when the table expression that defines the table is evaluated.
+- Table entities created for derived tables are also referred to as temporary tables, as they are dropped after the current statement is executed. Typically, temporary tables are implicitly created at the first time it is populated. The table ID of the temporary table being created is recorded in the TAOB so that it can be used, directly or indirectly, by the subsequent table operations.
+- the corresponding table Prior to the application of a table operation, the corresponding table has to be opened to render the per-operation working areas initialized on behalf of the current operation. This is accomplished by invoking the open table run-time routine, explicitly or implicitly.
+- This run-time routine will use the table ID obtained from the TAOB to invoke the lower-level DMS routines to initialize the aforementioned working areas. For convenience, pointers to these working areas are also recorded in the TAOB.
+- the open table run-time routine is invoked either explicitly from the interpreter for a fetch operation or implicitly from other run-time routines for scan-based table operations such as delete and update. Symmetric to the open table routine is the close table routine which is invoked at the end of a table operation to release the working areas.
+- Run-time routines for fetch, insert, delete, update, join, sort, etc, are invoked explicitly from the interpreter.
+- the interface between the interpreter and these routines is relational in that all the parameters represent some aspect of a relation or table. More precisely, the TAOBs identify the tables involved in the operation, the input buffer holds the tuple to be passed into the database engine, the output buffer holds the tuple retrieved by the database engine, and the predicate serves as a filter for the tuples accessed by the current table operation.
+- These routines will then communicate with the lower-level DMS routines using a file-oriented interface.
+- a dispatcher 404 is embedded in the very beginning of the open table 471 run-time routine. In other embodiments, the dispatcher may be embedded in any run-time routine.
+- This dispatcher 404 will check the type attribute of the TAOB 340, and will dispatch the control depending on the underlying table type. If the type indicates that it's a base table or a derived table operation 451, then nothing special needs to be done; it will proceed to exercise the existing logic.
+- the control will be passed to the external table function broker 401 which will render the table to be initialized (the open routine), the tuple to be produced (the fetch routine), or the table to be closed (the close routine).
+- the control is passed to the dynamic table broker 402 for the linkage of unresolved table references. After the table linkage is accomplished, the control will proceed as if the underlying table were a base table or a derived table.
+- the dynamic table broker 402 (FIG. 4) is responsible for resolving a dynamic table reference to the corresponding table entity which only becomes known at run-time.
+- the dynamic broker dispatches control at run-time to a linking routine depending upon the type of dynamic table. There is no explicit invocation of the broker.
+- the dynamic broker is invoked on demand when a dynamic table is opened for a table operation. It is built into the run-time for an OPEN table operation.
+- the first statement in the run-time routine for OPEN is an IF statement that tests whether there is a dynamic table and there is a need for a dynamic linkage. If there is, then a routine corresponding to the type of dynamic table is used to perform the dynamic linking.
+- the broker collaborates with the database engine to find the desired table entity to which the table reference will be dynamically linked.
+- the linkage between the table reference and the actual table entity is recorded by updating the table attributes of the TAOB with the information about the actual table entity.
+- the table ID of the table entity is always required in the dynamic linking process.
+- link -- transition -- table(), link -- user -- defined -- temporary -- table(), and link -- table -- parameter() perform the actual table linkage for a transition table reference, a user-defined temporary table reference, and a table parameter or a table result, respectively. It is the focus of the following two sections to describe in detail how the first two routines are implemented. It should be noted that although the preferred embodiment has a plurality of routines depending upon the table type, other embodiments could use just one routine to perform the dynamic linking.
+- Transition tables are temporary tables that capture the state of affected rows when the triggering SQL operation is applied to a table. More specifically, the old transition table contains the value of affected rows prior to the application of an update or a delete operation, and the new transition table contains the value of affected rows that will be (or were) used in an update or a insert operation.
+- the transition tables are created and populated with the rows that are determined by the type of the transition table, the triggering operation, and the current content of the subject table.
+- the TAOB of the transition table is marked by the query compiler as of type "transition table" 602 (FIG. 5).
+- the subtype 603 (new or old) of the transition table and the name of the associated trigger 606 and base table 604 are also recorded in the corresponding dynamic table descriptor 610.
+- the following example shows a create trigger statement whose transition tables are represented by the TAOB 601 in FIG. 5.
+- Transition tables are created and populated in the executable plan for the triggering SQL operation.
+- table fuh.mytbl consist of five rows, ⁇ (1, 100),(2, 10),(3, -1001), (4, 331), (5,-5) ⁇ , and fuh.mytrig be the trigger as shown in the previous example.
+- the following update statement will be "compiled" in-line with the trigger body of fuh.mytrig to produce a combined executable plan which will create the transition tables and get them populated by the value of affected rows. (It should be noted that in some implementations, a trigger body is compiled into an independent plan which is invoked through a function call from the executable plan of the triggering operation.) Therefore, the following update statement:
+- transition tables nt and ot will render the transition tables nt and ot to be created and populated with the following rows.
+- nt ⁇ (3, 1001), (5, 5) ⁇
+- transition tables are created in an executable plan different from those of the external trigger body. Therefore, they have to be recorded somewhere so that the dynamic table broker routine, link -- transition -- table(), will be able to find it later on when an unresolved reference to the transition table is encountered.
+- the activations of triggers can be nested just like normal procedure calls. Therefore, the created transition tables have to be recorded in a way so that the "innermost" ones always get the precedence.
+- the preferred embodiment accomplishes this by maintaining the transition tables in a global stack. The TAOBs for the transition tables are pushed into the stack when the trigger body is entered and popped out of the stack at trigger body exit.
+- the producer of the transition table once the table is produced, directly stores all of the information about the table into the actual table object, i.e., it is pushed into the run-time stack.
+- the table object i.e., the template table object
+- this will kick off the dynamic linking process which will access the actual table object from the top of the run-time stack.
+- Information from the actual table object is moved into the template table object.
+- the dynamic table broker always looks up the top entry of the run-time stack for the actual table entity and modifies the table attributes of the underlying template TAOB accordingly.
+- the set of table attributes that are modified varies from one implementation to another.
+- the template table object can be used to represent or identify the actual table object, including where it can be found, how many columns there are, where the buffers that hold the columns of the record are, the type of table, and run-time stats that indicate the state of the table access (open, close, fully populated in memory or partially populated).
+- the dynamic linkage process will at least determine the actual table location.
+- DB2 common server for each table there is associated three id's, 1)a node id in the parallel environment, 2) a pool id, which is similar to a directory, and 3) an object id. Using these three id's, the table location can be uniquely identified. Once the dynamic linkage is accomplished, that table is transformed into a derived table (since the location is now known) which also requires certain information to be moved at dynamic linking time.
+- table type (derived) and table ID are always changed to the value obtained from the TAOB of the actual transition table entity.
+- columns of the actual table entities are ordered differently from the corresponding table accesses. In such a case, more effort is needed to map the table columns of the accessing TAOBs to the corresponding columns of the actual TAOBs.
+- the above routine performs the dynamic linkage for transition tables.
+- the routine is invoked when the trigger body written in a 3GL language (not SQL language) is invoked.
+- the very first time either the new or old transition table is referenced it will go through the OPEN, FETCH, CLOSE paradigm.
+- OPEN time it is detected whether it is a transition table.
+- link -- transition -- table routine is invoked by passing in the information that it needs. What is passed in is a template of the extended table object (TAOB) because it does not contain the information necessary to locate the table, but it does contain information to describe what it is.
+- TAOB extended table object
+- the first IF statement states that if the control block subparts indicate that it is a new transition table, then it references the new transition table entry at the top of the stack.
+- the actual table object is accessed.
+- step 2 the minimal attributes are copied.
+- Step 3 is implementation dependent.
+- a global temporary table is a user-defined temporary table shared by all SQL operations in a database connection session.
+- global temporary tables possess two important characteristics, namely, being global and temporary. It is “global” in that changes on a particular global temporary table are immediate and visible by subsequent operations of the same database connection. It is “temporary” in that the content of a global temporary table only persists in a database connection; all the rows inserted into the table are deleted at the end of a connection session and the table becomes empty. Another important characteristic of global temporary tables is that they are not sharable among different connection sessions regardless of whether these sessions are sequential or concurrent. These characteristics can be best understood through an example. Let gtt be a global temporary table and t1 and t2 be two base tables with identical column definitions as that of gtt. The following database connections, sequential or concurrent, will populate t1 and t2 with the rows as shown below.
+- the dynamic table broker routine link -- user -- defined -- temporary -- table will look up the actual table entity in a global symbol table located in the per-connection working area (e.g. the agent control block of DB2/CS). If it is found, the TAOB of the actual table entity is used to perform the dynamic table linkage. If it is not found, it is created and entered into the symbol table for subsequent lookups. The TAOB of the newly created table entity is then used to perform the dynamic table linkage for the underlying table access. The details of the table linkage is identical to that of transition table reference in the previous section entitled "External Transition Tables.” As before, the following C-like pseudo code is used for outlining the main logic of the dynamic table broker routine link -- user -- defined -- temporary -- table().
+- the database engine will traverse the global symbol table and drop all the table entities created on behalf of global temporary table accesses in that connection session.
+- SQL92 standard also defines two variations of user-defined temporary table concept: created local temporary table and declared local temporary table with different scopes. Created local temporary tables are shared among all the SQL operations belonging to the same compilation unit while declared local temporary tables are shared only within a basic module. Therefore, the dynamic table linking for these two table concepts does not introduce new issues and are not separately described herein.
+- Table parameter and result The caller side of a function call has the exact table entity of a table parameter, but needs the exact entity of the result table. The situation is opposite at the callee side. This shares the same characteristics with dynamic tables as the linkage between table references and actual subject tables can only be created at run-time.
+- a table parameter is similar to parameter passing which requires a run-time stack so the producer of the table parameter, i.e., the caller of the function, can put in the actual table object.
+- the producer of the table parameter i.e., the caller of the function
+- the callee side when a table parameter is referenced, it will always go through the OPEN, FETCH, CLOSE paradigm, but OPEN time will kick off the dynamic linkage of the table parameter which gets the necessary information from the TAOB by looking at the stack.
+- Abstract tables will ultimately allow all operations on a table to be user definable; that is, the user can define an open, fetch, close, insert, update, delete, and even rollback and commit operations.
+- the invention may be implemented as a machine, process, or article of manufacture by using standard programming and/or engineering techniques to produce programming software, firmware, hardware or any combination thereof.
+- Any resulting program(s), having computer readable program code, may be embodied within one or more computer usable media such as memory devices or transmitting devices, thereby making a computer program product or article of manufacture according to the invention.
+- the terms "article of manufacture” and “computer program product” as used herein are intended to encompass a computer program existent (permanently, temporarily, or transitorily) on any computer usable medium such as on any memory device or in any transmitting device.
+- Executing program code directly from one medium, storing program code onto a medium, copying the code from one medium to another medium, transmitting the code using a transmitting device, or other equivalent acts, may involve the use of a memory or transmitting device which only embodies program code transitorily as a preliminary or final step in making, using or selling the invention.
+- Memory devices include, but are not limited to, fixed (hard) disk drives, diskettes, optical disks, magnetic tape, semiconductor memories such as RAM, ROM, Proms, etc.
+- Transmitting devices include, but are not limited to, the internet, intranets, electronic bulletin board and message/note exchanges, telephone/modem-based network communication, hardwired/cabled communication network, cellular communication, radio wave communication, satellite communication, and other stationary or mobile network systems/communication links.
+- a machine embodying the invention may involve one or more processing systems including, but not limited to, cpu, memory/storage devices, communication links, communication/transmitting devices, servers, I/O devices, or any subcomponents or individual parts of one or more processing systems, including software, firmware, hardware or any combination or subcombination thereof, which embody the invention as set forth in the claims.
+- processing systems including, but not limited to, cpu, memory/storage devices, communication links, communication/transmitting devices, servers, I/O devices, or any subcomponents or individual parts of one or more processing systems, including software, firmware, hardware or any combination or subcombination thereof, which embody the invention as set forth in the claims.
+Abstract
+Description
+______________________________________ IF access.sub.-- taob.type is a dynamic table THEN switch access.sub.-- taob.type { case TRANSITION.sub.-- TABLE: link.sub.-- transition.sub.-- table(access.sub.-- taob); break; case USER.sub.-- DEFINED.sub.-- TEMPORARY.sub.-- TABLE: link.sub.-- user.sub.-- defined.sub.-- temporary.sub.-- table(access.su b.-- taob); break; case TABLE.sub.-- PARAMETER: link.sub.-- table.sub.-- parameter(access.sub.-- taob); break; } ELSE follow original logic Copyright IBM Corporation 1996 ______________________________________
+______________________________________ CREATE TRIGGER fuh.mytrig AFTER UPDATE OF c1, c2 ON fuh.mytb1 REFERENCING NEW.sub.-- TABLE AS nt OLD.sub.-- TABLE AS ot FOR EACH STATEMENT MODE DB2SQL BEGIN . . . END ______________________________________
+______________________________________ link.sub.-- transition.sub.-- table(access.sub.-- taob) TAOB actual.sub.-- taob; /* (1) look up the run-time stack */ if (access.sub.-- taob->dt.sub.-- cb.subtype == NEW) actual.sub.-- taob = tran.sub.-- tb1.sub.-- stack top!.new; else actual.sub.-- taob = tran.sub.-- tb1.sub.-- stack top!.old; /* (2) minimum attributes copy */ access.sub.-- taob->type = actual.sub.-- taob->type; access.sub.-- taob->id = actual.sub.-- taob->id; /* (3) more attributes copy, implementation-dependent */ modify.sub.-- other.sub.-- attributes(access.sub.-- taob, actual.sub.-- taob); } Copyright IBM Corporation 1996 ______________________________________
+______________________________________ CREATE TRIGGER trig1 AFTER UPDATE ON t1 REFERENCING NEW.sub.-- TABLE AS nt FOR EACH STATEMENT MODE DB2SQL LANGUAGE C BEGIN int i, j; . . . EXEC SQL CASE (SELECT (COUNT(*) FROM nt) WHEN 2: UPDATE t2 SET c2 = c2 * c2 WHERE c2 < 0; END CASE; . . . END CREATE TRIGGER trig2 AFTER UPDATE ON t2 REFERENCING NEW.sub.-- TABLE AS nt OLD.sub.-- TABLE AS ot FOR EACH STATEMENT MODE DB2SQL LANGUAGE C BEGIN char *buf; . . . EXEC SQL INSERT INTO t3 SELECT nt.c1, ot.c2 FROM nt, ot; . . . END ______________________________________
+UPDATE t1 SET c2=-c2 WHERE c2<0
+______________________________________ *** Connection I *** *** Connection II *** ______________________________________ connect to db; connect to db; insert into gtt values (1, 2); insert into gtt values (3, 6); insert into gtt values (2, 4); insert into gtt values (4, 8); insert into t1 select * from gtt; insert into t2 select * from gtt; connect reset; connect reset; ______________________________________ *** Result I *** *** Result II *** ______________________________________ t1 = {(1, 2), (2, 4)} t2 = {(3, 6), (4, 8)} ______________________________________
+______________________________________ link.sub.-- user.sub.-- defined.sub.-- temporary.sub.-- table(access.sub.- - taob) switch (access.sub.-- taob->dt.sub.-- cb.subtype) { case GLOBAL: { TAOB actual.sub.-- taob; /* 1. look up the global symbol table */ actual.sub.-- taob = find.sub.-- global.sub.-- temporary.sub.-- table(access.sub.-- taob); /* 2. create the global temporary table, if not created yet */ if (actual.sub.-- taob == NULL) actual.sub.-- taob = create.sub.-- global.sub.-- temporary.sub.-- table(access.sub.-- taob); /* 3 minimum attributes copy */ access.sub.-- taob->type = actual.sub.-- taob->type; access.sub.-- taob->id = actual.sub.-- taob->id; /* 4. more attributes copy; implementation-dependent */ modify.sub.-- other.sub.-- attributes(access.sub.-- taob, actual.sub.-- taob); } break; case TEMPORARY: { . . . } } } Copyright IBM Corporation 1996 ______________________________________
+Claims (41)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US08/786,603 US5930795A (en) | 1997-01-21 | 1997-01-21 | Supporting dynamic tables in SQL query compilers |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US08/786,603 US5930795A (en) | 1997-01-21 | 1997-01-21 | Supporting dynamic tables in SQL query compilers |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US5930795A true US5930795A (en) | 1999-07-27 |
+Family
+ID=25139073
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US08/786,603 Expired - Lifetime US5930795A (en) | 1997-01-21 | 1997-01-21 | Supporting dynamic tables in SQL query compilers |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US5930795A (en) |
+Cited By (87)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6108660A (en) * | 1997-02-28 | 2000-08-22 | Oracle Corporation | Method for processing host language source code containing embedded database language statements |
+US6202069B1 (en) * | 1998-04-30 | 2001-03-13 | International Business Machines Corporation | Execution paradigm for accessing hierarchical data using an object framework |
+US6289336B1 (en) * | 1999-03-26 | 2001-09-11 | Compaq Computer Corporation | System and method for computing rows since sequence function in a database system |
+US6298338B1 (en) * | 1999-03-26 | 2001-10-02 | Compaq Computer Corporation | System and method for computing an offset sequence function in a database system |
+US6304873B1 (en) * | 1999-07-06 | 2001-10-16 | Compaq Computer Corporation | System and method for performing database operations and for skipping over tuples locked in an incompatible mode |
+US6317738B1 (en) | 1999-03-26 | 2001-11-13 | Compaq Computer Corporation | System and method for computing running and moving sequence functions in a database system |
+EP1207462A2 (en) * | 2000-11-16 | 2002-05-22 | Protegrity Research & Development | A method for altering encryption status in a relation database in a continuous process |
+US6411959B1 (en) * | 1999-09-29 | 2002-06-25 | International Business Machines Corporation | Apparatus and method for dynamically updating a computer-implemented table and associated objects |
+WO2002050675A1 (en) * | 2000-12-19 | 2002-06-27 | Tajea Corp. | Method for enabling a compiler or interpreter to use run time identifiers in a map container object |
+US20020120620A1 (en) * | 2000-11-30 | 2002-08-29 | Victor Chan | Method and system for composing a query for a database and traversing the database |
+US6446259B2 (en) * | 1997-09-15 | 2002-09-03 | Compaq Computer Corporation | System and method for generating an object structure at run time in an object-oriented programming language |
+US6453313B1 (en) | 1999-07-06 | 2002-09-17 | Compaq Information Technologies Group, L.P. | Database management system and method for dequeuing rows published to a database table |
+US20020138497A1 (en) * | 2001-03-26 | 2002-09-26 | International Business Machines Corporation | Method, system, and program for implementing a database trigger |
+GB2380020A (en) * | 2001-06-29 | 2003-03-26 | Inventec Corp | Method of generating a dynamic editable table in a web page |
+US20030074656A1 (en) * | 2001-09-14 | 2003-04-17 | Yoshiaki Irino | Program execution apparatus and method, computer program for performing the program execution method, image forming system, and address solution method |
+US20030097545A1 (en) * | 2001-07-13 | 2003-05-22 | Rajesh Vadavia | Adaptive data architecture for information management systems |
+US6598058B2 (en) | 1999-09-22 | 2003-07-22 | International Business Machines Corporation | Method and apparatus for cross-node sharing of cached dynamic SQL in a multiple relational database management system environment |
+US6598041B1 (en) | 2000-09-07 | 2003-07-22 | International Business Machines Corporation | Method, system, and program for processing modifications to data in tables in a database system |
+US6604102B2 (en) | 1999-07-06 | 2003-08-05 | Hewlett-Packard Development Company, Lp. | System and method for performing database operations on a continuous stream of tuples |
+US6636846B1 (en) * | 2000-04-28 | 2003-10-21 | International Business Machines Corporation | Method for providing a system maintained materialized functionally dependent column for a database management system |
+US6694306B1 (en) * | 1999-10-06 | 2004-02-17 | Hitachi, Ltd. | System and method for query processing using virtual table interface |
+US6711560B2 (en) | 2001-03-29 | 2004-03-23 | Hewlett-Packard Development Company, L.P. | Method of executing conflicting triggers in an active database |
+US20040059744A1 (en) * | 2002-09-19 | 2004-03-25 | Cedars-Sinai Medical Center | Data repository system |
+US6714935B1 (en) * | 1998-09-21 | 2004-03-30 | Microsoft Corporation | Management of non-persistent data in a persistent database |
+US6721725B2 (en) | 2001-03-29 | 2004-04-13 | Hewlett-Packard Development Company, L.P. | Method of parallel trigger execution in an active database |
+US20040103109A1 (en) * | 1999-07-29 | 2004-05-27 | Huras Matthew Albert | Dropped database table recovery |
+US6745174B2 (en) | 2001-03-29 | 2004-06-01 | Hewlett-Packard Development Company, L.P. | Method of executing before-triggers in an active database |
+US6763352B2 (en) * | 1999-05-21 | 2004-07-13 | International Business Machines Corporation | Incremental maintenance of summary tables with complex grouping expressions |
+US20040154005A1 (en) * | 2003-01-30 | 2004-08-05 | Maine Dale W. | Parse table generation method and system |
+WO2005008529A2 (en) * | 2003-07-07 | 2005-01-27 | Netezza Corporation | Optimized sql code generation |
+US6856996B2 (en) | 2001-03-30 | 2005-02-15 | International Business Machines Corporation | Method, system, and program for accessing rows in one or more tables satisfying a search criteria |
+US20050060307A1 (en) * | 2003-09-12 | 2005-03-17 | International Business Machines Corporation | System, method, and service for datatype caching, resolving, and escalating an SQL template with references |
+US20050071326A1 (en) * | 2003-09-29 | 2005-03-31 | International Business Machines Corporation | Method, system, and program for predicate processing by iterator functions |
+US20050081184A1 (en) * | 2003-09-30 | 2005-04-14 | International Business Machines Corporation | Multi-attribute dynamic link library packaging |
+US6973457B1 (en) | 2002-05-10 | 2005-12-06 | Oracle International Corporation | Method and system for scrollable cursors |
+US20060041861A1 (en) * | 2003-05-06 | 2006-02-23 | Pegasystems Inc. | Methods and apparatus for digital data processing with mutable inheritance |
+US20060047658A1 (en) * | 2004-08-31 | 2006-03-02 | Microsoft Corporation | Verifying dynamically generated operations on a data store |
+US7069263B1 (en) * | 2002-02-19 | 2006-06-27 | Oracle International Corporation | Automatic trend analysis data capture |
+US7089331B1 (en) | 1998-05-29 | 2006-08-08 | Oracle International Corporation | Method and mechanism for reducing client-side memory footprint of transmitted data |
+US7103590B1 (en) * | 2001-08-24 | 2006-09-05 | Oracle International Corporation | Method and system for pipelined database table functions |
+US20060235837A1 (en) * | 2005-04-18 | 2006-10-19 | Oracle International Corporation | Rewriting table functions as SQL strings |
+US7143108B1 (en) | 2000-04-06 | 2006-11-28 | International Business Machines Corporation | Apparatus and method for deletion of objects from an object-relational system in a customizable and database independent manner |
+US20060287498A1 (en) * | 2003-06-18 | 2006-12-21 | Hitachi Chemical Co Ltd | High-molecular copolymer containing metal coordination compound and organic electroluminescence element using the same |
+US7243306B1 (en) * | 2002-07-17 | 2007-07-10 | International Business Machines Corporation | Service descriptor for a multitier compute infrastructure |
+US7260569B1 (en) | 2002-02-21 | 2007-08-21 | Ncr Corporation | Evaluating expressions in stored procedures |
+US20070233902A1 (en) * | 2006-03-30 | 2007-10-04 | Alan Trefler | User interface methods and apparatus for rules processing |
+US20070239646A1 (en) * | 2006-03-03 | 2007-10-11 | Alan Trefler | Rules base systems and methods with circumstance translation |
+US20080082978A1 (en) * | 2002-07-17 | 2008-04-03 | International Business Machines Corporation | Topology mapping of a mulitier compute infrastructure |
+US20080120304A1 (en) * | 2006-11-21 | 2008-05-22 | Calio Robert J | Method and system for providing high performance data modification of relational database tables |
+US7389284B1 (en) | 2000-02-29 | 2008-06-17 | Oracle International Corporation | Method and mechanism for efficient processing of remote-mapped queries |
+US20080216055A1 (en) * | 2007-03-02 | 2008-09-04 | Pegasystems, Inc. | Proactive performance management for multi-user enterprise software systems |
+US20080288561A1 (en) * | 2007-05-16 | 2008-11-20 | International Business Machines Corporation | Computer program product and method for database management system supporting multiple temporary tables |
+US20080313131A1 (en) * | 2007-06-15 | 2008-12-18 | Microsoft Corporation | Parameter-sensitive plans for structural scenarios |
+US20090024570A1 (en) * | 2007-07-20 | 2009-01-22 | Oracle Internatonal Corporation | User defined query rewrite mechanism |
+US20090157737A1 (en) * | 2007-12-13 | 2009-06-18 | Rafal Przemyslaw Konik | Database Trigger Modification System and Method |
+US7555503B1 (en) * | 2000-06-30 | 2009-06-30 | Click Commerce, Inc. | Method and apparatus for managing updates to a catalog |
+US7610351B1 (en) | 2002-05-10 | 2009-10-27 | Oracle International Corporation | Method and mechanism for pipelined prefetching |
+US7640229B1 (en) * | 2003-12-15 | 2009-12-29 | Teradata Us, Inc. | Row triggers |
+US7665063B1 (en) * | 2004-05-26 | 2010-02-16 | Pegasystems, Inc. | Integration of declarative rule-based processing with procedural programming |
+US20100191716A1 (en) * | 2009-01-25 | 2010-07-29 | Qiming Chen | Structured parallel data intensive computing |
+US20100257537A1 (en) * | 2002-09-18 | 2010-10-07 | Netezza Corporation | Field Oriented Pipeline Architecture For A Programmable Data Streaming Processor |
+US20100287185A1 (en) * | 2009-05-11 | 2010-11-11 | Jean-Yves Cras | Generation of logical database schema representation based on symbolic business intelligence query |
+US20110055800A1 (en) * | 2009-08-31 | 2011-03-03 | Sybase, Inc. | Extensible Template-Based Code Generator Builder |
+US20110113019A1 (en) * | 2009-11-09 | 2011-05-12 | Avraham Leff | Concurrent Database Access by Production and Prototype Applications |
+US7962590B1 (en) | 2002-07-17 | 2011-06-14 | International Business Machines Corporation | Automated discovery of a multitier compute infrastructure |
+US20110271137A1 (en) * | 2010-04-29 | 2011-11-03 | Sap Ag | Unified framework for configuration validation |
+US8335704B2 (en) | 2005-01-28 | 2012-12-18 | Pegasystems Inc. | Methods and apparatus for work management and routing |
+US8880487B1 (en) | 2011-02-18 | 2014-11-04 | Pegasystems Inc. | Systems and methods for distributed rules processing |
+US8924335B1 (en) | 2006-03-30 | 2014-12-30 | Pegasystems Inc. | Rule-based user interface conformance methods |
+US9195936B1 (en) | 2011-12-30 | 2015-11-24 | Pegasystems Inc. | System and method for updating or modifying an application without manual coding |
+US9678719B1 (en) | 2009-03-30 | 2017-06-13 | Pegasystems Inc. | System and software for creation and modification of software |
+US10275401B2 (en) * | 2016-11-30 | 2019-04-30 | Sap Se | Write access control in a database |
+US10380084B2 (en) * | 2017-01-26 | 2019-08-13 | Sap Se | Data model view with complex calculation capability |
+US10423599B2 (en) * | 2015-12-22 | 2019-09-24 | Sap Se | Global and local temporary database tables |
+US10469396B2 (en) | 2014-10-10 | 2019-11-05 | Pegasystems, Inc. | Event processing with enhanced throughput |
+US10467200B1 (en) | 2009-03-12 | 2019-11-05 | Pegasystems, Inc. | Techniques for dynamic data processing |
+US10528557B1 (en) * | 2017-12-31 | 2020-01-07 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US10528556B1 (en) * | 2017-12-31 | 2020-01-07 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US10558662B2 (en) | 2017-01-14 | 2020-02-11 | International Business Machines Corporation | Transforming a user-defined table function to a derived table in a database management system |
+US10698599B2 (en) | 2016-06-03 | 2020-06-30 | Pegasystems, Inc. | Connecting graphical shapes using gestures |
+US10698647B2 (en) | 2016-07-11 | 2020-06-30 | Pegasystems Inc. | Selective sharing for collaborative application usage |
+US11048488B2 (en) | 2018-08-14 | 2021-06-29 | Pegasystems, Inc. | Software code optimizer and method |
+CN113326270A (en) * | 2021-06-30 | 2021-08-31 | 中国平安人寿保险股份有限公司 | Data storage method, device, equipment and storage medium |
+US11151131B2 (en) | 2019-07-19 | 2021-10-19 | Bank Of America Corporation | Query generation from a natural language input |
+US20220269690A1 (en) * | 2020-01-17 | 2022-08-25 | Sigma Computing, Inc. | Compiling a database query |
+US11567945B1 (en) | 2020-08-27 | 2023-01-31 | Pegasystems Inc. | Customized digital content generation systems and methods |
+US11921719B1 (en) * | 2022-09-14 | 2024-03-05 | International Business Machines Corporation | Automated query selectivity predictions using query graphs |
+Citations (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5093916A (en) * | 1988-05-20 | 1992-03-03 | International Business Machines Corporation | System for inserting constructs into compiled code, defining scoping of common blocks and dynamically binding common blocks to tasks |
+US5613120A (en) * | 1994-10-20 | 1997-03-18 | Silicon Graphics, Inc. | System and method for enabling, without recompilation, modification of class definitions and implementations in an object-oriented computer program |
+US5615400A (en) * | 1993-06-30 | 1997-03-25 | Apple Computer, Inc. | System for object oriented dynamic linking based upon a catalog of registered function set or class identifiers |
+US5680619A (en) * | 1995-04-03 | 1997-10-21 | Mfactory, Inc. | Hierarchical encapsulation of instantiated objects in a multimedia authoring system |
+-
+1997
+- 1997-01-21 US US08/786,603 patent/US5930795A/en not_active Expired - Lifetime
+Patent Citations (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5093916A (en) * | 1988-05-20 | 1992-03-03 | International Business Machines Corporation | System for inserting constructs into compiled code, defining scoping of common blocks and dynamically binding common blocks to tasks |
+US5615400A (en) * | 1993-06-30 | 1997-03-25 | Apple Computer, Inc. | System for object oriented dynamic linking based upon a catalog of registered function set or class identifiers |
+US5613120A (en) * | 1994-10-20 | 1997-03-18 | Silicon Graphics, Inc. | System and method for enabling, without recompilation, modification of class definitions and implementations in an object-oriented computer program |
+US5680619A (en) * | 1995-04-03 | 1997-10-21 | Mfactory, Inc. | Hierarchical encapsulation of instantiated objects in a multimedia authoring system |
+Non-Patent Citations (6)
+Title |
+---|
+IBM Corporation, "IBM Database 2: SQL Reference--for common servers", Version 2, 1994,1995. |
+IBM Corporation, IBM Database 2: SQL Reference for common servers , Version 2, 1994,1995. * |
+ISO ANSI working Draft, Information Technology Database Language SQL , Jim Melton, editor, International Organization for Standardization and American National Standards Institute, Jul. 1992. * |
+ISO-ANSI working Draft, "Information Technology--Database Language SQL", Jim Melton, editor, International Organization for Standardization and American National Standards Institute, Jul. 1992. |
+Martin C. Sturzenbecker, "Building an Object-Oriented Environment for distributed Manufacturing Software", IEEE, pp. 1972-1978, Jan. 1991. |
+Martin C. Sturzenbecker, Building an Object Oriented Environment for distributed Manufacturing Software , IEEE, pp. 1972 1978, Jan. 1991. * |
+Cited By (153)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6108660A (en) * | 1997-02-28 | 2000-08-22 | Oracle Corporation | Method for processing host language source code containing embedded database language statements |
+US6119145A (en) * | 1997-02-28 | 2000-09-12 | Oracle Corporation | Multithreaded client application storing a separate context for each transaction thus allowing threads to resume transactions started by other client threads |
+US6446259B2 (en) * | 1997-09-15 | 2002-09-03 | Compaq Computer Corporation | System and method for generating an object structure at run time in an object-oriented programming language |
+US6202069B1 (en) * | 1998-04-30 | 2001-03-13 | International Business Machines Corporation | Execution paradigm for accessing hierarchical data using an object framework |
+US20060195615A1 (en) * | 1998-05-29 | 2006-08-31 | Oracle International Corporation | Method and mechanism for reducing client-side memory footprint of transmitted data |
+US8825805B2 (en) | 1998-05-29 | 2014-09-02 | Oracle International Corporation | Method and mechanism for reducing client-side memory footprint of transmitted data |
+US9244938B2 (en) | 1998-05-29 | 2016-01-26 | Oracle International Corporation | Method and mechanism for reducing client-side memory footprint of transmitted data |
+US7089331B1 (en) | 1998-05-29 | 2006-08-08 | Oracle International Corporation | Method and mechanism for reducing client-side memory footprint of transmitted data |
+US6714935B1 (en) * | 1998-09-21 | 2004-03-30 | Microsoft Corporation | Management of non-persistent data in a persistent database |
+US6298338B1 (en) * | 1999-03-26 | 2001-10-02 | Compaq Computer Corporation | System and method for computing an offset sequence function in a database system |
+US6289336B1 (en) * | 1999-03-26 | 2001-09-11 | Compaq Computer Corporation | System and method for computing rows since sequence function in a database system |
+US6317738B1 (en) | 1999-03-26 | 2001-11-13 | Compaq Computer Corporation | System and method for computing running and moving sequence functions in a database system |
+US6763352B2 (en) * | 1999-05-21 | 2004-07-13 | International Business Machines Corporation | Incremental maintenance of summary tables with complex grouping expressions |
+US6453313B1 (en) | 1999-07-06 | 2002-09-17 | Compaq Information Technologies Group, L.P. | Database management system and method for dequeuing rows published to a database table |
+US6304873B1 (en) * | 1999-07-06 | 2001-10-16 | Compaq Computer Corporation | System and method for performing database operations and for skipping over tuples locked in an incompatible mode |
+US6604102B2 (en) | 1999-07-06 | 2003-08-05 | Hewlett-Packard Development Company, Lp. | System and method for performing database operations on a continuous stream of tuples |
+US7188124B2 (en) * | 1999-07-29 | 2007-03-06 | International Business Machines Corporation | Method, system, computer product for recovering dropped database table specifying one or more table spaces, recovering the table space being restored using the dropped table history data structure |
+US20040103109A1 (en) * | 1999-07-29 | 2004-05-27 | Huras Matthew Albert | Dropped database table recovery |
+US6598058B2 (en) | 1999-09-22 | 2003-07-22 | International Business Machines Corporation | Method and apparatus for cross-node sharing of cached dynamic SQL in a multiple relational database management system environment |
+US6411959B1 (en) * | 1999-09-29 | 2002-06-25 | International Business Machines Corporation | Apparatus and method for dynamically updating a computer-implemented table and associated objects |
+US6694306B1 (en) * | 1999-10-06 | 2004-02-17 | Hitachi, Ltd. | System and method for query processing using virtual table interface |
+US7389284B1 (en) | 2000-02-29 | 2008-06-17 | Oracle International Corporation | Method and mechanism for efficient processing of remote-mapped queries |
+US7143108B1 (en) | 2000-04-06 | 2006-11-28 | International Business Machines Corporation | Apparatus and method for deletion of objects from an object-relational system in a customizable and database independent manner |
+US6636846B1 (en) * | 2000-04-28 | 2003-10-21 | International Business Machines Corporation | Method for providing a system maintained materialized functionally dependent column for a database management system |
+US7555503B1 (en) * | 2000-06-30 | 2009-06-30 | Click Commerce, Inc. | Method and apparatus for managing updates to a catalog |
+US6754653B2 (en) | 2000-09-07 | 2004-06-22 | International Business Machines Corporation | Method, system, and program for processing a fetch request for a target row in a table that precedes as current row |
+US6604097B2 (en) | 2000-09-07 | 2003-08-05 | International Business Machines Corporation | Method, system, and program for using control data structures when performing operations with respect to a database |
+US6598041B1 (en) | 2000-09-07 | 2003-07-22 | International Business Machines Corporation | Method, system, and program for processing modifications to data in tables in a database system |
+US6665678B2 (en) | 2000-09-07 | 2003-12-16 | International Business Machines Corporation | Method, system, and program for optimistic concurrency control for scrollable cursors in a database |
+US6694305B2 (en) | 2000-09-07 | 2004-02-17 | International Business Machines Corporation | Method, system, and program for processing modifications to data in tables in a database system |
+US6721731B2 (en) | 2000-09-07 | 2004-04-13 | International Business Machines Corporation | Method, system, and program for processing a fetch request for a target row at an absolute position from a first entry in a table |
+US6643637B2 (en) | 2000-09-07 | 2003-11-04 | International Business Machines Corporation | Method, system, and program for using a fetch request to make data available to an application program |
+EP1207462A3 (en) * | 2000-11-16 | 2005-12-21 | Protegrity Research & Development | A method for altering encryption status in a relation database in a continuous process |
+EP1207462A2 (en) * | 2000-11-16 | 2002-05-22 | Protegrity Research & Development | A method for altering encryption status in a relation database in a continuous process |
+US20020120620A1 (en) * | 2000-11-30 | 2002-08-29 | Victor Chan | Method and system for composing a query for a database and traversing the database |
+US20060036594A1 (en) * | 2000-11-30 | 2006-02-16 | International Business Machines Corporation | Method and system for composing a query for a database and traversing the database |
+US6985899B2 (en) | 2000-11-30 | 2006-01-10 | International Business Machines Corporation | Method and system for composing a query for a database and traversing the database |
+US7401095B2 (en) * | 2000-11-30 | 2008-07-15 | International Business Machines Corporation | Method and system for composing a query for a database and traversing the database |
+US6993744B2 (en) | 2000-12-19 | 2006-01-31 | Tajen Corporation | Method for enabling a compiler or interpreter to use identifiers found at run time in a map container object in a manner similar or identical to identifiers declared at compile time |
+WO2002050675A1 (en) * | 2000-12-19 | 2002-06-27 | Tajea Corp. | Method for enabling a compiler or interpreter to use run time identifiers in a map container object |
+US20020133809A1 (en) * | 2000-12-19 | 2002-09-19 | Hills Theodore S. | Method for enabling a compiler or interpreter to use identifiers found at run time in a map container object in a manner similar or identical to identifiers declared at compile time |
+US6829616B2 (en) * | 2001-03-26 | 2004-12-07 | International Business Machines Corporation | Method, system, and program for implementing a database trigger |
+US20020138497A1 (en) * | 2001-03-26 | 2002-09-26 | International Business Machines Corporation | Method, system, and program for implementing a database trigger |
+US6711560B2 (en) | 2001-03-29 | 2004-03-23 | Hewlett-Packard Development Company, L.P. | Method of executing conflicting triggers in an active database |
+US6745174B2 (en) | 2001-03-29 | 2004-06-01 | Hewlett-Packard Development Company, L.P. | Method of executing before-triggers in an active database |
+US20040103094A1 (en) * | 2001-03-29 | 2004-05-27 | Eliezer Levy | Method of parallel trigger execution in an active database |
+US6721725B2 (en) | 2001-03-29 | 2004-04-13 | Hewlett-Packard Development Company, L.P. | Method of parallel trigger execution in an active database |
+US6856996B2 (en) | 2001-03-30 | 2005-02-15 | International Business Machines Corporation | Method, system, and program for accessing rows in one or more tables satisfying a search criteria |
+GB2380020B (en) * | 2001-06-29 | 2004-04-14 | Inventec Corp | Method of generating a dynamic editable table in a web page |
+GB2380020A (en) * | 2001-06-29 | 2003-03-26 | Inventec Corp | Method of generating a dynamic editable table in a web page |
+US7464095B2 (en) | 2001-07-13 | 2008-12-09 | Rajesh Vadavia | Adaptive data architecture for information management systems |
+US20030097545A1 (en) * | 2001-07-13 | 2003-05-22 | Rajesh Vadavia | Adaptive data architecture for information management systems |
+US7103590B1 (en) * | 2001-08-24 | 2006-09-05 | Oracle International Corporation | Method and system for pipelined database table functions |
+US20030074656A1 (en) * | 2001-09-14 | 2003-04-17 | Yoshiaki Irino | Program execution apparatus and method, computer program for performing the program execution method, image forming system, and address solution method |
+US7069263B1 (en) * | 2002-02-19 | 2006-06-27 | Oracle International Corporation | Automatic trend analysis data capture |
+US7260569B1 (en) | 2002-02-21 | 2007-08-21 | Ncr Corporation | Evaluating expressions in stored procedures |
+US7610351B1 (en) | 2002-05-10 | 2009-10-27 | Oracle International Corporation | Method and mechanism for pipelined prefetching |
+US6973457B1 (en) | 2002-05-10 | 2005-12-06 | Oracle International Corporation | Method and system for scrollable cursors |
+US7962590B1 (en) | 2002-07-17 | 2011-06-14 | International Business Machines Corporation | Automated discovery of a multitier compute infrastructure |
+US7243306B1 (en) * | 2002-07-17 | 2007-07-10 | International Business Machines Corporation | Service descriptor for a multitier compute infrastructure |
+US7912873B2 (en) | 2002-07-17 | 2011-03-22 | International Business Machines Corporation | Topology mapping of a mulitier compute infrastructure |
+US20080082978A1 (en) * | 2002-07-17 | 2008-04-03 | International Business Machines Corporation | Topology mapping of a mulitier compute infrastructure |
+US20100257537A1 (en) * | 2002-09-18 | 2010-10-07 | Netezza Corporation | Field Oriented Pipeline Architecture For A Programmable Data Streaming Processor |
+US8880551B2 (en) | 2002-09-18 | 2014-11-04 | Ibm International Group B.V. | Field oriented pipeline architecture for a programmable data streaming processor |
+US20040059744A1 (en) * | 2002-09-19 | 2004-03-25 | Cedars-Sinai Medical Center | Data repository system |
+US7603661B2 (en) * | 2003-01-30 | 2009-10-13 | Hamilton Sunstrand | Parse table generation method and system |
+US20040154005A1 (en) * | 2003-01-30 | 2004-08-05 | Maine Dale W. | Parse table generation method and system |
+US7711919B2 (en) | 2003-05-06 | 2010-05-04 | Pegasystems Inc. | Methods and apparatus for digital data processing with mutable inheritance |
+US20060041861A1 (en) * | 2003-05-06 | 2006-02-23 | Pegasystems Inc. | Methods and apparatus for digital data processing with mutable inheritance |
+US20060287498A1 (en) * | 2003-06-18 | 2006-12-21 | Hitachi Chemical Co Ltd | High-molecular copolymer containing metal coordination compound and organic electroluminescence element using the same |
+WO2005008529A2 (en) * | 2003-07-07 | 2005-01-27 | Netezza Corporation | Optimized sql code generation |
+WO2005008529A3 (en) * | 2003-07-07 | 2005-03-03 | Netezza Corp | Optimized sql code generation |
+EP1649344A4 (en) * | 2003-07-07 | 2010-02-10 | Netezza Corp | Sql code generation for heterogeneous environment |
+US7430549B2 (en) | 2003-07-07 | 2008-09-30 | Netezza Corporaton | Optimized SQL code generation |
+US7433863B2 (en) | 2003-07-07 | 2008-10-07 | Netezza Corporation | SQL code generation for heterogeneous environment |
+EP1649344A2 (en) * | 2003-07-07 | 2006-04-26 | Netezza Corporation | Sql code generation for heterogeneous environment |
+US20050027701A1 (en) * | 2003-07-07 | 2005-02-03 | Netezza Corporation | Optimized SQL code generation |
+US20050028134A1 (en) * | 2003-07-07 | 2005-02-03 | Netezza Corporation | SQL code generation for heterogeneous environment |
+US20090083219A1 (en) * | 2003-07-07 | 2009-03-26 | Netezza Corporation | SQL code generation for heterogeneous environment |
+US8171018B2 (en) | 2003-07-07 | 2012-05-01 | Ibm International Group B.V. | SQL code generation for heterogeneous environment |
+US20050060307A1 (en) * | 2003-09-12 | 2005-03-17 | International Business Machines Corporation | System, method, and service for datatype caching, resolving, and escalating an SQL template with references |
+US7685103B2 (en) | 2003-09-29 | 2010-03-23 | International Business Machines Corporation | Method, system, and program for predicate processing by iterator functions |
+US20050071326A1 (en) * | 2003-09-29 | 2005-03-31 | International Business Machines Corporation | Method, system, and program for predicate processing by iterator functions |
+US7519951B2 (en) * | 2003-09-30 | 2009-04-14 | International Business Machines Corporation | Multi-attribute dynamic link library packaging |
+US20090144708A1 (en) * | 2003-09-30 | 2009-06-04 | International Business Machines Corporation | Multi-attribute dynamic link library packaging |
+US20050081184A1 (en) * | 2003-09-30 | 2005-04-14 | International Business Machines Corporation | Multi-attribute dynamic link library packaging |
+US8136092B2 (en) | 2003-09-30 | 2012-03-13 | International Business Machines Corporation | Multi-attribute dynamic link library packaging |
+US7640229B1 (en) * | 2003-12-15 | 2009-12-29 | Teradata Us, Inc. | Row triggers |
+US8479157B2 (en) | 2004-05-26 | 2013-07-02 | Pegasystems Inc. | Methods and apparatus for integration of declarative rule-based processing with procedural programming in a digital data-processing evironment |
+US7665063B1 (en) * | 2004-05-26 | 2010-02-16 | Pegasystems, Inc. | Integration of declarative rule-based processing with procedural programming |
+US8959480B2 (en) | 2004-05-26 | 2015-02-17 | Pegasystems Inc. | Methods and apparatus for integration of declarative rule-based processing with procedural programming in a digital data-processing environment |
+US7457832B2 (en) | 2004-08-31 | 2008-11-25 | Microsoft Corporation | Verifying dynamically generated operations on a data store |
+US20060047658A1 (en) * | 2004-08-31 | 2006-03-02 | Microsoft Corporation | Verifying dynamically generated operations on a data store |
+US8335704B2 (en) | 2005-01-28 | 2012-12-18 | Pegasystems Inc. | Methods and apparatus for work management and routing |
+US7680862B2 (en) * | 2005-04-18 | 2010-03-16 | Oracle International Corporation | Rewriting table functions as SQL strings |
+US20060235837A1 (en) * | 2005-04-18 | 2006-10-19 | Oracle International Corporation | Rewriting table functions as SQL strings |
+US7640222B2 (en) | 2006-03-03 | 2009-12-29 | Pegasystems Inc. | Rules base systems and methods with circumstance translation |
+US20100088266A1 (en) * | 2006-03-03 | 2010-04-08 | Pegasystems Inc. | Rules base systems and methods with circumstance translation |
+US20070239646A1 (en) * | 2006-03-03 | 2007-10-11 | Alan Trefler | Rules base systems and methods with circumstance translation |
+US8073802B2 (en) | 2006-03-03 | 2011-12-06 | Pegasystems, Inc. | Rules base systems and methods with circumstance translation |
+US8924335B1 (en) | 2006-03-30 | 2014-12-30 | Pegasystems Inc. | Rule-based user interface conformance methods |
+US9658735B2 (en) | 2006-03-30 | 2017-05-23 | Pegasystems Inc. | Methods and apparatus for user interface optimization |
+US10838569B2 (en) | 2006-03-30 | 2020-11-17 | Pegasystems Inc. | Method and apparatus for user interface non-conformance detection and correction |
+US20070233902A1 (en) * | 2006-03-30 | 2007-10-04 | Alan Trefler | User interface methods and apparatus for rules processing |
+US20080120304A1 (en) * | 2006-11-21 | 2008-05-22 | Calio Robert J | Method and system for providing high performance data modification of relational database tables |
+US20080216055A1 (en) * | 2007-03-02 | 2008-09-04 | Pegasystems, Inc. | Proactive performance management for multi-user enterprise software systems |
+US9189361B2 (en) | 2007-03-02 | 2015-11-17 | Pegasystems Inc. | Proactive performance management for multi-user enterprise software systems |
+US8250525B2 (en) | 2007-03-02 | 2012-08-21 | Pegasystems Inc. | Proactive performance management for multi-user enterprise software systems |
+US20080288561A1 (en) * | 2007-05-16 | 2008-11-20 | International Business Machines Corporation | Computer program product and method for database management system supporting multiple temporary tables |
+US7774372B2 (en) * | 2007-05-16 | 2010-08-10 | International Business Machines Corporation | Computer program product and method for database management system supporting multiple temporary tables |
+US7933894B2 (en) * | 2007-06-15 | 2011-04-26 | Microsoft Corporation | Parameter-sensitive plans for structural scenarios |
+US20080313131A1 (en) * | 2007-06-15 | 2008-12-18 | Microsoft Corporation | Parameter-sensitive plans for structural scenarios |
+US20090024570A1 (en) * | 2007-07-20 | 2009-01-22 | Oracle Internatonal Corporation | User defined query rewrite mechanism |
+US8396846B2 (en) * | 2007-12-13 | 2013-03-12 | International Business Machines Corporation | Database trigger modification system and method |
+US20090157737A1 (en) * | 2007-12-13 | 2009-06-18 | Rafal Przemyslaw Konik | Database Trigger Modification System and Method |
+US8046373B2 (en) * | 2009-01-25 | 2011-10-25 | Hewlett-Packard Development Company, L.P. | Structured parallel data intensive computing |
+US20100191716A1 (en) * | 2009-01-25 | 2010-07-29 | Qiming Chen | Structured parallel data intensive computing |
+US10467200B1 (en) | 2009-03-12 | 2019-11-05 | Pegasystems, Inc. | Techniques for dynamic data processing |
+US9678719B1 (en) | 2009-03-30 | 2017-06-13 | Pegasystems Inc. | System and software for creation and modification of software |
+US8229952B2 (en) * | 2009-05-11 | 2012-07-24 | Business Objects Software Limited | Generation of logical database schema representation based on symbolic business intelligence query |
+US20100287185A1 (en) * | 2009-05-11 | 2010-11-11 | Jean-Yves Cras | Generation of logical database schema representation based on symbolic business intelligence query |
+US8997035B2 (en) * | 2009-08-31 | 2015-03-31 | Sybase, Inc. | Extensible template-based code generator builder |
+US20110055800A1 (en) * | 2009-08-31 | 2011-03-03 | Sybase, Inc. | Extensible Template-Based Code Generator Builder |
+US8880549B2 (en) * | 2009-11-09 | 2014-11-04 | International Business Machines Corporation | Concurrent database access by production and prototype applications |
+US20110113019A1 (en) * | 2009-11-09 | 2011-05-12 | Avraham Leff | Concurrent Database Access by Production and Prototype Applications |
+US8843893B2 (en) * | 2010-04-29 | 2014-09-23 | Sap Ag | Unified framework for configuration validation |
+US20110271137A1 (en) * | 2010-04-29 | 2011-11-03 | Sap Ag | Unified framework for configuration validation |
+US8880487B1 (en) | 2011-02-18 | 2014-11-04 | Pegasystems Inc. | Systems and methods for distributed rules processing |
+US9270743B2 (en) | 2011-02-18 | 2016-02-23 | Pegasystems Inc. | Systems and methods for distributed rules processing |
+US9195936B1 (en) | 2011-12-30 | 2015-11-24 | Pegasystems Inc. | System and method for updating or modifying an application without manual coding |
+US10572236B2 (en) | 2011-12-30 | 2020-02-25 | Pegasystems, Inc. | System and method for updating or modifying an application without manual coding |
+US11057313B2 (en) | 2014-10-10 | 2021-07-06 | Pegasystems Inc. | Event processing with enhanced throughput |
+US10469396B2 (en) | 2014-10-10 | 2019-11-05 | Pegasystems, Inc. | Event processing with enhanced throughput |
+US10423599B2 (en) * | 2015-12-22 | 2019-09-24 | Sap Se | Global and local temporary database tables |
+US10698599B2 (en) | 2016-06-03 | 2020-06-30 | Pegasystems, Inc. | Connecting graphical shapes using gestures |
+US10698647B2 (en) | 2016-07-11 | 2020-06-30 | Pegasystems Inc. | Selective sharing for collaborative application usage |
+US10275401B2 (en) * | 2016-11-30 | 2019-04-30 | Sap Se | Write access control in a database |
+US11354313B2 (en) * | 2017-01-14 | 2022-06-07 | Alibaba Group Holding Limited | Transforming a user-defined table function to a derived table in a database management system |
+US10558662B2 (en) | 2017-01-14 | 2020-02-11 | International Business Machines Corporation | Transforming a user-defined table function to a derived table in a database management system |
+US10846291B2 (en) | 2017-01-14 | 2020-11-24 | Alibaba Group Holding Limited | Transforming a user-defined table function to a derived table in a database management system |
+US10380084B2 (en) * | 2017-01-26 | 2019-08-13 | Sap Se | Data model view with complex calculation capability |
+US10528556B1 (en) * | 2017-12-31 | 2020-01-07 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US11126621B1 (en) | 2017-12-31 | 2021-09-21 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US10528557B1 (en) * | 2017-12-31 | 2020-01-07 | Allscripts Software, Llc | Database methodology for searching encrypted data records |
+US11048488B2 (en) | 2018-08-14 | 2021-06-29 | Pegasystems, Inc. | Software code optimizer and method |
+US11151131B2 (en) | 2019-07-19 | 2021-10-19 | Bank Of America Corporation | Query generation from a natural language input |
+US11609908B2 (en) | 2019-07-19 | 2023-03-21 | Bank Of America Corporation | Query generation from a natural language input |
+US11609907B2 (en) | 2019-07-19 | 2023-03-21 | Bank Of America Corporation | Query generation from a natural language input |
+US11640396B2 (en) | 2019-07-19 | 2023-05-02 | Bank Of America Corporation | Query generation from a natural language input |
+US20220269690A1 (en) * | 2020-01-17 | 2022-08-25 | Sigma Computing, Inc. | Compiling a database query |
+US11567945B1 (en) | 2020-08-27 | 2023-01-31 | Pegasystems Inc. | Customized digital content generation systems and methods |
+CN113326270A (en) * | 2021-06-30 | 2021-08-31 | 中国平安人寿保险股份有限公司 | Data storage method, device, equipment and storage medium |
+US11921719B1 (en) * | 2022-09-14 | 2024-03-05 | International Business Machines Corporation | Automated query selectivity predictions using query graphs |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US5930795A (en) | Supporting dynamic tables in SQL query compilers | |
+US6154747A (en) | Hash table implementation of an object repository | |
+US6941298B2 (en) | System and method for providing result sets using EJB query language | |
+US5448727A (en) | Domain based partitioning and reclustering of relations in object-oriented relational database management systems | |
+US6243709B1 (en) | Method and apparatus for loading stored procedures in a database corresponding to object-oriented data dependencies | |
+US6754670B1 (en) | Mapping relational tables to object oriented classes | |
+US6044216A (en) | Method and apparatus for implementing cursor variables for accessing data from database | |
+US5873097A (en) | Update mechanism for computer storage container manager | |
+KR100472807B1 (en) | System and method for automatically modifying database access methods to insert database object handling instructions | |
+US6701359B1 (en) | Apparatus and method for managing a multi-threaded persistent agent management information base including a managed object instance cache | |
+US5557793A (en) | In an object oriented repository, a method for treating a group of objects as a single object during execution of an operation | |
+US7555488B2 (en) | Prefetching and caching persistent objects | |
+US6374256B1 (en) | Method and apparatus for creating indexes in a relational database corresponding to classes in an object-oriented application | |
+US6112207A (en) | Apparatus and method which features linearizing attributes of an information object into a string of bytes for object representation and storage in a database system | |
+US20010056426A1 (en) | Transparent object instantiation/initialization from a relational store | |
+EP0932099A2 (en) | Dynamic modification of a database management system | |
+US20040044687A1 (en) | Apparatus and method using pre-described patterns and reflection to generate a database schema | |
+JPH113267A (en) | Method and device for combining state and behavior of object in database management system | |
+US6421666B1 (en) | Mechanism for sharing ancillary data between a family of related functions | |
+US20100293209A1 (en) | Batching heterogeneous database commands | |
+US6959305B2 (en) | Unique identification of SQL cursor occurrences in a repetitive, nested environment | |
+US6735598B1 (en) | Method and apparatus for integrating data from external sources into a database system | |
+US20040267766A1 (en) | Defining user-defined data types and/or user-defined methods using an interpreted programming language | |
+CA2166257C (en) | Method for application-program database interface | |
+US8903846B2 (en) | Method and apparatus for integrating data from external sources into a database system |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:CHEN, YAO-CHING STEPHEN;CHOW, JYH-HERNG;COCHRANE, ROBERTA JO;AND OTHERS;REEL/FRAME:008453/0264Effective date: 19970121 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:027005/0673Effective date: 20110930 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

@@ -1,0 +1,473 @@
+US7146365B2 - Method, system, and program for optimizing database query execution - Google Patents
+Method, system, and program for optimizing database query execution Download PDFInfo
+- Publication number
+- US7146365B2 US7146365B2 US10/353,138 US35313803A US7146365B2 US 7146365 B2 US7146365 B2 US 7146365B2 US 35313803 A US35313803 A US 35313803A US 7146365 B2 US7146365 B2 US 7146365B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- data
+- index
+- partitions
+- secondary index
+- data pages
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime, expires
+Links
+- 238000000034 method Methods 0.000 title claims abstract description 26
+- 238000005192 partition Methods 0.000 claims abstract description 112
+- 230000008569 process Effects 0.000 claims abstract description 10
+- 238000000638 solvent extraction Methods 0.000 claims description 31
+- 238000004519 manufacturing process Methods 0.000 claims description 14
+- 238000013507 mapping Methods 0.000 claims description 6
+- 238000003860 storage Methods 0.000 description 19
+- 238000012545 processing Methods 0.000 description 14
+- 238000005457 optimization Methods 0.000 description 5
+- 230000005540 biological transmission Effects 0.000 description 4
+- 238000010586 diagram Methods 0.000 description 4
+- 230000003287 optical effect Effects 0.000 description 3
+- 238000013499 data model Methods 0.000 description 2
+- 238000007726 management method Methods 0.000 description 2
+- 238000012986 modification Methods 0.000 description 2
+- 230000004048 modification Effects 0.000 description 2
+- 101100521334 Mus musculus Prom1 gene Proteins 0.000 description 1
+- 230000004913 activation Effects 0.000 description 1
+- 238000013459 approach Methods 0.000 description 1
+- 238000004891 communication Methods 0.000 description 1
+- 238000004590 computer program Methods 0.000 description 1
+- 230000006872 improvement Effects 0.000 description 1
+- 230000007246 mechanism Effects 0.000 description 1
+- 230000008520 organization Effects 0.000 description 1
+- 230000001902 propagating effect Effects 0.000 description 1
+- 238000009877 rendering Methods 0.000 description 1
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/22—Indexing; Data structures therefor; Storage structures
+- G06F16/2228—Indexing structures
+- G06F16/2272—Management thereof
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99932—Access augmentation or optimizing
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99938—Concurrency, e.g. lock management in shared database
+Definitions
+- the present invention is related generally to optimizing database query execution and, in particular, to optimizing database query execution using query parallelism and a data partitioned secondary index.
+- a table has rows made up of columns of data, and the table is created within a tablespace. If the tablespace is partitioned, the table is partitioned across the partitions of the tablespace.
+- a tablespace may be stored in one or more physical partitions on one or more storage devices, and a single table partition is stored on a single physical partition.
+- a physical partition is a fixed size division of storage.
+- Statement (1) is an example of a SQL statement that may be used to create a tablespace named “TS1” with three partitions (represented by “NUMPARTS 3” in the SQL statement), referred to as partition 1, partition 2, and partition 3 for this example. CREATE TABLESPACE TS1 NUMPARTS 3; (1)
+- Statement (2) is an example of a SQL statement that may be used to create a table named “Q1” with at least four columns, DATE, CUSTOMER_NUMBER, STATE, AND PURCHASE_AMOUNT.
+- Table “Q1” is created in tablespace “TS1”, with a partitioning key on the DATE column.
+- the partitioning key on the DATE column indicates that dates up to and including ‘2002-01-31’ are in partition 1, dates greater than ‘2002-01-31’ up to and including ‘2002-02-28’ are in partition 2, and dates greater than ‘2002-02-28’ up to and including ‘2002-03-31’ are in partition 3.
+- partition 1 is for January 2002
+- partition 2 is for February 2002
+- partition 3 is for March 2002.
+- a DATE column value falls in January 2002 for a row
+- that row is stored in partition 1 of the tablespace.
+- a DATE column value falls in February 2002 for a row
+- that row is stored in partition 2 of the tablespace.
+- a DATE column value falls in March 2002 for a row, then that row is stored in partition three of the tablespace.
+- a partitioning index is used to direct the placement of records into physical partitions based on index key values.
+- An index key is a set of one or more columns in a table used to determine the order of index entries.
+- one partitioning index is associated with one tablespace, which may be stored across multiple physical partitions.
+- Statement (3) is an example of a SQL statement that may be used to create a partitioning index on table “Q1” with a key on the DATE column.
+- a database query may be submitted against one or more tables.
+- the database query includes one or more predicates for selection of data.
+- an index may be used to access data.
+- An index is set of pointers that are logically ordered by the values of a key. Indexes provide quick access to data and can enforce uniqueness on the rows in the table.
+- An index has an index key. For example, for the “emp” table, an index may have a key of last name. If a predicate in the database query references a column of a table that is also a key column of an index, the index may be used to access the data associated with rows of data having the requested column value.
+- DPSI data partitioned secondary index
+- Each data partitioned secondary index partition is associated with a physical partition of a partitioned table.
+- the data partitioned secondary index is created on one or more columns of a table.
+- a given key value may occur in multiple partitions of the data partitioned secondary index.
+- Statement (4) is an example of a SQL statement that may be used to create a data partitioned secondary index on table “Q1” with a key on the STATE column. CREATE INDEX STATE_IX ON Q1 (STATE) PARTITIONED; (4)
+- relational data model is a Relational DataBase Management System (RDBMS) using a Structured Query Language (SQL) interface.
+- RDBMS Relational DataBase Management System
+- SQL Structured Query Language
+- query parallelism may be enabled when the RDBMS is set up.
+- Query parallelism refers to the use of parallel tasks to execute a database query.
+- Query parallelism is accomplished by triggering multiple concurrent execution requests within a single database query.
+- execution requests refers to both input/output (“I/O”) requests and central processing unit (“CPU”) processing requests.
+- the index includes one or more key columns whose values identify one or more rows. For example, for a table storing employee data, there may be a last name column. Then, the index for the table may include a last name key column. The index may be partitioned according to key ranges. For example, one key range may include values for the last name key column that start with A–M, while a second key range may include values for the last name key column that start with N–Z.
+- key range partitioning refers to assigning different key ranges of an index to different parallel tasks. Each of the parallel tasks then executes the query for its assigned key range of the index, and the results of the parallel tasks are combined to form a single result from execution of the database query.
+- index access query parallelism involving key range partitioning have disadvantages when extended to data partitioned secondary index access.
+- A–Z last names beginning with any letter (i.e., A–Z) may be found in any or all physical partitions.
+- each parallel task may need to search all of the data partitioned secondary index partitions, leading to possible I/O contention at the index level. That is, if multiple parallel tasks try to access the same data partitioned secondary index partition, contention may arise in the event that an I/O subsystem that manages access to the data partitioned secondary index partition cannot satisfy all requests to access the data partitioned secondary index partition concurrently.
+- a range of data pages is assigned to each of multiple parallel tasks. For each of the multiple parallel tasks, the range of data pages is mapped to one or more physical partitions, and a data partitioned secondary index partition associated with each of the one or more physical partitions is identified. Each of the multiple parallel tasks is executed to process the database query against the assigned range of data pages using the one or more data partitioned secondary index partitions.
+- the described implementations of the invention provide a method, system, and program for optimizing database queries involving data partitioned secondary index access by utilizing query parallelism.
+- FIG. 1A illustrates, in a block diagram, a computing environment in accordance with certain implementations of the invention.
+- FIG. 1B illustrates, in a block diagram, mapping of a data partitioned secondary index to physical partitions on a storage device against which parallel tasks execute in accordance with certain implementations of the invention.
+- FIGS. 2A and 2B illustrate logic for initial processing of a database query in accordance with certain implementations of the invention.
+- FIG. 3 illustrates logic for processing performed to enable execution of parallel task in accordance with certain implementations of the invention.
+- FIG. 4 illustrates one implementation of the architecture of the computer systems of FIG. 1A in accordance with certain implementations of the invention.
+- FIG. 1A illustrates, in a block diagram, a computing environment in accordance with certain implementations of the invention.
+- a client computer 100 executes one or more client applications 110 .
+- a client application 110 may be any type of application program.
+- the client computer 100 is connected to a server computer 120 by a network 190 , such as a local area network (LAN), wide area network (WAN), or the Internet.
+- the Internet is a world-wide collection of connected computer networks (i.e., a network of networks).
+- the server computer 120 includes a database engine 130 .
+- the database engine maintains one or more partitioning indexes 132 and one or more data partitioned secondary indexes 134 .
+- the database engine 130 includes an access path selection component 136 for selecting an access path.
+- An access path specifies how data referenced in a database query is to be accessed in a physical partition (e.g., whether an index is to be used to access the data).
+- the database engine 130 includes a query parallelism optimization component 138 that determines a number of parallel tasks 140 and a range of data pages to be assigned to each parallel task 140 for executing the database query in parallel.
+- each storage device 160 , 170 has a device interface 162 , 172 , respectively.
+- each storage device 160 and 170 may be a redundant array of independent disks (RAID).
+- RAID redundant array of independent disks
+- a RAID device enables storage of the same data on multiple hard disks, thus allowing simultaneous accesses to copies of the data.
+- a client application 110 may submit database queries to the database engine 130 .
+- the database engine 130 is a Relational DataBase Management System (RDBMS) using a Structured Query Language (SQL) interface, and the client application 110 submits SQL queries.
+- the SQL interface has evolved into a standard language for RDBMS software and has been adopted as such by both the American National Standards Institute (ANSI) and the International Standards Organization (ISO).
+- ANSI American National Standards Institute
+- ISO International Standards Organization
+- a DB2® for z/OS product available from International Business Machines, Corporation is an example of an RDBMS.
+- the database engine 130 processes the database query against database objects (e.g., rows of tables). Each database object may be accessed via the partitioning index 132 and one or more data partitioned secondary indexes 134 .
+- the query parallelism optimization component 138 separates execution of the database query into multiple parallel tasks 140 , such that each parallel task 140 processes a same key range, but a discrete data page range associated with a partitioned table qualified by the database query.
+- a task structure 142 (e.g., an array) is associated with a query and includes an entry for each parallel task 140 .
+- Each entry of the task structure 142 stores a low data page identifier (e.g., an address of a data page) and a high data page identifier (e.g., an address of a data page) identifying a data page range assigned to a parallel task 140 .
+- each entry of the task structure 142 also stores a low key and a high key identifying a key range assigned to a parallel task 140 .
+- the key range assigned to each parallel task 140 is the same.
+- FIG. 1B illustrates, in a block diagram, mapping of a data partitioned secondary index 180 to physical partitions on storage device 160 against which parallel tasks 190 , 192 execute in accordance with certain implementations of the invention.
+- the data partitioned secondary index 180 is partitioned into three partitions: data partitioned secondary index partition A 184 , data partitioned secondary index partition B 186 , and data partitioned secondary index partition C 188 .
+- Storage device 160 stores physical partition A 164 with data pages 1–10, physical partition B 166 with data pages 11–20, and physical partition C 168 with data pages 21–30.
+- Each data partitioned secondary index partition is associated with a physical partition.
+- data partitioned secondary index partition A 184 is associated with physical partition A 164 .
+- Data partitioned secondary index partition B 186 is associated with physical partition B 166 .
+- Data partitioned secondary index partition C 188 is associated with physical partition C 168 .
+- parallel task 190 is assigned data pages 1–10 of physical partition A 164 and data pages 11–20 of physical partition B 166 .
+- Parallel task 192 is assigned data pages 21–30 of physical partition C 168 .
+- implementations of the invention are able to map the data pages to physical partitions, which are then mapped to associations with data partitioned secondary index partitions. Since different parallel tasks access different data pages and different data partitioned secondary index partitions, I/O contention between parallel tasks is minimized and overall elapsed time is reduced. Thus, implementations of the invention achieve an elapsed time improvement over sequential database query execution by creating multiple parallel tasks to concurrently access data through a data partitioned secondary index and by using data page range partitioning (i.e., assigning different data page ranges to different parallel tasks having the same key range).
+- FIGS. 2A and 2B illustrate logic for initial processing of a database query in accordance with certain implementations of the invention.
+- Control begins at block 200 with the database engine 130 receiving a database query with one or more predicates that are to be submitted against one or more tables.
+- the database query may be processed with multiple tasks being executed in parallel.
+- the database engine 130 determines whether a partitioning index may be used to identify physical partitions. In particular, the database engine 130 determines whether any predicates reference index keys in a partitioning index associated with the tablespaces in which the one or more tables referenced in the database query reside. Improved performance is realized by predicates on a partitioning index, as this serves to reduce the range of qualified partitions. If a partitioning index may be used, processing continues to block 230 , otherwise, processing continues to block 240 . In block 230 , the database engine 130 uses the partitioning index to identify physical partitions in which data pages for the one or more tables referenced in the database query reside. In block 240 , the database engine 130 identifies all physical partitions in which data pages for the one or more tables referenced in the database query reside.
+- the query parallelism optimization component 138 of the database engine 130 separates execution of the database query into multiple parallel tasks.
+- the query parallelism optimization component 138 selects a number of parallel tasks to invoke.
+- the number of parallel tasks is selected by a user or an application.
+- the number of parallel tasks maybe limited by the server computer 120 or database engine 130 .
+- the number of parallel tasks depends on the number and speed of available processors at the server computer 120 and/or the number of physical partitions to be accessed in processing the database query. In certain implementations, however, the number of parallel tasks does not exceed the number of processors or the number of physical partitions.
+- the number of parallel tasks is more closely related to the number of processors and the speed of the processors. If execution of the database query is dominated by I/O cost, then the number of parallel tasks is more closely related to the number of physical partitions.
+- the query parallelism optimization component 138 assigns a range of contiguous data pages in one or more entire physical partitions to each parallel task.
+- an entry of a task structure 142 stores a low data page identifier and a high data page identifier identifying a data page range assigned to a parallel task.
+- statistics 144 on the physical partitions may be used to estimate the elapsed time for each parallel task and to determine the data page ranges to assign to each parallel task so that elapsed time is equally distributed across the parallel tasks. For example, some statistics that may be used include the size of a table and the number of rows in each partition of that table. In certain implementations, each parallel task is assigned a same number of data pages.
+- one or more of the parallel tasks may be assigned a different number of data pages than one or more other parallel tasks.
+- the number of data pages assigned to each parallel task depends on the number of pages in each physical partition.
+- Each parallel task has the same key range determined by the predicates in the database query, but accesses different data pages in the physical partitions.
+- the data pages assigned to a parallel task are within one or more entire physical partitions. That is, multiple parallel tasks do not access data pages in the same physical partition, thus avoiding contention at the data page level.
+- FIG. 3 illustrates logic for processing performed to enable execution of a parallel task in accordance with certain implementations of the invention.
+- Control begins at block 300 with the database engine 130 mapping the assigned data pages to one or more physical partitions.
+- the database engine 130 identifies one or more data partitioned secondary index partitions associated with the one or more physical partitions.
+- the database engine 130 executes the parallel task to process the database query against the one or more data partitioned secondary index partitions and the assigned data pages. Since the assigned data pages fall into one or more entire physical partitions, and each physical partition is associated with a data partitioned secondary index, contention at the index level is avoided.
+- FIG. 3 illustrates processing for one parallel task, the processing of FIG. 3 is performed for each parallel task.
+- implementations of the invention reduce the overall elapsed time associated with database query execution by utilizing parallel execution, while minimizing I/O contention and I/O wait time.
+- the partitioning strategy assigns disparate data page ranges to different parallel task, each with the same key range, thereby minimizing contention at the data page level and reducing overall elapsed time beyond an approach that partitions based on the index key.
+- IBM, DB2, and z/OS are registered trademarks or trademarks of International Business Machines Corporation in the United States and/or other countries.
+- the described techniques may be implemented as a method, apparatus or article of manufacture using standard programming and/or engineering techniques to produce software, firmware, hardware, or any combination thereof.
+- article of manufacture refers to code or logic implemented in hardware logic (e.g., an integrated circuit chip, Programmable Gate Array (PGA), Application Specific Integrated Circuit (ASIC), etc.) or a computer readable medium, such as magnetic storage medium (e.g., hard disk drives, floppy disks, tape, etc.), optical storage (CD ROMs, optical disks, etc.), volatile and non volatile memory devices (e.g., EEPROMs, ROMs, PROMs, RAMs, DRAMs, SRAMs, firmware, programmable logic, etc.).
+- hardware logic e.g., an integrated circuit chip, Programmable Gate Array (PGA), Application Specific Integrated Circuit (ASIC), etc.
+- a computer readable medium such as magnetic storage medium (e.g., hard disk drives, floppy disks, tape, etc.), optical storage (CD ROMs,
+- Code in the computer readable medium is accessed and executed by a processor.
+- the code in which described embodiments are implemented may further be accessible through a transmission medium or from a file server over a network.
+- the article of manufacture in which the code is implemented may comprise a transmission media, such as a network transmission line, wireless transmission media, signals propagating through space, radio waves, infrared signals, etc.
+- the “article of manufacture” may comprise the medium in which the code is embodied.
+- the “article of manufacture” may comprise a combination of hardware and software components in which the code is embodied, processed, and executed.
+- the article of manufacture may comprise any information bearing medium known in the art.
+- FIGS. 2A , 2 B, and 3 describe specific operations occurring in a particular order. In alternative implementations, certain of the logic operations may be performed in a different order, modified or removed. Moreover, steps may be added to the above described logic and still conform to the described implementations. Further, operations described herein may occur sequentially or certain operations may be processed in parallel, or operations described as performed by a single process may be performed by distributed processes.
+- FIGS. 2A , 2 B, and 3 The illustrated logic of FIGS. 2A , 2 B, and 3 was described as being implemented in software. The logic may be implemented in hardware or in programmable and non-programmable gate array logic.
+- FIG. 4 illustrates one implementation of the architecture of the computer systems 100 , 120 in accordance with certain implementations of the invention.
+- the computer systems 100 , 120 may implement a computer architecture 400 having a processor 402 (e.g., a microprocessor), a memory 404 (e.g., a volatile memory device), a network card 408 , and storage 410 (e.g., a non-volatile storage area, such as magnetic disk drives, optical disk drives, a tape drive, non-volatile RAM, etc.).
+- An operating system 405 may execute in memory 404 .
+- the storage 410 may comprise an internal storage device or an attached or network accessible storage.
+- Computer programs in the storage 410 may be loaded into the memory 404 and executed by the processor 402 in a manner known in the art.
+- a network card 408 enables communication with a network.
+- An input device 412 is used to provide user input to the processor 402 , and may include a keyboard, mouse, pen-stylus, microphone, touch sensitive display screen, or any other activation or input mechanism known in the art.
+- An output device 414 is capable of rendering information transmitted from the processor 402 , or other component, such as a display monitor, printer, storage, etc.
+- the computer architecture 400 may comprise any computing device known in the art, such as a mainframe, server, personal computer, workstation, laptop, handheld computer, telephony device, network appliance, virtualization device, storage controller, etc. Any processor 402 and operating system 405 known in the art may be used.
+Abstract
+Description
+CREATE TABLESPACE TS1 NUMPARTS 3; (1)
+CREATE TABLE Q1 (DATE, ..., | (2) |
+CUSTOMER_NUMBER, ..., | |
+STATE, ..., | |
+PURCHASE_AMOUNT...,) | |
+IN TS1 | |
+PARTITIONING KEY (DATE) |
+( |
+||
+PART 2 VALUES (‘2002-02-28’), | ||
+PART 3 VALUES (‘2002-03-31’)); | ||
+CREATE INDEX DATE_IX ON Q1 (DATE) | (3) |
+PARTITIONED CLUSTER; | ||
+CREATE INDEX STATE_IX ON Q1 (STATE) PARTITIONED; (4)
+SELECT CUSTOMER_NUMBER, PURCHASE_AMOUNT | (5) |
+FROM Q1 | |
+WHERE DATE BETWEEN ‘2002-01-01’ AND ‘2002-02-28’ AND | |
+STATE = ‘CA’ | |
+ORDER BY CUSTOMER_NUMBER; | |
+Claims (21)
+Priority Applications (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/353,138 US7146365B2 (en) | 2003-01-27 | 2003-01-27 | Method, system, and program for optimizing database query execution |
+US10/440,333 US7158996B2 (en) | 2003-01-27 | 2003-05-16 | Method, system, and program for managing database operations with respect to a database table |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/353,138 US7146365B2 (en) | 2003-01-27 | 2003-01-27 | Method, system, and program for optimizing database query execution |
+Related Child Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/440,333 Continuation-In-Part US7158996B2 (en) | 2003-01-27 | 2003-05-16 | Method, system, and program for managing database operations with respect to a database table |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20040148273A1 US20040148273A1 (en) | 2004-07-29 |
+US7146365B2 true US7146365B2 (en) | 2006-12-05 |
+Family
+ID=32736125
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/353,138 Expired - Lifetime US7146365B2 (en) | 2003-01-27 | 2003-01-27 | Method, system, and program for optimizing database query execution |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7146365B2 (en) |
+Cited By (26)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7254580B1 (en) * | 2003-07-31 | 2007-08-07 | Google Inc. | System and method for selectively searching partitions of a database |
+US20070239681A1 (en) * | 2006-03-31 | 2007-10-11 | Oracle International Corporation | Techniques of efficient XML meta-data query using XML table index |
+US20080120322A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Techniques of efficient query over text, image, audio, video and other domain specific data in XML using XML table index with integration of text index and other domain specific indexes |
+US20080120321A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Techniques of efficient XML query using combination of XML table index and path/value index |
+US20080215544A1 (en) * | 2007-03-02 | 2008-09-04 | Microsoft Corporation | Systems and Methods for Modeling Partitioned Tables as Logical Indexes |
+US20080281786A1 (en) * | 2007-05-11 | 2008-11-13 | Microsoft Corporation | Producer/consumer optimization |
+US20090030888A1 (en) * | 2007-07-25 | 2009-01-29 | Birendra Kumar Sahu | Techniques for scoring and comparing query execution plans |
+US20090037365A1 (en) * | 2007-07-30 | 2009-02-05 | Paul Sinclair | Product join dynamic partition elimination for multilevel partitioning |
+US20090182762A1 (en) * | 2008-01-15 | 2009-07-16 | Oracle International Corporation | Matching up xml query expression for xml table index lookup during query rewrite |
+US7590620B1 (en) * | 2004-06-18 | 2009-09-15 | Google Inc. | System and method for analyzing data records |
+US7650331B1 (en) * | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+US20100106934A1 (en) * | 2008-10-24 | 2010-04-29 | Microsoft Corporation | Partition management in a partitioned, scalable, and available structured storage |
+US20100122065A1 (en) * | 2004-06-18 | 2010-05-13 | Jeffrey Dean | System and Method for Large-Scale Data Processing Using an Application-Independent Framework |
+US20100146245A1 (en) * | 2008-12-04 | 2010-06-10 | Microsoft Corporation | Parallel execution of a loop |
+US20100228760A1 (en) * | 2009-03-06 | 2010-09-09 | Qiming Chen | Correlated query process (cqp) and peer-to-peer (p2p) execution |
+US20110055151A1 (en) * | 2009-08-27 | 2011-03-03 | International Business Machines Corporation | Processing Database Operation Requests |
+US20120197868A1 (en) * | 2009-08-24 | 2012-08-02 | Dietmar Fauser | Continuous Full Scan Data Store Table And Distributed Data Store Featuring Predictable Answer Time For Unpredictable Workload |
+US8510538B1 (en) | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US20130332484A1 (en) * | 2012-06-06 | 2013-12-12 | Rackspace Us, Inc. | Data Management and Indexing Across a Distributed Database |
+TWI498758B (en) * | 2010-01-18 | 2015-09-01 | Microsoft Technology Licensing Llc | Database engine throttling |
+US20150261840A1 (en) * | 2014-03-14 | 2015-09-17 | International Business Machines Corporation | Dynamically indentifying and preventing skewed partitions in a shared-nothing database |
+US9141666B2 (en) | 2013-06-28 | 2015-09-22 | Microsoft Technology Licensing, Llc | Incremental maintenance of range-partitioned statistics for query optimization |
+US20150339350A1 (en) * | 2014-05-23 | 2015-11-26 | International Business Machines Corporation | Data-partitioned secondary index (dpsi) partition level join |
+US9607042B2 (en) | 2013-09-16 | 2017-03-28 | Mastercard International Incorporated | Systems and methods for optimizing database queries |
+US9965510B2 (en) | 2015-06-22 | 2018-05-08 | International Business Machines Corporation | Partition access method for query optimization |
+US10169409B2 (en) | 2015-10-01 | 2019-01-01 | International Business Machines Corporation | System and method for transferring data between RDBMS and big data platform |
+Families Citing this family (16)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7174553B1 (en) * | 2002-11-22 | 2007-02-06 | Ncr Corp. | Increasing parallelism of function evaluation in a database |
+US8583657B2 (en) * | 2004-05-06 | 2013-11-12 | Oracle International Corporation | Method and apparatus for using a hash-partitioned index to access a table that is not partitioned or partitioned independently of the hash partitioned index |
+US7447679B2 (en) * | 2004-05-07 | 2008-11-04 | Oracle International Corporation | Optimizing execution of a database query by using the partitioning schema of a partitioned object to select a subset of partitions from another partitioned object |
+JP4567472B2 (en) * | 2005-01-12 | 2010-10-20 | 株式会社エヌ・ティ・ティ・ドコモ | Data communication restriction method and data communication restriction control device for flat-rate users |
+US20060248037A1 (en) * | 2005-04-29 | 2006-11-02 | International Business Machines Corporation | Annotation of inverted list text indexes using search queries |
+US20070250470A1 (en) * | 2006-04-24 | 2007-10-25 | Microsoft Corporation | Parallelization of language-integrated collection operations |
+US8150904B2 (en) * | 2007-02-28 | 2012-04-03 | Sap Ag | Distribution of data and task instances in grid environments |
+US7921085B2 (en) * | 2007-03-26 | 2011-04-05 | International Business Machines Corporation | Method and system for quantifying a data page repetition pattern for a database index in a database management system |
+US9740735B2 (en) | 2007-11-07 | 2017-08-22 | Microsoft Technology Licensing, Llc | Programming language extensions in structured queries |
+US8666974B2 (en) * | 2010-04-16 | 2014-03-04 | Salesforce.Com, Inc. | Methods and systems for performing high volume searches in a multi-tenant store |
+US9266020B2 (en) * | 2012-09-27 | 2016-02-23 | Empire Technology Development Llc | Character model animation using stored recordings of player movement interface data |
+WO2014149031A1 (en) * | 2013-03-18 | 2014-09-25 | Ge Intelligent Platforms, Inc. | Apparatus and method for time series query packaging |
+WO2014149029A1 (en) * | 2013-03-18 | 2014-09-25 | Ge Intelligent Platforms, Inc. | Apparatus and method for executing parallel time series data analytics |
+US9697247B2 (en) * | 2014-07-16 | 2017-07-04 | Facebook, Inc. | Tiered data storage architecture |
+CN107045499A (en) * | 2016-02-05 | 2017-08-15 | 中兴通讯股份有限公司 | A kind of method and server for realizing data query |
+US11893267B2 (en) | 2022-01-14 | 2024-02-06 | Bank Of America Corporation | Data flow control and routing using machine learning |
+Citations (15)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5093911A (en) | 1989-09-14 | 1992-03-03 | International Business Machines Corporation | Storage and retrieval system |
+US5307484A (en) | 1991-03-06 | 1994-04-26 | Chrysler Corporation | Relational data base repository system for managing functional and physical data structures of nodes and links of multiple computer networks |
+US5515531A (en) | 1992-05-29 | 1996-05-07 | Hitachi, Ltd. | Parallel database processing system and retrieval method using secondary key |
+US5551027A (en) | 1993-01-07 | 1996-08-27 | International Business Machines Corporation | Multi-tiered indexing method for partitioned data |
+US5692174A (en) | 1995-10-05 | 1997-11-25 | International Business Machines Corporation | Query parallelism in a shared data DBMS system |
+US5813005A (en) | 1993-11-16 | 1998-09-22 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US5918224A (en) | 1995-07-26 | 1999-06-29 | Borland International, Inc. | Client/server database system with methods for providing clients with server-based bi-directional scrolling at the server |
+US5960194A (en) | 1995-09-11 | 1999-09-28 | International Business Machines Corporation | Method for generating a multi-tiered index for partitioned data |
+US6101495A (en) | 1994-11-16 | 2000-08-08 | Hitachi, Ltd. | Method of executing partition operations in a parallel database system |
+US6266660B1 (en) | 1998-07-31 | 2001-07-24 | Unisys Corporation | Secondary index search |
+US6353820B1 (en) * | 1999-09-29 | 2002-03-05 | Bull Hn Information Systems Inc. | Method and system for using dynamically generated code to perform index record retrieval in certain circumstances in a relational database manager |
+US6470331B1 (en) * | 1999-12-04 | 2002-10-22 | Ncr Corporation | Very large table reduction in parallel processing database systems |
+US6598041B1 (en) | 2000-09-07 | 2003-07-22 | International Business Machines Corporation | Method, system, and program for processing modifications to data in tables in a database system |
+US6609131B1 (en) * | 1999-09-27 | 2003-08-19 | Oracle International Corporation | Parallel partition-wise joins |
+US6772163B1 (en) * | 2001-12-20 | 2004-08-03 | Ncr Corporation | Reduced memory row hash match scan join for a partitioned database system |
+-
+2003
+- 2003-01-27 US US10/353,138 patent/US7146365B2/en not_active Expired - Lifetime
+Patent Citations (16)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5093911A (en) | 1989-09-14 | 1992-03-03 | International Business Machines Corporation | Storage and retrieval system |
+US5307484A (en) | 1991-03-06 | 1994-04-26 | Chrysler Corporation | Relational data base repository system for managing functional and physical data structures of nodes and links of multiple computer networks |
+US5515531A (en) | 1992-05-29 | 1996-05-07 | Hitachi, Ltd. | Parallel database processing system and retrieval method using secondary key |
+US5551027A (en) | 1993-01-07 | 1996-08-27 | International Business Machines Corporation | Multi-tiered indexing method for partitioned data |
+US6192359B1 (en) | 1993-11-16 | 2001-02-20 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US5813005A (en) | 1993-11-16 | 1998-09-22 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US6101495A (en) | 1994-11-16 | 2000-08-08 | Hitachi, Ltd. | Method of executing partition operations in a parallel database system |
+US5918224A (en) | 1995-07-26 | 1999-06-29 | Borland International, Inc. | Client/server database system with methods for providing clients with server-based bi-directional scrolling at the server |
+US5960194A (en) | 1995-09-11 | 1999-09-28 | International Business Machines Corporation | Method for generating a multi-tiered index for partitioned data |
+US5692174A (en) | 1995-10-05 | 1997-11-25 | International Business Machines Corporation | Query parallelism in a shared data DBMS system |
+US6266660B1 (en) | 1998-07-31 | 2001-07-24 | Unisys Corporation | Secondary index search |
+US6609131B1 (en) * | 1999-09-27 | 2003-08-19 | Oracle International Corporation | Parallel partition-wise joins |
+US6353820B1 (en) * | 1999-09-29 | 2002-03-05 | Bull Hn Information Systems Inc. | Method and system for using dynamically generated code to perform index record retrieval in certain circumstances in a relational database manager |
+US6470331B1 (en) * | 1999-12-04 | 2002-10-22 | Ncr Corporation | Very large table reduction in parallel processing database systems |
+US6598041B1 (en) | 2000-09-07 | 2003-07-22 | International Business Machines Corporation | Method, system, and program for processing modifications to data in tables in a database system |
+US6772163B1 (en) * | 2001-12-20 | 2004-08-03 | Ncr Corporation | Reduced memory row hash match scan join for a partitioned database system |
+Non-Patent Citations (6)
+Title |
+---|
+"Partitioned Tables and Indexes." Oracle9i Database Concepts, Release I (9.0.1), Part No. A88856-02, 1996-2001 [online] [retrieved on Aug. 30, 2002]. Retrieved from http:download-west.oracle.com. |
+Leslie, Harry, et al. Efficient Search of Multidimensional B-Trees. Proceedings of the 21<SUP>st </SUP>International Conference on Very Large Data Bases, pp. 710-719. Zurich, Switzerland Sep. 11-15, 1995. |
+Leslie, Harry, et al. Efficient Search of Multidimensional B-Trees. Proceedings of the 21st International Conference on Very Large Data Bases, pp. 710-719. Zurich, Switzerland Sep. 11-15, 1995. |
+Miller, Roger L. "DB2(R) for z/OS Technology Highlights," IBM Silicon Valley Lab, DB2 for z/OS [online] [retrieved on Aug. 30, 2002]. |
+Miller, Roger L. "DB2® for z/OS Technology Highlights," IBM Silicon Valley Lab, DB2 for z/OS [online] [retrieved on Aug. 30, 2002]. |
+U.S. Appl. No. 10/440,333, filed on May 16, 2003, entitled Method, System and Program for Managing Database Operations with Respect to a Database Table, by R.M. Croisettier et al. |
+Cited By (65)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7254580B1 (en) * | 2003-07-31 | 2007-08-07 | Google Inc. | System and method for selectively searching partitions of a database |
+US11650971B2 (en) | 2004-06-18 | 2023-05-16 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US9405808B2 (en) | 2004-06-18 | 2016-08-02 | Google Inc. | System and method for analyzing data records |
+US7590620B1 (en) * | 2004-06-18 | 2009-09-15 | Google Inc. | System and method for analyzing data records |
+US10885012B2 (en) | 2004-06-18 | 2021-01-05 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US11366797B2 (en) | 2004-06-18 | 2022-06-21 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US9612883B2 (en) | 2004-06-18 | 2017-04-04 | Google Inc. | System and method for large-scale data processing using an application-independent framework |
+US8612510B2 (en) | 2004-06-18 | 2013-12-17 | Google Inc. | System and method for large-scale data processing using an application-independent framework |
+US20100005080A1 (en) * | 2004-06-18 | 2010-01-07 | Pike Robert C | System and method for analyzing data records |
+US11275743B2 (en) | 2004-06-18 | 2022-03-15 | Google Llc | System and method for analyzing data records |
+US8126909B2 (en) | 2004-06-18 | 2012-02-28 | Google Inc. | System and method for analyzing data records |
+US9830357B2 (en) | 2004-06-18 | 2017-11-28 | Google Inc. | System and method for analyzing data records |
+US7650331B1 (en) * | 2004-06-18 | 2010-01-19 | Google Inc. | System and method for efficient large-scale data processing |
+US10296500B2 (en) | 2004-06-18 | 2019-05-21 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US20100122065A1 (en) * | 2004-06-18 | 2010-05-13 | Jeffrey Dean | System and Method for Large-Scale Data Processing Using an Application-Independent Framework |
+US20070239681A1 (en) * | 2006-03-31 | 2007-10-11 | Oracle International Corporation | Techniques of efficient XML meta-data query using XML table index |
+US7644066B2 (en) * | 2006-03-31 | 2010-01-05 | Oracle International Corporation | Techniques of efficient XML meta-data query using XML table index |
+US20080120322A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Techniques of efficient query over text, image, audio, video and other domain specific data in XML using XML table index with integration of text index and other domain specific indexes |
+US8478760B2 (en) | 2006-11-17 | 2013-07-02 | Oracle International Corporation | Techniques of efficient query over text, image, audio, video and other domain specific data in XML using XML table index with integration of text index and other domain specific indexes |
+US9436779B2 (en) | 2006-11-17 | 2016-09-06 | Oracle International Corporation | Techniques of efficient XML query using combination of XML table index and path/value index |
+US20080120321A1 (en) * | 2006-11-17 | 2008-05-22 | Oracle International Corporation | Techniques of efficient XML query using combination of XML table index and path/value index |
+US8255387B2 (en) | 2007-03-02 | 2012-08-28 | Microsoft Corporation | Systems and methods for modeling partitioned tables as logical indexes |
+US20080215544A1 (en) * | 2007-03-02 | 2008-09-04 | Microsoft Corporation | Systems and Methods for Modeling Partitioned Tables as Logical Indexes |
+US20100274780A1 (en) * | 2007-03-02 | 2010-10-28 | Microsoft Corporation | Systems and methods for modeling partitioned tables as logical indexes |
+US7792822B2 (en) | 2007-03-02 | 2010-09-07 | Microsoft Corporation | Systems and methods for modeling partitioned tables as logical indexes |
+US8352456B2 (en) | 2007-05-11 | 2013-01-08 | Microsoft Corporation | Producer/consumer optimization |
+US20080281786A1 (en) * | 2007-05-11 | 2008-11-13 | Microsoft Corporation | Producer/consumer optimization |
+US7941425B2 (en) | 2007-07-25 | 2011-05-10 | Teradata Us, Inc. | Techniques for scoring and comparing query execution plans |
+US20090030888A1 (en) * | 2007-07-25 | 2009-01-29 | Birendra Kumar Sahu | Techniques for scoring and comparing query execution plans |
+US20090037365A1 (en) * | 2007-07-30 | 2009-02-05 | Paul Sinclair | Product join dynamic partition elimination for multilevel partitioning |
+US8396862B2 (en) | 2007-07-30 | 2013-03-12 | Teradata Us, Inc. | Product join dynamic partition elimination for multilevel partitioning |
+US20090182762A1 (en) * | 2008-01-15 | 2009-07-16 | Oracle International Corporation | Matching up xml query expression for xml table index lookup during query rewrite |
+US7870121B2 (en) | 2008-01-15 | 2011-01-11 | Oracle International Corporation | Matching up XML query expression for XML table index lookup during query rewrite |
+US9996572B2 (en) | 2008-10-24 | 2018-06-12 | Microsoft Technology Licensing, Llc | Partition management in a partitioned, scalable, and available structured storage |
+US20100106934A1 (en) * | 2008-10-24 | 2010-04-29 | Microsoft Corporation | Partition management in a partitioned, scalable, and available structured storage |
+US8799629B2 (en) | 2008-12-04 | 2014-08-05 | Microsoft Corporation | Parallel execution of a loop |
+US20100146245A1 (en) * | 2008-12-04 | 2010-06-10 | Microsoft Corporation | Parallel execution of a loop |
+US20100228760A1 (en) * | 2009-03-06 | 2010-09-09 | Qiming Chen | Correlated query process (cqp) and peer-to-peer (p2p) execution |
+US8489633B2 (en) * | 2009-03-06 | 2013-07-16 | Hewlett-Packard Development Company, L.P. | Correlated query process (CQP) and peer-to-peer (P2P) execution |
+US9396036B2 (en) | 2009-04-13 | 2016-07-19 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US8510538B1 (en) | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US9886325B2 (en) | 2009-04-13 | 2018-02-06 | Google Llc | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US9047141B2 (en) | 2009-04-13 | 2015-06-02 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US20120197868A1 (en) * | 2009-08-24 | 2012-08-02 | Dietmar Fauser | Continuous Full Scan Data Store Table And Distributed Data Store Featuring Predictable Answer Time For Unpredictable Workload |
+US8990335B2 (en) * | 2009-08-24 | 2015-03-24 | Amadeus S.A.S. | Continuous full scan data store table and distributed data store featuring predictable answer time for unpredictable workload |
+US8626765B2 (en) | 2009-08-27 | 2014-01-07 | International Business Machines Corporation | Processing database operation requests |
+US20110055151A1 (en) * | 2009-08-27 | 2011-03-03 | International Business Machines Corporation | Processing Database Operation Requests |
+TWI498758B (en) * | 2010-01-18 | 2015-09-01 | Microsoft Technology Licensing Llc | Database engine throttling |
+US20130332484A1 (en) * | 2012-06-06 | 2013-12-12 | Rackspace Us, Inc. | Data Management and Indexing Across a Distributed Database |
+US9727590B2 (en) | 2012-06-06 | 2017-08-08 | Rackspace Us, Inc. | Data management and indexing across a distributed database |
+US8965921B2 (en) * | 2012-06-06 | 2015-02-24 | Rackspace Us, Inc. | Data management and indexing across a distributed database |
+US9141666B2 (en) | 2013-06-28 | 2015-09-22 | Microsoft Technology Licensing, Llc | Incremental maintenance of range-partitioned statistics for query optimization |
+US9607042B2 (en) | 2013-09-16 | 2017-03-28 | Mastercard International Incorporated | Systems and methods for optimizing database queries |
+US9465840B2 (en) * | 2014-03-14 | 2016-10-11 | International Business Machines Corporation | Dynamically indentifying and preventing skewed partitions in a shared-nothing database |
+US20150261840A1 (en) * | 2014-03-14 | 2015-09-17 | International Business Machines Corporation | Dynamically indentifying and preventing skewed partitions in a shared-nothing database |
+US9460152B2 (en) * | 2014-03-14 | 2016-10-04 | International Business Machines Corporation | Dynamically indentifying and preventing skewed partitions in a shared-nothing database |
+US20150261816A1 (en) * | 2014-03-14 | 2015-09-17 | International Business Machines Corporation | Dynamically indentifying and preventing skewed partitions in a shared-nothing database |
+US20150339350A1 (en) * | 2014-05-23 | 2015-11-26 | International Business Machines Corporation | Data-partitioned secondary index (dpsi) partition level join |
+US9940359B2 (en) * | 2014-05-23 | 2018-04-10 | International Business Machines Corporation | Data-partitioned secondary index (DPSI) partition level join |
+US10289718B2 (en) | 2015-06-22 | 2019-05-14 | International Business Machines Corporation | Partition access method for query optimization |
+US10380108B2 (en) | 2015-06-22 | 2019-08-13 | International Business Machines Corporation | Partition access method for query optimization |
+US10983994B2 (en) | 2015-06-22 | 2021-04-20 | International Business Machines Corporation | Partition access method for query optimization |
+US10223416B2 (en) | 2015-06-22 | 2019-03-05 | International Business Machines Corporation | Partition access method for query optimization |
+US9965510B2 (en) | 2015-06-22 | 2018-05-08 | International Business Machines Corporation | Partition access method for query optimization |
+US10169409B2 (en) | 2015-10-01 | 2019-01-01 | International Business Machines Corporation | System and method for transferring data between RDBMS and big data platform |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20040148273A1 (en) | 2004-07-29 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7146365B2 (en) | Method, system, and program for optimizing database query execution | |
+US11899666B2 (en) | System and method for dynamic database split generation in a massively parallel or distributed database environment | |
+US10089377B2 (en) | System and method for data transfer from JDBC to a data warehouse layer in a massively parallel or distributed database environment | |
+US7158996B2 (en) | Method, system, and program for managing database operations with respect to a database table | |
+US10180973B2 (en) | System and method for efficient connection management in a massively parallel or distributed database environment | |
+US10380114B2 (en) | System and method for generating rowid range-based splits in a massively parallel or distributed database environment | |
+US10528596B2 (en) | System and method for consistent reads between tasks in a massively parallel or distributed database environment | |
+US11544268B2 (en) | System and method for generating size-based splits in a massively parallel or distributed database environment | |
+US8745033B2 (en) | Database query optimization using index carryover to subset an index | |
+US10078684B2 (en) | System and method for query processing with table-level predicate pushdown in a massively parallel or distributed database environment | |
+US10089357B2 (en) | System and method for generating partition-based splits in a massively parallel or distributed database environment | |
+EP2778972B1 (en) | Shared cache used to provide zero copy memory mapped database | |
+US8566333B2 (en) | Multiple sparse index intelligent table organization | |
+US20100211577A1 (en) | Database processing system and method | |
+US8108375B2 (en) | Processing database queries by returning results of a first query to subsequent queries | |
+US7890480B2 (en) | Processing of deterministic user-defined functions using multiple corresponding hash tables | |
+US7792819B2 (en) | Priority reduction for fast partitions during query execution | |
+US20230359494A1 (en) | Disabling of memory allocators | |
+US20080215539A1 (en) | Data ordering for derived columns in a database system | |
+US7685103B2 (en) | Method, system, and program for predicate processing by iterator functions | |
+US20050097083A1 (en) | Apparatus and method for processing database queries | |
+US20240134861A1 (en) | System and method for dynamic database split generation in a massively parallel or distributed database environment | |
+US20060235819A1 (en) | Apparatus and method for reducing data returned for a database query using select list processing | |
+AlHammad et al. | Performance evaluation study of data retrieval in data warehouse environment | |
+US20240095248A1 (en) | Data transfer in a computer-implemented database from a database extension layer |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:ALLEN, TERRY DENNIS;DESAI, PARAMESH S.;SHIBAMIYA, AKIRA;AND OTHERS;REEL/FRAME:013720/0039Effective date: 20030127 |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:027005/0673Effective date: 20110930 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553)Year of fee payment: 12 |

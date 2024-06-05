@@ -1,0 +1,341 @@
+US7130838B2 - Query optimization via a partitioned environment - Google Patents
+Query optimization via a partitioned environment Download PDFInfo
+- Publication number
+- US7130838B2 US7130838B2 US10/660,144 US66014403A US7130838B2 US 7130838 B2 US7130838 B2 US 7130838B2 US 66014403 A US66014403 A US 66014403A US 7130838 B2 US7130838 B2 US 7130838B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- query
+- access plan
+- partition
+- queries
+- background
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/20—Information retrieval; Database structures therefor; File system structures therefor of structured data, e.g. relational data
+- G06F16/24—Querying
+- G06F16/245—Query processing
+- G06F16/2453—Query optimisation
+- G06F16/24534—Query rewriting; Transformation
+- G06F16/24542—Plan optimisation
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99931—Database or file accessing
+- Y10S707/99932—Access augmentation or optimizing
+Definitions
+- the present invention is related to the commonly owned, co-pending U.S. patent application Ser. No. 10/360,397 entitled “Patterned Based Query Optimization,” filed Feb. 6, 2003, herein incorporated by reference.
+- the present invention generally relates to data processing and more particularly to query optimization by executing queries in a backup environment.
+- Databases are computerized information storage and retrieval systems.
+- a relational database management system is a computer database management system (DBMS) that uses relational techniques for storing and retrieving data.
+- the most prevalent type of database is the relational database, a tabular database in which data is defined so that it can be reorganized and accessed in a number of different ways.
+- a distributed database is one that can be dispersed or replicated among different points in a network.
+- An object-oriented programming database is one that is congruent with the data defined in object classes and subclasses.
+- a requesting entity e.g., an application or the operating system
+- requests may include, for instance, simple catalog lookup requests or transactions and combinations of transactions that operate to read, change and add specified records in the database.
+- SQL Structured Query Language
+- IBM International Business Machines'
+- Microsoft's SQL Server and database products from Oracle, Sybase, and Computer Associates.
+- the term “query” denominates a set of commands for retrieving data from a stored database. Queries take the form of a command language that lets programmers and programs select, insert, update, find out the location of data, and so forth.
+- the DBMS includes a query optimizer component configured to determine the manner in which queries will be processed.
+- the primary task of the optimizer is to determine the most efficient way to execute each particular query against a database.
+- the optimizer determines an access plan for use in executing the query against the database.
+- the access plan contains low-level information indicating precisely what steps the system is to take to execute the query (e.g., using an index, a hash table, bit map, etc.).
+- Conventional optimizers are generally configured to determine the best access plan for each query they encounter, based on cost comparisons (i.e., estimated resource requirements, typically in terms of time and space) of available access plans.
+- the optimizer may explore various ways to execute the query. For example, the optimizer may determine if an index may be used to speed a search, whether a search condition should be applied to a first table prior to joining the first table to a second table or whether to join the tables first. In determining the best access plan, optimizers may also group queries based on similarities and use the same access plan for queries that are similar.
+- choosing an access plan may be a rather simple task.
+- the complexity of choosing an access plan may increase accordingly, as the optimizer may have to take account of many different variables to determine the most efficient access plan.
+- the access plan selected by the optimizer may not in actuality be the most efficient access plan. In fact, unless the queries are actually run with the different access plans to examine their execution time, there may be no definite way of determining the best access plan.
+- the present invention generally provides methods, articles of manufacture, and systems for optimizing queries.
+- One embodiment provides a method of optimizing the execution of queries in a system.
+- the method generally includes monitoring queries executed in a primary processing environment, selecting a query to be optimized, from the monitored queries, generating a plurality of access plans for the selected query, and determining an optimal access plan by executing the query in a background processing environment using the generated access plans.
+- Another embodiment provides a method of executing queries in a logically partitioned system having at least one primary partition and at least one background partition.
+- the method generally includes receiving a query to be executed in the primary partition, analyzing the query in the background partition to generate one or more performance measures, and executing the query in the primary partition only if the one or more performance measures fall within predefined performance criteria.
+- Another embodiment provides a computer readable medium containing a program for optimizing query execution which, When executed by a processor, the program performs operations generally including monitoring queries executed in a primary processing environment, selecting a query to be optimized, from the monitored queries, generating a plurality of access plans for the selected query, and determining an optimal access plan by executing the query in a background processing environment using the generated access plans.
+- Another embodiment provides a logically partitioned computer system generally including at least one primary partition, at least one background partition, a first executable component running on the primary partition and a second executable component running on the background partition.
+- the first executable component is generally configured to monitor queries executed in the primary partition, select a query to be optimized, from the monitored queries, and send the selected query to the background partition for determination of an optimal access plan.
+- the second executable component is generally configured to receive the selected query, generate a plurality of access plans for the selected query, and determine an optimal access plan by executing the query in the background partition using the generated access plans.
+- FIG. 1 is a computer system illustratively utilized in accordance with the present invention.
+- FIG. 2 is a logically partitioned computer system illustratively utilized in accordance with the present invention.
+- FIG. 3 is a relational view of software components according to one embodiment of the present invention.
+- FIGS. 4A and 4B are flow charts illustrating exemplary operations for determining an optimal access plan for a query according to one embodiment of the present invention.
+- FIG. 5 is a flow chart illustrating exemplary operations for testing a query prior to execution according to one embodiment of the present invention.
+- the present invention generally is directed to systems, methods, and articles of manufacture for improving the efficiency of executing a query.
+- queries frequently issued in a primary processing environment may be run in a background processing environment with different access plans to determine the access plan that results in the least execution time.
+- selected queries may be analyzed in the background processing environment prior to execution. This analysis may be performed to ensure execution time of the query will not exceed a specified threshold, and/or will not result in excessive contention when executed in the primary processing environment.
+- the term access plan generally refers to any type of information indicating what steps the system is to take to execute a query including, but not limited to, information such as indexes to use, an order of applying search conditions, joining tables, etc. Further, in some instances, an access plan may include multiple sets of steps, where each set of steps may be regarded as an individual access plan. However, to facilitate understanding, the following description will refer to the multiple sets of steps, taken as a whole, as a single access plan. As used herein, the term background processing generally refers to any type of processing that does not significantly impact primary (i.e., foreground) processing.
+- background processing may be performed using free processing cycles of unused/unassigned processors in a multi-processor system, or free cycles of processor used for foreground processing, for example, during idle times.
+- embodiments below will be described with reference to background processing on a logically partitioned system in which multiple processors are allocated among one or more primary and background partitions.
+- One embodiment of the invention is implemented as a program product for use with a computer system such as, for example, the computer system 110 of the data processing environment 100 shown in FIG. 1 and described below.
+- the program(s) of the program product defines functions of the embodiments (including the methods described herein) and can be contained on a variety of signal-bearing media.
+- Illustrative signal-bearing media include, but are not limited to: (i) information permanently stored on non-writable storage media (e.g., read-only memory devices within a computer such as CD-ROM disks readable by a CD-ROM drive); (ii) alterable information stored on writable storage media (e.g., floppy disks within a diskette drive or hard-disk drive); and (iii) information conveyed to a computer by a communications medium, such as through a computer or telephone network, including wireless communications. The latter embodiment specifically includes information downloaded from the Internet and other networks.
+- Such signal-bearing media when carrying computer-readable instructions that direct the functions of the present invention, represent embodiments of the present invention.
+- routines executed to implement the embodiments of the invention may be part of an operating system or a specific application, component, program, module, object, or sequence of instructions.
+- the computer program of the present invention typically is comprised of a multitude of instructions that will be translated by the native computer into a machine-readable format and hence executable instructions.
+- programs are comprised of variables and data structures that either reside locally to the program or are found in memory or on storage devices.
+- various programs described hereinafter may be identified based upon the application for which they are implemented in a specific embodiment of the invention. However, it should be appreciated that any particular program nomenclature that follows is used merely for convenience, and thus the invention should not be limited to use solely in any specific application identified and/or implied by such nomenclature.
+- the data processing environment 100 includes a computer system 110 and a plurality of networked devices 146 .
+- the computer system 110 may represent any type of computer, computer system or other programmable electronic device, including a client computer, a server computer, a portable computer, an embedded controller, a PC-based server, a minicomputer, a midrange computer, a mainframe computer, and other computers adapted to support the methods, apparatus, and article of manufacture of the invention.
+- the computer system 110 is an eServer iSeries 400 available from International Business Machines of Armonk, N.Y.
+- the computer system 110 could include a number of operators and peripheral systems as shown, for example, by a mass storage interface 137 operably connected to a direct access storage device (DASD) 138 , by a video interface 140 operably connected to a display 142 , and by a network interface 144 operably connected to the networked devices 146 .
+- the display 142 may be any video output device for outputting viewable information.
+- the networked devices 146 may be any combination of any type networked devices, such as networked servers, networked printers, and network accessed storage (NAS) devices.
+- NAS network accessed storage
+- Computer system 110 is shown comprising one or more processors 112 which may be allocated among one or more logical partitions (as shown in FIG. 2 ) of a computer system and may obtain instructions and data via a bus 114 from a main memory 116 .
+- the processors 112 could be any processor adapted to support the methods of the invention.
+- the main memory 116 is any memory sufficiently large to hold the necessary programs and data structures.
+- Main memory 116 could be one or a combination of memory devices, including Random Access Memory, nonvolatile or backup memory, (e.g., programmable or Flash memories, read-only memories, etc.).
+- main memory 116 may be considered to include memory physically located elsewhere in a computer system 110 , for example, any storage capacity used as virtual memory or stored on a mass storage device (e.g., DASD 138 ) or on another computer coupled to the computer system 110 via bus 114 .
+- a mass storage device e.g., DASD 138
+- the main memory 116 is shown configured with an operating system 118 .
+- the operating system 118 is the software used for managing the operation of the computer system 110 . Examples of the operating system 118 include UNIX, Microsoft Windows®, and the like.
+- the main memory 116 further includes at least one application 120 and a query execution component 130 .
+- the application 120 and the query execution component 130 are software products comprising a plurality of instructions that are resident at various times in various memory and storage devices in the computer system 110 . When read and executed by one or more processors 112 in the computer system 110 , the application 120 and the query execution component 130 cause the computer system 110 to perform the steps necessary to execute steps or elements embodying the various aspects of the invention.
+- the application 120 (and more generally, any requesting entity, including the operating system 118 ) is configured to run (i.e., issue/execute) queries against a database 139 (illustratively shown as resident in the DASD 138 ) via the query execution component 130 .
+- the queries issued by the application 120 may be created and/or specified by a user via a query building interface 122 , which may be included with the application 120 .
+- the queries may be generated (e.g., by a user) via the query building interface 122 by specifying query conditions, for example, through one or more a graphical user interface (GUI) screens.
+- the application 120 may send the generated queries to the query execution component 130 for execution.
+- the query execution component 130 may include a query optimizer 132 for optimizing received queries prior to execution.
+- the query execution component 130 may be generally configured to examine information regarding optimizations performed on prior executions of a query.
+- the executions may have been performed in a backup environment for testing purposes (e.g., performed by an idle/unassigned processor or on free cycles of a primary processor).
+- a backup environment may refer to free cycles of one or more processors 112 , for example, obtained via a power-on-demand arrangement (in which processing power is incrementally purchased by a customer).
+- the query execution table 160 may include a set of records containing queries and their associated optimal access plans, along with corresponding execution times, as well as other information regarding previously the queries, such as estimated amounts of contention.
+- the query execution table may include a list of access plans and corresponding execution times (that may be searched to determine an optimal access plan).
+- FIG. 2 illustrates a logically partitioned computer system comprising one or more logical partitions 110 , including at least one primary partition 110 1 and at least one background partition 110 N .
+- the primary partition 110 1 may handle primary computing functions, while the background partition 110 N may be used to perform additional functions, such as query execution and testing described herein.
+- each partition 110 may have an operating system 118 and a query execution component 130 for executing queries.
+- a set of processors 112 may be assigned to the one or more logical partitions 110 .
+- processors 112 1 – 112 M may be assigned to primary partitions
+- white processors 112 M+1 – 112 N may be unassigned (and thus available to background partitions).
+- one or more processors 112 may be dedicated to a given partition or one or more of the processors 112 may be shared among multiple partitions 110 .
+- Logical partitioning is indeed logical rather than physical.
+- a general purpose computer suitable for logically partitioning typically has physical data connections such as buses running between a resource in one partition and one in a different partition, and from a physical configuration standpoint, there is typically no distinction made with regard to partitions.
+- logical partitioning is enforced by a layer of system firmware 150 , referred to herein as a partition manager 152 , although there may be a certain amount of hardware support for logical partitioning, such as hardware registers which hold state information.
+- the partition manager 152 may include functions (e.g., messaging functions) used for communication between partitions. In other words, while there is nothing, from a hardware standpoint, which prevents a task executing in partition 110 1 from writing to an I/O device in partition 110 N , the partition manager 152 (and possibly associated hardware) prevents access to the resources in other partitions.
+- queries may be generated and executed in the primary partition 110 1 and tested, or evaluated, in the background partition 110 N .
+- FIG. 3 illustrates a relational view of software components, for example, of a primary partition, such as an application 120 , query execution component 130 , database 139 , and query execution table 160 , according to one embodiment of the invention.
+- the query execution component 130 in response to receiving a query from the application 120 (or any requesting entity), the query execution component 130 may be configured to generate an appropriate access plan, via the query optimizer 132 .
+- Issued queries may also be monitored and stored in a query statement cache 170 .
+- a testing component for example, on a background partition may periodically access the query statement cache 170 and perform optimizations on query statements 171 stored therein.
+- query statements 171 stored in the query statement cache 170 may be periodically examined in an effort to identify which queries are used often and are, therefore, candidates for background optimization. In other words, optimizing frequently used queries should result in a greater improvement in system performance than optimizing queries used less often.
+- the execution times of queries may also be stored in the cache and used to identify candidates for background optimization. In other words, optimizing simple queries that execute quickly may result in only minimal improvements in system performance.
+- the query execution table 160 may include a set of query execution records 161 , each of which may contain an optimal access plan selected from prior background testing of the same query, the corresponding execution time, and/or other information for the query.
+- the execution time corresponding to each access plan tested may be stored in query execution records 161 , such that the query optimizer 132 may search the records 161 for the optimal access plan.
+- each query execution record 161 may correspond to a single query and its related information.
+- a grouped query table may also be created that include a set of grouped query records, each of which contains a set of access plans used for prior executions of a group of similar queries.
+- the queries within a query group may be related in that their optimizations are in all likelihood the same or similar.
+- the optimizer 132 would likely determine the same access plan, or set of access plans for each query within a query group.
+- queries within a query group may share a common set of criteria (e.g., SQL WHERE clauses), that causes the query optimizer 132 to generate the same or similar access plans.
+- An advantage to query grouping is that by monitoring the execution of a relatively small number of queries access plans for executing a relatively large number of queries may be selected.
+- the concept of query grouping is described in detail in the commonly owned, co-pending application Ser. No. 10/360,397, entitled “Patterned Based Query Optimization,” filed Feb. 6, 2003, herein incorporated by reference.
+- FIG. 4A is a flow diagram of exemplary operations 400 for background query optimization that may be performed, for example, on primary and background partitions,.
+- the operations 400 begin at step 402 by monitoring access to the database to identify most often used queries. For example, saved query statements 171 contained in a system-wide statement cache 170 , along with the number of times each query statement 171 is issued, may be examined to identify queries used most often. As previously described, query execution times may also be examined to determine which queries should be optimized in the background.
+- each selected query may be run in the background to determine an optimal access plan.
+- the selected query may be sent to a background partition for execution using several different access plans.
+- queries executed in the background may be run against a replicated version of the originally targeted database. For example, all the data targeted by the query under test may be non-intrusively replicated in the background to be used for testing purposes only.
+- the result e.g., an updated query execution table 160
+- the result may be returned at step 408 .
+- FIG. 4B illustrates exemplary operations 410 that may be performed in the background for selecting an access plan with the least execution time.
+- the operations 410 begin at step 412 , for example, by receiving an identified query (e.g., from the query statement cache 170 , or directly from a primary partition).
+- a set of access plans is generated for the identified query, for example, by a query optimizer 132 running in background partition.
+- a loop of operations ( 418 – 422 ) to be performed for each access plan is entered, at step 416 .
+- the query is executed at step 418 and the execution time is recorded at step 420 .
+- an acceptable threshold or “goal” execution time may be provided, such that an access plan resulting in an execution time below this threshold is deemed sufficiently optimal. Therefore, at step 422 , the execution time is examined to determine whether it is less than a predetermined acceptable threshold value and, if so, the current access plan is returned, at step 424 . Otherwise, the operations ( 418 – 422 ) are repeated for the next selected access plan. After the operations ( 418 – 422 ) have been performed for each access plans (with none resulting in an execution time below the threshold), the access plan with the lowest execution time is returned, at step 426 .
+- the execution time may also be examined while the query is being executed, to ensure the execution time does not exceed a predetermined threshold (e.g., a timeout period).
+- a query governor 133 may keep track of time during the query execution and halt the operation, if the time exceeds a predetermined value. When the query governor halts an execution for taking too much time, the corresponding access plan may be marked accordingly and the operations 410 may return to step 416 to evaluate the next access plan.
+- a safe access plan e.g., an access plan that reliably results in an execution time below a predetermined threshold level.
+- queries may be desirable to evaluate queries in the background prior to primary execution, in an effort to determine if executing the query will have adverse effects on a system.
+- some “ad-hoc” queries may be very complex, or may not have been written efficiently, either of which may result in excessive execution times.
+- complex queries where complexity is, for example, determined by parsing the text of the query
+- queries may access a large number of rows and columns, creating excessive contention with other issued queries accessing the same rows and columns.
+- FIG. 5 illustrates exemplary operations 500 that may be performed to analyze a query in a background partition prior to executing the query in a primary partition.
+- the operations 500 begin at step 502 by generating a query in the primary partition.
+- the query is sent from the primary partition to the background partition for analysis.
+- the background partition receives the query, at step 506 , the query is analyzed for contention, at step 508 .
+- an amount of contention may be estimated by first parsing the query to identify the number of rows a statement might update or retrieve and lock. Then, by examining stored empirical (historical) data in the form of statistics of how long records from specific tables typically get locked, the contention time may be estimated.
+- an optimal access plan may also be determined at step 510 (e.g., by running the query with the different access plans as described with reference to FIG. 4B ).
+- the contention information and optimal access plan with the corresponding execution time is returned to the primary partition. It may be determined at the primary partition, at step 514 , whether the contention and/or execution time is acceptable. If the values are acceptable, the query is executed at step 518 . Otherwise, if the amount of contention and/or the execution time is too great, a user may be notified at step 516 , for example, via a graphical user-interface (GUI) screen.
+- GUI graphical user-interface
+- the GUI screen may indicate the excessive contention and/or execution time and allow the user a number of options, such as executing the query anyway or suggesting the query be re-written more efficiently.
+- executing a query in the background may result in determination of an optimal access plan with little impact on primary processing. This optimal access plan may then be used in later executions of the query, resulting in faster execution times and overall system performance. Queries may also be analyzed in the background prior to running them in the foreground, for example, to identify and avoid issuing queries with excessive execution times or queries resulting in excessively high contention.
+Abstract
+Description
+Claims (23)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/660,144 US7130838B2 (en) | 2003-09-11 | 2003-09-11 | Query optimization via a partitioned environment |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/660,144 US7130838B2 (en) | 2003-09-11 | 2003-09-11 | Query optimization via a partitioned environment |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20050060285A1 US20050060285A1 (en) | 2005-03-17 |
+US7130838B2 true US7130838B2 (en) | 2006-10-31 |
+Family
+ID=34273605
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/660,144 Active 2025-01-20 US7130838B2 (en) | 2003-09-11 | 2003-09-11 | Query optimization via a partitioned environment |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7130838B2 (en) |
+Cited By (13)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20060265351A1 (en) * | 2005-05-19 | 2006-11-23 | International Business Machines Corporation | Tracking premature termination of a database query |
+US20060271504A1 (en) * | 2005-05-26 | 2006-11-30 | Inernational Business Machines Corporation | Performance data for query optimization of database partitions |
+US20070016558A1 (en) * | 2005-07-14 | 2007-01-18 | International Business Machines Corporation | Method and apparatus for dynamically associating different query execution strategies with selective portions of a database table |
+US20070027860A1 (en) * | 2005-07-28 | 2007-02-01 | International Business Machines Corporation | Method and apparatus for eliminating partitions of a database table from a join query using implicit limitations on a partition key value |
+US20070239673A1 (en) * | 2006-04-05 | 2007-10-11 | Barsness Eric L | Removing nodes from a query tree based on a result set |
+US20080033920A1 (en) * | 2006-08-04 | 2008-02-07 | Kaelin Lee Colclasure | Method and apparatus for searching metadata |
+US20080186011A1 (en) * | 2007-02-06 | 2008-08-07 | Phat Tran | Root median square power measurement |
+US20090037365A1 (en) * | 2007-07-30 | 2009-02-05 | Paul Sinclair | Product join dynamic partition elimination for multilevel partitioning |
+US20100299337A1 (en) * | 2009-05-19 | 2010-11-25 | Sap Ag | Computer System for Processing a Query |
+US20100312776A1 (en) * | 2009-06-04 | 2010-12-09 | International Business Machines Corporation | Intelligent performance analysis and isolaton of potential problem queries |
+US20120303628A1 (en) * | 2011-05-24 | 2012-11-29 | Brian Silvola | Partitioned database model to increase the scalability of an information system |
+US9965510B2 (en) | 2015-06-22 | 2018-05-08 | International Business Machines Corporation | Partition access method for query optimization |
+US10049133B2 (en) | 2016-10-27 | 2018-08-14 | International Business Machines Corporation | Query governor across queries |
+Families Citing this family (17)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20060149724A1 (en) * | 2005-01-03 | 2006-07-06 | Ritter Gerd M | Methods relating to data repository querying |
+US7603389B2 (en) * | 2005-03-04 | 2009-10-13 | Gravic, Inc. | Optimized statement caching for transaction replay |
+US7831620B2 (en) * | 2006-08-31 | 2010-11-09 | International Business Machines Corporation | Managing execution of a query against a partitioned database |
+US7853584B2 (en) * | 2006-12-05 | 2010-12-14 | International Business Machines Corporation | Multi-partition query governor in a computer database system |
+US8214807B2 (en) * | 2007-01-10 | 2012-07-03 | International Business Machines Corporation | Code path tracking |
+US20090119155A1 (en) * | 2007-09-12 | 2009-05-07 | Regions Asset Company | Client relationship manager |
+US8621482B1 (en) * | 2008-09-05 | 2013-12-31 | Teradata Us, Inc. | Deciding whether to cache a generic plan for executing a request based on a system performance metric |
+JP5257172B2 (en) * | 2009-03-16 | 2013-08-07 | 富士通株式会社 | SEARCH METHOD, SEARCH PROGRAM, AND SEARCH DEVICE |
+US8290937B2 (en) * | 2010-08-30 | 2012-10-16 | International Business Machines Corporation | Estimating and monitoring query processing time |
+US20120066554A1 (en) * | 2010-09-09 | 2012-03-15 | Microsoft Corporation | Application query control with cost prediction |
+US9158814B2 (en) * | 2012-03-30 | 2015-10-13 | International Business Machines Corporation | Obtaining partial results from a database query |
+US9229983B2 (en) | 2012-11-30 | 2016-01-05 | Amazon Technologies, Inc. | System-wide query optimization |
+EP3137987B1 (en) * | 2015-03-16 | 2020-01-01 | Huawei Technologies Co. Ltd. | A method and a plan optimizing apparatus for optimizing query execution plan |
+WO2016167824A1 (en) * | 2015-04-15 | 2016-10-20 | Hewlett Packard Enterprise Development Lp | Database query classification |
+US11074234B1 (en) * | 2019-09-24 | 2021-07-27 | Workday, Inc. | Data space scalability for algorithm traversal |
+CN112783914B (en) * | 2019-11-01 | 2023-09-01 | 北京京东振世信息技术有限公司 | Method and device for optimizing sentences |
+US11693858B2 (en) | 2020-07-17 | 2023-07-04 | International Business Machines Corporation | Access path optimization |
+Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20030093442A1 (en) * | 2001-11-12 | 2003-05-15 | Kazuhiko Mogi | Storage apparatus acquiring static information related to database management system |
+US20050187917A1 (en) * | 2003-09-06 | 2005-08-25 | Oracle International Corporation | Method for index tuning of a SQL statement, and index merging for a multi-statement SQL workload, using a cost-based relational query optimizer |
+-
+2003
+- 2003-09-11 US US10/660,144 patent/US7130838B2/en active Active
+Patent Citations (2)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20030093442A1 (en) * | 2001-11-12 | 2003-05-15 | Kazuhiko Mogi | Storage apparatus acquiring static information related to database management system |
+US20050187917A1 (en) * | 2003-09-06 | 2005-08-25 | Oracle International Corporation | Method for index tuning of a SQL statement, and index merging for a multi-statement SQL workload, using a cost-based relational query optimizer |
+Cited By (34)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7493306B2 (en) * | 2005-05-19 | 2009-02-17 | International Business Machines Corporation | Tracking premature termination of a database query |
+US20060265351A1 (en) * | 2005-05-19 | 2006-11-23 | International Business Machines Corporation | Tracking premature termination of a database query |
+US7996386B2 (en) | 2005-05-19 | 2011-08-09 | International Business Machines Corporation | Tracking premature termination of a database query |
+US20090119249A1 (en) * | 2005-05-19 | 2009-05-07 | International Business Machines Corporation | Tracking premature termination of a database query |
+US20060271504A1 (en) * | 2005-05-26 | 2006-11-30 | Inernational Business Machines Corporation | Performance data for query optimization of database partitions |
+US7734615B2 (en) * | 2005-05-26 | 2010-06-08 | International Business Machines Corporation | Performance data for query optimization of database partitions |
+US9063982B2 (en) | 2005-07-14 | 2015-06-23 | International Business Machines Corporation | Dynamically associating different query execution strategies with selective portions of a database table |
+US20070016558A1 (en) * | 2005-07-14 | 2007-01-18 | International Business Machines Corporation | Method and apparatus for dynamically associating different query execution strategies with selective portions of a database table |
+US8386463B2 (en) | 2005-07-14 | 2013-02-26 | International Business Machines Corporation | Method and apparatus for dynamically associating different query execution strategies with selective portions of a database table |
+US20070027860A1 (en) * | 2005-07-28 | 2007-02-01 | International Business Machines Corporation | Method and apparatus for eliminating partitions of a database table from a join query using implicit limitations on a partition key value |
+US20070239673A1 (en) * | 2006-04-05 | 2007-10-11 | Barsness Eric L | Removing nodes from a query tree based on a result set |
+US8171042B2 (en) | 2006-08-04 | 2012-05-01 | Apple Inc. | Method and apparatus for searching metadata |
+US20090248684A1 (en) * | 2006-08-04 | 2009-10-01 | Kaelin Lee Colclasure | Method and apparatus for searching metadata |
+US7536383B2 (en) * | 2006-08-04 | 2009-05-19 | Apple Inc. | Method and apparatus for searching metadata |
+US9130952B2 (en) | 2006-08-04 | 2015-09-08 | Apple Inc. | Method and apparatus for searching metadata |
+US20080033920A1 (en) * | 2006-08-04 | 2008-02-07 | Kaelin Lee Colclasure | Method and apparatus for searching metadata |
+US8688745B2 (en) | 2006-08-04 | 2014-04-01 | Apple Inc. | Method and apparatus for searching metadata |
+US7526406B2 (en) * | 2007-02-06 | 2009-04-28 | Research In Motion Limited | Root median square power measurement |
+US20080186011A1 (en) * | 2007-02-06 | 2008-08-07 | Phat Tran | Root median square power measurement |
+US7930138B2 (en) * | 2007-02-06 | 2011-04-19 | Research In Motion Limited | Root median square power measurement |
+US20090187380A1 (en) * | 2007-02-06 | 2009-07-23 | Phat Tran | Root median square power measurement |
+US8396862B2 (en) | 2007-07-30 | 2013-03-12 | Teradata Us, Inc. | Product join dynamic partition elimination for multilevel partitioning |
+US20090037365A1 (en) * | 2007-07-30 | 2009-02-05 | Paul Sinclair | Product join dynamic partition elimination for multilevel partitioning |
+US20100299337A1 (en) * | 2009-05-19 | 2010-11-25 | Sap Ag | Computer System for Processing a Query |
+US9177019B2 (en) * | 2009-05-19 | 2015-11-03 | Sap Se | Computer system for optimizing the processing of a query |
+US20100312776A1 (en) * | 2009-06-04 | 2010-12-09 | International Business Machines Corporation | Intelligent performance analysis and isolaton of potential problem queries |
+US20120303628A1 (en) * | 2011-05-24 | 2012-11-29 | Brian Silvola | Partitioned database model to increase the scalability of an information system |
+US9507816B2 (en) * | 2011-05-24 | 2016-11-29 | Nintendo Co., Ltd. | Partitioned database model to increase the scalability of an information system |
+US9965510B2 (en) | 2015-06-22 | 2018-05-08 | International Business Machines Corporation | Partition access method for query optimization |
+US10223416B2 (en) | 2015-06-22 | 2019-03-05 | International Business Machines Corporation | Partition access method for query optimization |
+US10289718B2 (en) | 2015-06-22 | 2019-05-14 | International Business Machines Corporation | Partition access method for query optimization |
+US10380108B2 (en) | 2015-06-22 | 2019-08-13 | International Business Machines Corporation | Partition access method for query optimization |
+US10983994B2 (en) | 2015-06-22 | 2021-04-20 | International Business Machines Corporation | Partition access method for query optimization |
+US10049133B2 (en) | 2016-10-27 | 2018-08-14 | International Business Machines Corporation | Query governor across queries |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20050060285A1 (en) | 2005-03-17 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US7130838B2 (en) | Query optimization via a partitioned environment | |
+US7031958B2 (en) | Patterned based query optimization | |
+US7493304B2 (en) | Adjusting an amount of data logged for a query based on a change to an access plan | |
+US6105033A (en) | Method and apparatus for detecting and removing obsolete cache entries for enhancing cache system operation | |
+US8775412B2 (en) | Method and system for a self-healing query access plan | |
+US7734615B2 (en) | Performance data for query optimization of database partitions | |
+US7698253B2 (en) | Method and system for reducing host variable impact on access path selection | |
+US6801903B2 (en) | Collecting statistics in a database system | |
+US8650179B2 (en) | Generating statistics for temporary tables during query optimization | |
+US7917498B2 (en) | Method and system for dynamic join reordering | |
+US9251213B2 (en) | Estimating error propagation for database optimizers | |
+US7146365B2 (en) | Method, system, and program for optimizing database query execution | |
+EP3070620A1 (en) | Lightweight table comparison | |
+US8135703B2 (en) | Multi-partition query governor in a computer database system | |
+US7743052B2 (en) | Method and apparatus for projecting the effect of maintaining an auxiliary database structure for use in executing database queries | |
+US20070143246A1 (en) | Method and apparatus for analyzing the effect of different execution parameters on the performance of a database query | |
+US9020929B2 (en) | Method and system for tracking performance by breaking down a query | |
+US7792819B2 (en) | Priority reduction for fast partitions during query execution | |
+US11803521B2 (en) | Implementation of data access metrics for automated physical database design | |
+Baldacci et al. | A cost model for SPARK SQL | |
+Myalapalli et al. | High performance SQL | |
+US20060085375A1 (en) | Method and system for access plan sampling | |
+US20090171921A1 (en) | Accelerating Queries Based on Exact Knowledge of Specific Rows Satisfying Local Conditions | |
+US20230359494A1 (en) | Disabling of memory allocators | |
+US20060085464A1 (en) | Method and system for providing referential integrity constraints |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, NEW YFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:BARSNESS, ERIC L.;SANTOSUOSSO, JOHN M.;REEL/FRAME:014497/0418Effective date: 20030908 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+SULP | Surcharge for late payment | ||
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:027005/0673Effective date: 20110930 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553)Year of fee payment: 12 |

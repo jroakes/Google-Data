@@ -1,0 +1,657 @@
+US8707312B1 - Document reuse in a search engine crawler - Google Patents
+Document reuse in a search engine crawler Download PDFInfo
+- Publication number
+- US8707312B1 US8707312B1 US10/882,955 US88295504A US8707312B1 US 8707312 B1 US8707312 B1 US 8707312B1 US 88295504 A US88295504 A US 88295504A US 8707312 B1 US8707312 B1 US 8707312B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- document
+- record
+- database
+- crawl
+- reuse
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+- 238000000034 method Methods 0.000 claims description 33
+- 238000012545 processing Methods 0.000 claims description 21
+- 230000009193 crawling Effects 0.000 claims description 18
+- 230000004044 response Effects 0.000 claims description 9
+- 230000008569 process Effects 0.000 description 16
+- 238000010586 diagram Methods 0.000 description 15
+- 230000006870 function Effects 0.000 description 14
+- 238000004891 communication Methods 0.000 description 10
+- 230000008859 change Effects 0.000 description 3
+- 238000005192 partition Methods 0.000 description 3
+- 230000001419 dependent effect Effects 0.000 description 2
+- 238000013507 mapping Methods 0.000 description 2
+- 230000007246 mechanism Effects 0.000 description 2
+- 238000012986 modification Methods 0.000 description 2
+- 230000004048 modification Effects 0.000 description 2
+- 238000001914 filtration Methods 0.000 description 1
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/90—Details of database functions independent of the retrieved data types
+- G06F16/95—Retrieval from the web
+- G06F16/951—Indexing; Web crawling techniques
+Definitions
+- the disclosed embodiments relate generally to search engine crawlers for use in computer network systems, and in particular to a scheduler for a search engine crawler.
+- a search engine is a tool that identifies documents, typically stored on hosts distributed over a network, that satisfy search queries specified by users.
+- Web search engines work by storing information about a large number of web pages (hereinafter also referred to as “pages” or “documents”), which they retrieve from the World Wide Web (WWW). These documents are retrieved by a web crawler.
+- the web crawler follows links found in crawled documents so as to discover additional documents to download.
+- the contents of the downloaded documents are indexed, mapping the terms in the documents to identifiers of the documents.
+- the resulting index is configured to enable a search to identify documents matching the terms in search queries.
+- Some search engines also store all or part of the document itself, in addition to the index entries.
+- the search engine searches the index for documents that satisfy the query, and provides a listing of matching documents, typically including for each listed document the URL, the title of the document, and in some search engines a portion of document's text deemed relevant to the query.
+- a search engine crawler includes a scheduler for determining which documents to download from their respective host servers. Some documents, known to be stable based on one or more record from prior crawls, are reused from a document repository. A reuse flag is set in a scheduler record that also contains a document identifier, the reuse flag indicating whether the document should be retrieved from a first database, such as the World Wide Web, or a second database, such as a document repository. A set of such scheduler records are used during a crawl by the search engine crawler to determine which database to use when retrieving the documents identified in the scheduler records.
+- FIG. 1A illustrates a data structure for storing URLs.
+- FIG. 1B illustrates the assignment of schedulers to URL partitions containing one or more segments.
+- FIG. 2 is a block diagram illustrating a web crawler system for processing crawled web pages including a central URL scheduler.
+- FIG. 3 is a block diagram illustrating a web crawler system for processing web pages including a set of URL schedulers.
+- FIG. 4A is a conceptual block diagram of a web crawler system.
+- FIG. 4B is a block diagram of a history log file.
+- FIG. 4C is a flow diagram of a process for determining which URLs to be download and which to reuse from a database of previously downloaded documents when crawling a set of URLs.
+- FIG. 4D is a block diagram of a reuse server for a web crawler system.
+- FIG. 5 illustrates a URL fingerprint hashing process for accessing records in a URL status file.
+- FIG. 6 illustrates the format of a schedule output file.
+- FIG. 7 is a block diagram of a URL scheduler for a URL manager system.
+- FIG. 8 is flow diagram of a URL scheduler process.
+- FIG. 1A illustrates a data structure 100 for storing document identifiers (e.g., web page URLs) into segments 112 .
+- the data structure 100 includes a sequence of segments 112 a , . . . , 112 n .
+- Each segment 112 includes a number of URLs representing a portion of the web page address space that has been (or will be) used by a web crawler system.
+- FIG. 1B illustrates the assignment of a set of URL schedulers to segments of a data structure. Note that each scheduler 1 , . . . , N is assigned to a URL partition, which includes a portion of each of the segments 1 to Q. For Example, scheduler 1 will schedule URLs contained in segments 1 , . . . , Q, which collectively form URL partition 1 .
+- the schedulers 302 are described more fully with respect to FIG. 3 .
+- FIG. 2 is a simplified block diagram of a web crawler system 200 , which crawls URLs stored in the data structure 100 .
+- URL sources used to populate the data structure 100 , including direct submission 203 of URLs by users of the search engine system 200 , or submissions (e.g., time-based submissions) from third parties who have agreed to provide links to documents as they are published, updated or changed.
+- Another source of URLs is through discovery of outgoing links on crawled pages.
+- the URL scheduler 202 determines which URLs will be crawled in each epoch, and stores that information in the data structure 100 . In some embodiments, the URL scheduler 202 allocates URLs to segments of the data structure, where the segments correspond to the epochs. In these embodiments, the URL scheduler 202 also determines which URLs within each segment are to be crawled, as will be described in more detail below.
+- the controller 201 selects a segment 112 for crawling.
+- the selected segment 112 is referred to hereinafter as the “active segment.”
+- the controller 201 selects a different segment 112 as the active segment so that, over the course of several epochs, all the segments 112 a , . . . , n are selected for crawling in a round-robin manner.
+- a query-independent score (also called a document score) is computed for each URL by URL page rankers 222 .
+- the page rankers 222 compute a page importance score for a given URL.
+- the page importance score is computed by considering not only the number of URLs that reference a given URL but also the page importance score of such referencing URLs.
+- Page importance score data is provided to URL managers 204 , which pass a page importance score for each URL to URL server 206 , robots 208 , and content processing servers 210 .
+- PageRank is used the page importance metric used in the Google search engine. An explanation of the computation of PageRank is found in U.S. Pat. No. 6,285,999, which is incorporated by reference herein in its entirety.
+- the URL server 206 requests URLs from the URL managers 204 .
+- the URL managers 204 provide the URL server 206 with URLs obtained from data structure 100 .
+- the URL server 206 then distributes URLs from the URL managers 204 to crawlers 208 (hereinafter also called “robots” or “bots”) to be crawled.
+- a robot 208 is a server that retrieves documents at the URLs provided by the URL server 206 .
+- the robots 208 use various known protocols to download pages associated with URLs (e.g., HTTP, HTTPS, Gopher, FTP, etc.).
+- Pages obtained from URLs that have been crawled by robots 208 are delivered to content processing servers 210 , which perform a number of tasks.
+- these tasks include indexing the content of the pages, generating records of the outbound links in the pages, detecting duplicate pages, and creating various log records to record information about the crawled pages.
+- these log records are stored in log files, including link logs 214 , history logs 218 , and status logs 212 .
+- the link logs 214 include a link record for each document obtained from a URL by a robot 208 and passed to the content processing servers 210 .
+- Each link log 214 record identifies all the links (e.g., URLs, also called outbound links) that are found in the document associated with the record and the text that surrounds the link.
+- the information in the link logs 214 is used by the content processing servers 210 to create link maps 220 .
+- the records in the link map 220 are similar to records in the link logs 214 with the exception that text is stripped and the records are keyed by a “fingerprint” of the normalized value of the source URL.
+- a URL fingerprint is a 64-bit integer determined by applying a hash function or other one way function to a URL. The bit-length of the URL fingerprint may be longer or shorter than 64 bits in other embodiments.
+- each link map 220 may optionally be sorted or keyed by a fingerprint.
+- the link maps 220 are used by the page rankers 222 to adjust the page importance score of URLs within data structure 100 . Preferably, such page importance scores persist between epochs.
+- FIG. 3 is a simplified block diagram illustrating a web crawler system 300 for processing web pages including URL schedulers 302 .
+- portions of the web crawler system 300 not directly involved in the operation of the URL schedulers 302 and URL managers 304 are represented by the content processing servers 210 .
+- the controller 201 , page rankers 222 , content processing servers 210 , URL server 206 and robots 208 operate in a manner previously described with respect to the web crawler system 200 shown in FIG. 2 .
+- the web crawler system 300 employs a number of URL schedulers 302 - 1 , . . .
+- Each scheduler 302 is coupled to a corresponding URL manager 304 - 1 , . . . , 304 -N, which is responsible for managing the distribution of URLs to URL server 306 .
+- the URL schedulers 302 are adapted to receive URL lists 319 containing URLs to be scheduled for crawling.
+- the URL lists 319 are generated, at least in part, from URL status tables 505 , as described below.
+- a reuse server 307 populates a reuse table 309 with historical data received from history logs 218 generated by the content processing servers 210 during previous crawls.
+- the reuse table 309 identified URLs that are to be retrieved from data repositories rather than downloaded from the WWW in the next crawl.
+- the decision to reuse a URL is based on whether the content of the document corresponding to the URL has changed in the last N crawls. For example, if a content checksum for a document remains unchanged over the last N crawls, then the URL associated with the document will be included in the reuse table 309 along with the number of days since the document was last modified. In other embodiments, a limit is placed on the number of times a particular URL is reused.
+- the top x % (e.g., 2%) of URLs based on page importance scores will not be reused because of the importance that the search index contain the most recent version of these documents, as well as the high probability that their content will change between crawls.
+- Table I below is an example of a reuse table 309 for a scheduler system 300 .
+- the reuse table 309 includes a record for each URL and each URL record includes at least three fields.
+- the first field includes the URL fingerprint (FP) and the second field includes a Reuse Type flag indicating whether the URL associated with the URL FP is to be reused, or downloaded, or conditionally reused. If the Reuse Type flag is set to REUSE, then the document associated with the URL FP will be retrieved from a data repository. If the Reuse Type flag is set to DOWNLOAD, then the document will be downloaded in the next crawl cycle. If the Reuse Type Flag is set to REUSE IF NOT MODIFIED SINCE, the third field specifies a date or a date and time or a timestamp value.
+- FIG. 4A is a conceptual diagram of a web crawler system. All of the components of the system have been previously described, except the two databases 350 , 352 .
+- the first database 350 is the World Wide Web or other network of documents, and thus is not part of the web crawler system.
+- the second database 352 is a local repository of documents previously downloaded from the first database 350 , during either the current or previous crawls.
+- the robots 208 crawl scheduled documents, the addresses or URLs of which are provided to the robots by the URL Server 206 . Each scheduled document is crawled either from the first database 350 or the local second database 352 , based on information specified in the reuse table 309 .
+- FIG. 4B depicts a portion of the data structure of a history log file 218 and a history log record 432 .
+- each history log record 432 contains only a subset of the fields shown in FIG. 4B , and may contain other fields as well.
+- the history log file 218 contains a set of history log records 432 , each of which stores information concerning a particular crawl attempt of a particular document.
+- Each history record 432 includes the following fields:
+- Some of the fields of the history record 432 are unused, or undefined, in the event that the crawl attempt is unsuccessful, or if the crawl attempt is a reuse of the document from a local document repository.
+- FIG. 4C is a flow diagram of a process for determining whether to download (e.g., from the WWW) or reuse (e.g., retrieve from a repository) a document corresponding to a URL in the next crawl.
+- the process is performed by the reuse server 307 once per M URL segments.
+- each URL is associated with a URL record stored in the reuse table 309 .
+- Each URL record includes a Reuse Type flag for determining whether a document will be downloaded or retrieved from a data repository in the next crawl cycle.
+- the process begins by retrieving 400 from a URL manager 304 a list of URLs downloaded in the last crawl and selecting 402 a URL to process. If 404 the page importance score for the URL is greater than a first predetermined threshold (e.g., a threshold associated with the top x % of page importance scores), then its Reuse Type flag is set 416 to DOWNLOAD and stored 414 in the reuse table 309 .
+- the URL page importance score used in steps 404 and 406 can be obtained from the page rankers 222 , or can be retrieved from the URL history log 218 , or it can be obtained by obtaining the historical page importance score for the URL for a predefined number of prior crawls and then performing a predefined filtering function on those values to obtain the URL page importance score.
+- the page importance score of the URL is not above the first predefined threshold, its page importance score is compared against a second predetermined threshold. If 406 the page importance score is greater than the second predetermined threshold (e.g., in the top y % of page ranks), and the last crawl of the document was from the web (i.e., was not a reuse of the document from a local document repository) 407 , then the date and time of the current version of the URL is determined 418 , the Reuse Type flag is set 420 to REUSE UNLESS MODIFIED SINCE and the determined date and time are also stored in Reuse table entry for the URL.
+- the second predetermined threshold e.g., in the top y % of page ranks
+- the robot assigned this URL will establish a connection to the host to determine the date and time of the last update to the document at the URL. If the update date and time are after the date and time specified in the reuse table, the robot downloads the document from the host server. Otherwise, the robot reuses the document from a document repository.
+- the Reuse Type Flag is set 416 to Download.
+- the URL record is stored 414 in the reuse table 309 and another URL is selected 402 from the URL list for processing.
+- the Reuse Type flag is set 422 to DOWNLOAD.
+- the history logs 218 include a content checksum 440 for the content of a document each time it is downloaded by a robot. By comparing the content checksums for two or more of the downloads of the URL during a predefined period of time, the reuse server can determine if the document at the URL has changed during that predefined period.
+- the URL record is stored 414 in the reuse table 309 and another URL is selected 402 from the URL list for processing.
+- various aspects of the reuse scheduling process may differ from those shown in FIG. 4C and described above. For instance, in some embodiments, all known URLs are assigned a Reuse Type of either Download or Reuse. In these embodiments, the Reuse Type of Reuse If Not Modified Since is not used.
+- FIG. 4D is a block diagram of a computer system configured to operate as the reuse server 307 . Since reuse scheduling is performed only occasionally, the computer system 307 may well be used for other tasks as well. For the purposes of the present discussion, however, we are concerned only about the computer system while it is configured for use as a reuse scheduler 307 .
+- the reuse scheduler 307 includes one or more processing units (CPU's) 472 , one or more network or other communications interfaces 480 , memory 482 , and one or more communication buses 484 for interconnecting these components.
+- the system 307 may optionally include a user interface 474 , for instance a display 476 and a keyboard 478 .
+- Memory 912 may include high speed random access memory and may also include non-volatile memory, such as one or more magnetic disk storage devices.
+- Memory 482 may include mass storage that is remotely located from the central processing unit(s) 472 .
+- the memory 482 stores an operating system 486 (e.g., Linux or Unix), a network communication module 480 , a system initialization module 490 and a reuse scheduler module 492 .
+- the operating system 486 generally includes procedures for handling various basic system services and for performing hardware dependent tasks.
+- the network communication module 488 is used for connecting the system 307 to other servers or computers in the web crawler system 300 ( FIG. 3 ) and possibly to other servers or computers via one or more communication networks (wired or wireless), such as the Internet, other wide area networks, local area networks, metropolitan area networks, and the like.
+- the system initialization module 490 initializes other modules and data structures stored in memory 484 required for the appropriate operation of the system 307 .
+- the reuse scheduler module 492 includes reuse scheduler software 494 , which is used to implement the main logic of the reuse server, a history log analyzer 496 , and the reuse table 309 .
+- the history log analyzer 496 is configured to analyze the information in one or more history log file(s) 218 to determine (A) whether the content of a particular URL has remain unchanged for a predefined or specified period of time, and (B) whether a particular URL has been reused Y times in a row.
+- FIG. 5 illustrates a URL FP hashing process for accessing records containing data used in the distributed scheduler process described with respect to FIG. 8 .
+- the URL FP is an N-bit number (where N is a value or a bit length) that is generated from the corresponding URL by first normalizing 500 the URL text (e.g., converting host names to lower case, and canonicalization—rewriting the URL, if necessary, in canonical form) and then passing the normalized URL text through a hash function 502 to produce a URL fingerprint. The URL fingerprint is then passed through a hash map 504 , which ensures that the URL fingerprint is well distributed across the entire space of possible numbers.
+- N is a value or a bit length
+- the hash map 504 maps the URL fingerprint to a corresponding record 508 in the URL status file 506 .
+- the URL records 508 include a page importance score, a prior crawl status and a segment ID.
+- URL records 508 can include more or fewer fields than shown in FIG. 5 , as needed, depending upon the architecture of the system 300 .
+- a page importance score is assigned to a URL FP at the time the document download operation is performed or attempted.
+- the page importance score can change over time, as the set of pages having links to the page corresponding to URL FP changes, and as the page importance scores of these referring pages change.
+- the prior crawl status can include multiple fields, including without limitation an error field and an unreachable field.
+- the error field records information associated with a download error.
+- An example of an error is “HTTP Error 4xx,” which may indicate that the web page does not exist, or that access is not authorized, or some other error.
+- the error field indicates the number of consecutive times an attempt to download the URL resulted in an error.
+- the unreachable field records information associated with a URL being unreachable (e.g., because the host server is busy).
+- the unreachable field can include the number of consecutive times the URL was unreachable in previous crawls.
+- the segment ID identifies the particular crawl segment associated with the URL FP at the time that the document download operation was performed or attempted.
+- information about document download errors and unreachable URLs is stored in one or more separate files (hereinafter called URL Error Files). For example, for each complete segment crawl, a first file may be created for each URL scheduler that indicates all the URLs scheduled by that URL scheduler which resulted in downloading error, and a second file may be created for each URL scheduler that indicates all the URLs scheduled by that URL scheduler that were determined to be unreachable. The information in these files is then used by the URL scheduler while determining which URLs to schedule for downloading in a next crawl cycle.
+- URL Error Files For example, for each complete segment crawl, a first file may be created for each URL scheduler that indicates all the URLs scheduled by that URL scheduler which resulted in downloading error, and a second file may be created for each URL scheduler that indicates all the URLs scheduled by that URL scheduler that were determined to be unreachable.
+- the information in these files is then used by the URL scheduler while determining which URLs to schedule for downloading in a next crawl cycle.
+- FIG. 6 illustrates the format of a schedule output file 600 .
+- the result of the scheduler process shown in FIG. 8 is a schedule output file 600 , which is provided by a scheduler 302 to its corresponding URL manager 304 .
+- the scheduler output file 600 includes records 600 a , . . . , 600 n ., each identifying a URL to be crawled and, optionally, including additional information (e.g., page importance score, source tag, etc.).
+- FIG. 7 is a block diagram of a computer system 700 configured to operate as one of the URL schedulers. Since URL schedule is performed only occasionally, the computer system 700 may well be used for other tasks as well. For the purposes of the present discussion, however, we are concerned only about the computer system 700 while it is configured for use as a URL scheduler.
+- the URL scheduler 700 includes one or more processing units (CPU's) 702 , one or more network or other communications interfaces 710 , memory 712 , and one or more communication buses 714 for interconnecting these components.
+- the system 700 may optionally include a user interface 704 , for instance a display 706 and a keyboard 708 .
+- Memory 712 may include high speed random access memory and may also include non-volatile memory, such as one or more magnetic disk storage devices. Memory 712 may include mass storage that is remotely located from the central processing unit(s) 702 .
+- the memory 712 stores an operating system 716 (e.g., Linux or Unix), a network communication module 718 , a system initialization module 720 and a URL scheduler module 722 .
+- the operating system 716 generally includes procedures for handling various basic system services and for performing hardware dependent tasks.
+- the network communication module 718 is used for connecting the system 700 to other servers or computers in the web crawler system 300 ( FIG. 3 ) and possibly to other servers or computers via one or more communication networks (wired or wireless), such as the Internet, other wide area networks, local area networks, metropolitan area networks, and the like.
+- the system initialization module 720 initializes other modules and data structures stored in memory 714 required for the appropriate operation of the system 700 .
+- the memory 712 also includes a URL scheduler module 722 , which is used to implement various aspects of the disclosed embodiments, as described below with respect to FIG. 8 .
+- the scheduler module 722 includes scheduler software 724 , which is used to implement the various aspects of the scheduler system 700 , together with various data structures and functions.
+- the data structures and functions include a URL list 726 (e.g., one per segment), a schedule output file 600 , a priority score function 730 , scheduler limit(s) 732 , a hash function 502 , a URL FP hash map 504 , a URL status file 506 , exception filter(s) 738 , and a Unscheduled URLs file 740 .
+- the data structures may optionally include one or more URL Error Files 736 , for storing information about errors and unreachable URLs encountered in one or more prior crawl epochs.
+- the use of these data structures and functions is described with respect to FIG. 8 .
+- FIG. 8 is a flow diagram of a URL scheduling process implemented by a scheduler module N corresponding to a URL manager N and segment Y.
+- the scheduler 724 retrieves 802 a starting point URL list 726 from URL manager N for segment Y.
+- the URL list 726 includes URLs in segment Y that were scheduled for crawling during a prior crawl cycle.
+- the URLs are passed through the hash function 733 to generate URL fingerprints which are passed through the hash map 734 to access URL records in the URL status file 506 .
+- the prior crawl status fields (e.g., unreachable and error fields) in the URL status file 506 can be used to identify URLs that were unreachable in each of the last X crawls (e.g., the last two crawls) or that associated with download errors in each of the last X crawls.
+- prior crawl error information is retrieved from separate URL Error Files.
+- the identified URLs are removed 804 from the starting URL list 726 .
+- one or more exception filters 738 can be applied 806 to the URL list 726 to eliminate URLs.
+- URLs associated with customer complaints or spammers are deleted from the URL list 726 .
+- more or fewer exception filters are applied to the URL list, to remove URLs from the initial URL list.
+- the boost factor can be used to promote URLs of homepages of major companies (e.g., Fortune 100) or popular news sites (e.g., CNN). Note that more or fewer priority scores can be computed using a variety of priority functions, as needed, depending upon the architecture of the scheduling system 300 .
+- the URLs are sorted 810 by priority score and the top N sorted URLs are selected 812 as candidates to be crawled.
+- the number N may be a predefined number, related to the URL handling capacity of the web crawling system during each epoch. For example, N may be equal to a predefined percentage (e.g., 65% or 75% or 80%) of the URL handling capacity of the web crawling system during an epoch.
+- one or more scheduler limits 732 can be applied 814 to the selected URLs.
+- scheduler limits 732 include values that represent the maximum number of URLs that can be scheduled on a host-by-host, domain and/or group basis. For example, there may be hardware or software limits on the number of URLs that a particular host machine can process in a crawl cycle or epoch. There may also be limits on the number of URLs having a particular domain name or that are associated with a particular file type (e.g., CGI files). Note that any number and types of scheduler limits 732 can be applied to the selected URLs, as needed, depending upon the architecture of the scheduler system 300 .
+- the selected URLs are written 816 to a schedule output file 728 , as shown in FIG. 6 .
+- only URLs are written 816 to the schedule output file 728 .
+- the URLs are written 816 to the schedule output file 728 , together with other information (e.g., page importance score, source tag, etc.), as needed, depending upon the architecture of the scheduler system 300 .
+- the URLs that were not written 816 to the schedule output file 728 because they were eliminated due to the scheduler limits 732 are optionally written 818 to an unscheduled URL file 740 .
+- the schedule output file 728 produced by the URL scheduler of FIG. 7 is used by a corresponding to URL manager 304 .
+- the URLs listed in the schedule output file 728 are provided to the URL server 306 over the course of a crawl epoch, for either downloading or reuse, as specified by the reuse table 309 . Additional URLs discovered during the course of the crawl are also provided by the URL manager 304 to the URL server 306 using additional mechanisms that are not the subject of this document.
+Abstract
+Description
+TABLE I |
+Reuse Table Example |
+URL | URL | ||
+Record No. | Fingerprint (FP) | Reuse Type | If Modified Since . . . |
+1 | 2123242 | |
+|
+2 | 2323232 | REUSE IF NOT | Feb. 5, 2004 |
+MODIFIED SINCE | |||
+3 | 3343433 | DOWNLOAD | |
+• | • | • | • |
+• | • | • | • |
+-
+-
+URL fingerprint 434, which is obtained by applying a hash function or fingerprint function to the document's URL; - timestamp 436, indicating the date and time of the download or crawl attempt;
+- crawl
+status 438, indicating whether the crawl attempt was a success or resulted in an error; -
+content checksum 440, which contains a checksum of the contents of the page if the crawl attempt was successful; -
+source ID 442, indicating whether the document was reused (i.e., accessed from the local document repository), or downloaded (or attempted to be downloaded); -
+segment identifier 444, which indicates the segment to which the document is assigned; and -
+page importance 446, which is the page importance score assigned to the document (by the page rankers) at the time of the crawl attempt.
+-
+Priority Scorei=page_importancei*boost factor, (1)
+where the subscript i denotes an ith URL and the boost factor is a scalar (e.g., a number larger or smaller than 1.0) that is used to demote or promote the priority score of the URL. For example, the boost factor can be used to promote URLs of homepages of major companies (e.g., Fortune 100) or popular news sites (e.g., CNN). Note that more or fewer priority scores can be computed using a variety of priority functions, as needed, depending upon the architecture of the
+Claims (37)
+Priority Applications (5)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/882,955 US8707312B1 (en) | 2003-07-03 | 2004-06-30 | Document reuse in a search engine crawler |
+US10/882,956 US8042112B1 (en) | 2003-07-03 | 2004-06-30 | Scheduler for search engine crawler |
+US13/031,011 US8707313B1 (en) | 2003-07-03 | 2011-02-18 | Scheduler for search engine crawler |
+US14/245,806 US9679056B2 (en) | 2003-07-03 | 2014-04-04 | Document reuse in a search engine crawler |
+US15/617,634 US10216847B2 (en) | 2003-07-03 | 2017-06-08 | Document reuse in a search engine crawler |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/614,113 US7308643B1 (en) | 2003-07-03 | 2003-07-03 | Anchor tag indexing in a web crawler system |
+US10/882,955 US8707312B1 (en) | 2003-07-03 | 2004-06-30 | Document reuse in a search engine crawler |
+Related Parent Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/614,113 Continuation-In-Part US7308643B1 (en) | 2003-07-03 | 2003-07-03 | Anchor tag indexing in a web crawler system |
+Related Child Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US14/245,806 Continuation US9679056B2 (en) | 2003-07-03 | 2014-04-04 | Document reuse in a search engine crawler |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US8707312B1 true US8707312B1 (en) | 2014-04-22 |
+Family
+ID=50482029
+Family Applications (5)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/882,955 Active 2027-08-14 US8707312B1 (en) | 2003-07-03 | 2004-06-30 | Document reuse in a search engine crawler |
+US10/882,956 Expired - Fee Related US8042112B1 (en) | 2003-07-03 | 2004-06-30 | Scheduler for search engine crawler |
+US13/031,011 Expired - Fee Related US8707313B1 (en) | 2003-07-03 | 2011-02-18 | Scheduler for search engine crawler |
+US14/245,806 Active 2024-05-21 US9679056B2 (en) | 2003-07-03 | 2014-04-04 | Document reuse in a search engine crawler |
+US15/617,634 Expired - Fee Related US10216847B2 (en) | 2003-07-03 | 2017-06-08 | Document reuse in a search engine crawler |
+Family Applications After (4)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/882,956 Expired - Fee Related US8042112B1 (en) | 2003-07-03 | 2004-06-30 | Scheduler for search engine crawler |
+US13/031,011 Expired - Fee Related US8707313B1 (en) | 2003-07-03 | 2011-02-18 | Scheduler for search engine crawler |
+US14/245,806 Active 2024-05-21 US9679056B2 (en) | 2003-07-03 | 2014-04-04 | Document reuse in a search engine crawler |
+US15/617,634 Expired - Fee Related US10216847B2 (en) | 2003-07-03 | 2017-06-08 | Document reuse in a search engine crawler |
+Country Status (1)
+Country | Link |
+---|---|
+US (5) | US8707312B1 (en) |
+Cited By (3)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20110307467A1 (en) * | 2010-06-10 | 2011-12-15 | Stephen Severance | Distributed web crawler architecture |
+US20130060930A1 (en) * | 2011-09-02 | 2013-03-07 | Kenneth Alexander Ellis | Systems, methods, and interfaces for analyzing webpage portions |
+US10216847B2 (en) | 2003-07-03 | 2019-02-26 | Google Llc | Document reuse in a search engine crawler |
+Families Citing this family (47)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7725452B1 (en) | 2003-07-03 | 2010-05-25 | Google Inc. | Scheduler for search engine crawler |
+US7702618B1 (en) | 2004-07-26 | 2010-04-20 | Google Inc. | Information retrieval system for archiving multiple document versions |
+US7711679B2 (en) | 2004-07-26 | 2010-05-04 | Google Inc. | Phrase-based detection of duplicate documents in an information retrieval system |
+US7567959B2 (en) | 2004-07-26 | 2009-07-28 | Google Inc. | Multiple index based information retrieval system |
+US7987172B1 (en) | 2004-08-30 | 2011-07-26 | Google Inc. | Minimizing visibility of stale content in web searching including revising web crawl intervals of documents |
+US8386459B1 (en) * | 2005-04-25 | 2013-02-26 | Google Inc. | Scheduling a recrawl |
+US8666964B1 (en) | 2005-04-25 | 2014-03-04 | Google Inc. | Managing items in crawl schedule |
+US7509315B1 (en) | 2005-06-24 | 2009-03-24 | Google Inc. | Managing URLs |
+US7966558B2 (en) * | 2006-06-15 | 2011-06-21 | Microsoft Corporation | Snipping tool |
+US9298417B1 (en) * | 2007-07-25 | 2016-03-29 | Emc Corporation | Systems and methods for facilitating management of data |
+US8117223B2 (en) | 2007-09-07 | 2012-02-14 | Google Inc. | Integrating external related phrase information into a phrase-based indexing information retrieval system |
+US8286171B2 (en) * | 2008-07-21 | 2012-10-09 | Workshare Technology, Inc. | Methods and systems to fingerprint textual information using word runs |
+US8555080B2 (en) | 2008-09-11 | 2013-10-08 | Workshare Technology, Inc. | Methods and systems for protect agents using distributed lightweight fingerprints |
+US9092636B2 (en) | 2008-11-18 | 2015-07-28 | Workshare Technology, Inc. | Methods and systems for exact data match filtering |
+US8406456B2 (en) * | 2008-11-20 | 2013-03-26 | Workshare Technology, Inc. | Methods and systems for image fingerprinting |
+WO2011017084A2 (en) * | 2009-07-27 | 2011-02-10 | Workshare Technology, Inc. | Methods and systems for comparing presentation slide decks |
+US10783326B2 (en) | 2013-03-14 | 2020-09-22 | Workshare, Ltd. | System for tracking changes in a collaborative document editing environment |
+US11030163B2 (en) | 2011-11-29 | 2021-06-08 | Workshare, Ltd. | System for tracking and displaying changes in a set of related electronic documents |
+US10025759B2 (en) | 2010-11-29 | 2018-07-17 | Workshare Technology, Inc. | Methods and systems for monitoring documents exchanged over email applications |
+US10055480B2 (en) * | 2015-05-29 | 2018-08-21 | Sap Se | Aggregating database entries by hashing |
+US10127281B2 (en) | 2010-12-23 | 2018-11-13 | Sap Se | Dynamic hash table size estimation during database aggregation processing |
+US10880359B2 (en) | 2011-12-21 | 2020-12-29 | Workshare, Ltd. | System and method for cross platform document sharing |
+US10963584B2 (en) | 2011-06-08 | 2021-03-30 | Workshare Ltd. | Method and system for collaborative editing of a remotely stored document |
+US9948676B2 (en) | 2013-07-25 | 2018-04-17 | Workshare, Ltd. | System and method for securing documents prior to transmission |
+US9613340B2 (en) | 2011-06-14 | 2017-04-04 | Workshare Ltd. | Method and system for shared document approval |
+US9170990B2 (en) | 2013-03-14 | 2015-10-27 | Workshare Limited | Method and system for document retrieval with selective document comparison |
+US10574729B2 (en) | 2011-06-08 | 2020-02-25 | Workshare Ltd. | System and method for cross platform document sharing |
+US9298713B2 (en) * | 2011-09-30 | 2016-03-29 | Oracle International Corporation | Executor for software configuration automation |
+US9679296B2 (en) * | 2011-11-30 | 2017-06-13 | Retailmenot, Inc. | Promotion code validation apparatus and method |
+US9736260B2 (en) * | 2012-06-21 | 2017-08-15 | Cisco Technology, Inc. | Redirecting from a cloud service to a third party website to save costs without sacrificing security |
+US11567907B2 (en) | 2013-03-14 | 2023-01-31 | Workshare, Ltd. | Method and system for comparing document versions encoded in a hierarchical representation |
+US10592915B2 (en) * | 2013-03-15 | 2020-03-17 | Retailmenot, Inc. | Matching a coupon to a specific product |
+US20140324815A1 (en) * | 2013-04-29 | 2014-10-30 | Broadcom Corporation | Search infrastructure representing hosting client devices |
+US10911492B2 (en) | 2013-07-25 | 2021-02-02 | Workshare Ltd. | System and method for securing documents prior to transmission |
+CN103870329B (en) * | 2014-03-03 | 2017-01-18 | 同济大学 | Distributed crawler task scheduling method based on weighted round-robin algorithm |
+US9690847B2 (en) | 2014-08-07 | 2017-06-27 | Google, Inc. | Selecting content using query-independent scores of query segments |
+US11182551B2 (en) | 2014-12-29 | 2021-11-23 | Workshare Ltd. | System and method for determining document version geneology |
+US10133723B2 (en) | 2014-12-29 | 2018-11-20 | Workshare Ltd. | System and method for determining document version geneology |
+US11763013B2 (en) | 2015-08-07 | 2023-09-19 | Workshare, Ltd. | Transaction document management system and method |
+CN106503017A (en) * | 2015-09-08 | 2017-03-15 | 摩贝（上海）生物科技有限公司 | A kind of distributed reptile system task grasping system and method |
+US10949479B2 (en) * | 2016-04-29 | 2021-03-16 | ModeSens Inc. | Retrieval of content using link-based search |
+US10353978B2 (en) * | 2016-07-06 | 2019-07-16 | Facebook, Inc. | URL normalization |
+CN107463669B (en) * | 2017-08-03 | 2020-05-05 | 深圳市华傲数据技术有限公司 | Method and device for analyzing webpage data crawled by crawler |
+CN109829094A (en) * | 2019-01-23 | 2019-05-31 | 钟祥博谦信息科技有限公司 | Distributed reptile system |
+US11366862B2 (en) * | 2019-11-08 | 2022-06-21 | Gap Intelligence, Inc. | Automated web page accessing |
+CN110955414A (en) * | 2019-11-29 | 2020-04-03 | 电子科技大学 | User-defined data acquisition system and method |
+US11327947B1 (en) | 2021-01-04 | 2022-05-10 | Bank Of America Corporation | System for identifying, tagging, and monitoring data flow in a system environment |
+Citations (93)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4312009A (en) | 1979-02-16 | 1982-01-19 | Smh-Adrex | Device for projecting ink droplets onto a medium |
+US5521140A (en) | 1993-10-22 | 1996-05-28 | Sony Corporation | Recording unit structure and recording device |
+US5594480A (en) | 1992-10-14 | 1997-01-14 | Sony Corporation | Printing device and photographic paper |
+US5634062A (en) | 1993-10-27 | 1997-05-27 | Fuji Xerox Co., Ltd. | System for managing hypertext node information and link information |
+US5801702A (en) | 1995-03-09 | 1998-09-01 | Terrabyte Technology | System and method for adding network links in a displayed hierarchy |
+US5832494A (en) | 1993-06-14 | 1998-11-03 | Libertech, Inc. | Method and apparatus for indexing, searching and displaying data |
+US5898836A (en) | 1997-01-14 | 1999-04-27 | Netmind Services, Inc. | Change-detection tool indicating degree and location of change of internet documents by comparison of cyclic-redundancy-check(CRC) signatures |
+US6003060A (en) | 1996-12-20 | 1999-12-14 | International Business Machines Corporation | Method and apparatus to share resources while processing multiple priority data flows |
+US6012087A (en) | 1997-01-14 | 2000-01-04 | Netmind Technologies, Inc. | Unique-change detection of dynamic web pages using history tables of signatures |
+US6049804A (en) | 1995-11-01 | 2000-04-11 | Filetek, Inc. | Method and apparatus for segmenting a database |
+US6068363A (en) | 1996-07-04 | 2000-05-30 | Canon Kabushiki Kaisha | Recording head and apparatus employing multiple temperature sensors to effect temperature control |
+US6189019B1 (en) | 1996-08-14 | 2001-02-13 | Microsoft Corporation | Computer system and computer-implemented process for presenting document connectivity |
+US6243091B1 (en) | 1997-11-21 | 2001-06-05 | International Business Machines Corporation | Global history view |
+WO2001050320A1 (en) | 1999-12-30 | 2001-07-12 | Auctionwatch.Com, Inc. | Minimal impact crawler |
+US6263350B1 (en) | 1996-10-11 | 2001-07-17 | Sun Microsystems, Inc. | Method and system for leasing storage |
+US6263364B1 (en) | 1999-11-02 | 2001-07-17 | Alta Vista Company | Web crawler system using plurality of parallel priority level queues having distinct associated download priority levels for prioritizing document downloading and maintaining document freshness |
+US6269370B1 (en) | 1996-02-21 | 2001-07-31 | Infoseek Corporation | Web scan process |
+US6285999B1 (en) | 1997-01-10 | 2001-09-04 | The Board Of Trustees Of The Leland Stanford Junior University | Method for node ranking in a linked database |
+WO2001086507A1 (en) | 2000-05-08 | 2001-11-15 | The Johns Hopkins University | Relevant search rankings using high refresh-rate distributed crawling |
+US6321265B1 (en) | 1999-11-02 | 2001-11-20 | Altavista Company | System and method for enforcing politeness while scheduling downloads in a web crawler |
+US6336123B2 (en) | 1996-10-02 | 2002-01-01 | Matsushita Electric Industrial Co., Ltd. | Hierarchical based hyper-text document preparing and management apparatus |
+US20020010682A1 (en) | 2000-07-20 | 2002-01-24 | Johnson Rodney D. | Information archival and retrieval system for internetworked computers |
+US20020023158A1 (en) | 2000-04-27 | 2002-02-21 | Polizzi Kathleen Riddell | Method and apparatus for implementing search and channel features in an enterprise-wide computer system |
+US6351755B1 (en) | 1999-11-02 | 2002-02-26 | Alta Vista Company | System and method for associating an extensible set of data with documents downloaded by a web crawler |
+US6377984B1 (en) | 1999-11-02 | 2002-04-23 | Alta Vista Company | Web crawler system using parallel queues for queing data sets having common address and concurrently downloading data associated with data set in each queue |
+US20020052928A1 (en) | 2000-07-31 | 2002-05-02 | Eliyon Technologies Corporation | Computer method and apparatus for collecting people and organization information from Web sites |
+US20020065827A1 (en) * | 1995-05-31 | 2002-05-30 | David Christie | Method and apparatus for workgroup information replication |
+US6404446B1 (en) | 1997-08-15 | 2002-06-11 | International Business Machines Corporation | Multi-node user interface component and method thereof for use in displaying visual indication of search results |
+US20020073188A1 (en) | 2000-12-07 | 2002-06-13 | Rawson Freeman Leigh | Method and apparatus for partitioning system management information for a server farm among a plurality of leaseholds |
+US20020087515A1 (en) | 2000-11-03 | 2002-07-04 | Swannack Christopher Martyn | Data acquisition system |
+US6418433B1 (en) | 1999-01-28 | 2002-07-09 | International Business Machines Corporation | System and method for focussed web crawling |
+US6418452B1 (en) | 1999-11-03 | 2002-07-09 | International Business Machines Corporation | Network repository service directory for efficient web crawling |
+US6418453B1 (en) | 1999-11-03 | 2002-07-09 | International Business Machines Corporation | Network repository service for efficient web crawling |
+US6424966B1 (en) | 1998-06-30 | 2002-07-23 | Microsoft Corporation | Synchronizing crawler with notification source |
+US20020099602A1 (en) | 2000-12-04 | 2002-07-25 | Paul Moskowitz | Method and system to provide web site schedules |
+US20020129062A1 (en) | 2001-03-08 | 2002-09-12 | Wood River Technologies, Inc. | Apparatus and method for cataloging data |
+US20020143932A1 (en) | 2001-04-02 | 2002-10-03 | The Aerospace Corporation | Surveillance monitoring and automated reporting method for detecting data changes |
+US20020152201A1 (en) | 2001-04-17 | 2002-10-17 | International Business Machines Corporation | Mining of generalised disjunctive association rules |
+US20030061260A1 (en) | 2001-09-25 | 2003-03-27 | Timesys Corporation | Resource reservation and priority management |
+US6547829B1 (en) | 1999-06-30 | 2003-04-15 | Microsoft Corporation | Method and system for detecting duplicate documents in web crawls |
+US20030126136A1 (en) | 2001-06-22 | 2003-07-03 | Nosa Omoigui | System and method for knowledge retrieval, management, delivery and presentation |
+US20030131005A1 (en) | 2002-01-10 | 2003-07-10 | International Business Machines Corporation | Method and apparatus for automatic pruning of search engine indices |
+US6594662B1 (en) | 1998-07-01 | 2003-07-15 | Netshadow, Inc. | Method and system for gathering information resident on global computer networks |
+US20030158839A1 (en) | 2001-05-04 | 2003-08-21 | Yaroslav Faybishenko | System and method for determining relevancy of query responses in a distributed network search mechanism |
+US6631369B1 (en) | 1999-06-30 | 2003-10-07 | Microsoft Corporation | Method and system for incremental web crawling |
+US6638314B1 (en) | 1998-06-26 | 2003-10-28 | Microsoft Corporation | Method of web crawling utilizing crawl numbers |
+US6701350B1 (en) | 1999-09-08 | 2004-03-02 | Nortel Networks Limited | System and method for web page filtering |
+US20040044962A1 (en) | 2001-05-08 | 2004-03-04 | Green Jacob William | Relevant search rankings using high refresh-rate distributed crawling |
+US20040064442A1 (en) | 2002-09-27 | 2004-04-01 | Popovitch Steven Gregory | Incremental search engine |
+US20040088369A1 (en) | 2002-10-31 | 2004-05-06 | Yeager William J. | Peer trust evaluation using mobile agents in peer-to-peer networks |
+US6751612B1 (en) | 1999-11-29 | 2004-06-15 | Xerox Corporation | User query generate search results that rank set of servers where ranking is based on comparing content on each server with user query, frequency at which content on each server is altered using web crawler in a search engine |
+US20040128285A1 (en) | 2000-12-15 | 2004-07-01 | Jacob Green | Dynamic-content web crawling through traffic monitoring |
+US6763362B2 (en) | 2001-11-30 | 2004-07-13 | Micron Technology, Inc. | Method and system for updating a search engine |
+US6772203B1 (en) | 1999-05-14 | 2004-08-03 | Pivia, Inc. | Updating data objects for dynamic application caching |
+US20040225644A1 (en) | 2003-05-09 | 2004-11-11 | International Business Machines Corporation | Method and apparatus for search engine World Wide Web crawling |
+US20040225642A1 (en) | 2003-05-09 | 2004-11-11 | International Business Machines Corporation | Method and apparatus for web crawler data collection |
+US6836768B1 (en) | 1999-04-27 | 2004-12-28 | Surfnotes | Method and apparatus for improved information representation |
+US20050071766A1 (en) * | 2003-09-25 | 2005-03-31 | Brill Eric D. | Systems and methods for client-based web crawling |
+US20050086206A1 (en) | 2003-10-15 | 2005-04-21 | International Business Machines Corporation | System, Method, and service for collaborative focused crawling of documents on a network |
+US20050154746A1 (en) | 2004-01-09 | 2005-07-14 | Yahoo!, Inc. | Content presentation and management system associating base content and relevant additional content |
+US20050165778A1 (en) | 2000-01-28 | 2005-07-28 | Microsoft Corporation | Adaptive Web crawling using a statistical model |
+US20050192936A1 (en) | 2004-02-12 | 2005-09-01 | Meek Christopher A. | Decision-theoretic web-crawling and predicting web-page change |
+US20050210008A1 (en) | 2004-03-18 | 2005-09-22 | Bao Tran | Systems and methods for analyzing documents over a network |
+US6950874B2 (en) | 2000-12-15 | 2005-09-27 | International Business Machines Corporation | Method and system for management of resource leases in an application framework system |
+US20050216522A1 (en) | 2004-03-23 | 2005-09-29 | Integrated Data Corporation | Multi-tier document management system |
+US6952730B1 (en) | 2000-06-30 | 2005-10-04 | Hewlett-Packard Development Company, L.P. | System and method for efficient filtering of data set addresses in a web crawler |
+US20050240253A1 (en) | 2003-11-26 | 2005-10-27 | Wicab, Inc. | Systems and methods for altering vestibular biology |
+US6993534B2 (en) | 2002-05-08 | 2006-01-31 | International Business Machines Corporation | Data store for knowledge-based data mining system |
+US20060036605A1 (en) | 2004-04-14 | 2006-02-16 | Microsoft Corporation | System and method for storage power, thermal and acoustic management in server systems |
+US20060069663A1 (en) | 2004-09-28 | 2006-03-30 | Eytan Adar | Ranking results for network search query |
+US7043473B1 (en) | 2000-11-22 | 2006-05-09 | Widevine Technologies, Inc. | Media tracking system and method |
+US7047491B2 (en) | 2000-12-05 | 2006-05-16 | Schubert Daniel M | Electronic information management system for abstracting and reporting document information |
+US7080073B1 (en) | 2000-08-18 | 2006-07-18 | Firstrain, Inc. | Method and apparatus for focused crawling |
+US7089233B2 (en) | 2001-09-06 | 2006-08-08 | International Business Machines Corporation | Method and system for searching for web content |
+US7139747B1 (en) | 2000-11-03 | 2006-11-21 | Hewlett-Packard Development Company, L.P. | System and method for distributed web crawling |
+US7148991B2 (en) | 1995-04-18 | 2006-12-12 | Fuji Xerox Co., Ltd. | Job scheduling system for print processing |
+US7171619B1 (en) | 2001-07-05 | 2007-01-30 | Sun Microsystems, Inc. | Methods and apparatus for accessing document content |
+US7200592B2 (en) | 2002-01-14 | 2007-04-03 | International Business Machines Corporation | System for synchronizing of user's affinity to knowledge |
+US7231606B2 (en) * | 2000-10-31 | 2007-06-12 | Software Research, Inc. | Method and system for testing websites |
+US7260543B1 (en) | 2000-05-09 | 2007-08-21 | Sun Microsystems, Inc. | Automatic lease renewal with message gates in a distributed computing environment |
+US7308643B1 (en) | 2003-07-03 | 2007-12-11 | Google Inc. | Anchor tag indexing in a web crawler system |
+US7343412B1 (en) | 1999-06-24 | 2008-03-11 | International Business Machines Corporation | Method for maintaining and managing dynamic web pages stored in a system cache and referenced objects cached in other data stores |
+US7346839B2 (en) | 2003-09-30 | 2008-03-18 | Google Inc. | Information retrieval based on historical data |
+US7447777B1 (en) | 2002-02-11 | 2008-11-04 | Extreme Networks | Switching system |
+US7475069B2 (en) | 2006-03-29 | 2009-01-06 | International Business Machines Corporation | System and method for prioritizing websites during a webcrawling process |
+US20090037393A1 (en) | 2004-06-30 | 2009-02-05 | Eric Russell Fredricksen | System and Method of Accessing a Document Efficiently Through Multi-Tier Web Caching |
+US7565423B1 (en) | 2004-06-30 | 2009-07-21 | Google Inc. | System and method of accessing a document efficiently through multi-tier web caching |
+US7725452B1 (en) | 2003-07-03 | 2010-05-25 | Google Inc. | Scheduler for search engine crawler |
+US7769742B1 (en) | 2005-05-31 | 2010-08-03 | Google Inc. | Web crawler scheduler that utilizes sitemaps from websites |
+US7987172B1 (en) | 2004-08-30 | 2011-07-26 | Google Inc. | Minimizing visibility of stale content in web searching including revising web crawl intervals of documents |
+US8042112B1 (en) | 2003-07-03 | 2011-10-18 | Google Inc. | Scheduler for search engine crawler |
+US8180760B1 (en) | 2007-12-20 | 2012-05-15 | Google Inc. | Organization system for ad campaigns |
+US20120173552A1 (en) | 2003-07-03 | 2012-07-05 | Huican Zhu | Assigning Document Identification Tags |
+Family Cites Families (6)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US7236976B2 (en) | 2000-06-19 | 2007-06-26 | Aramark Corporation | System and method for scheduling events and associated products and services |
+US20040064432A1 (en) | 2002-09-27 | 2004-04-01 | Oetringer Eugen H. | Method and system for maintaining documents |
+US7627613B1 (en) | 2003-07-03 | 2009-12-01 | Google Inc. | Duplicate document detection in a web crawler system |
+US7240064B2 (en) | 2003-11-10 | 2007-07-03 | Overture Services, Inc. | Search engine with hierarchically stored indices |
+US20070214133A1 (en) | 2004-06-23 | 2007-09-13 | Edo Liberty | Methods for filtering data and filling in missing data using nonlinear inference |
+US8224964B1 (en) | 2004-06-30 | 2012-07-17 | Google Inc. | System and method of accessing a document efficiently through multi-tier web caching |
+-
+2004
+- 2004-06-30 US US10/882,955 patent/US8707312B1/en active Active
+- 2004-06-30 US US10/882,956 patent/US8042112B1/en not_active Expired - Fee Related
+-
+2011
+- 2011-02-18 US US13/031,011 patent/US8707313B1/en not_active Expired - Fee Related
+-
+2014
+- 2014-04-04 US US14/245,806 patent/US9679056B2/en active Active
+-
+2017
+- 2017-06-08 US US15/617,634 patent/US10216847B2/en not_active Expired - Fee Related
+Patent Citations (106)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US4312009A (en) | 1979-02-16 | 1982-01-19 | Smh-Adrex | Device for projecting ink droplets onto a medium |
+US5594480A (en) | 1992-10-14 | 1997-01-14 | Sony Corporation | Printing device and photographic paper |
+US5832494A (en) | 1993-06-14 | 1998-11-03 | Libertech, Inc. | Method and apparatus for indexing, searching and displaying data |
+US5521140A (en) | 1993-10-22 | 1996-05-28 | Sony Corporation | Recording unit structure and recording device |
+US5634062A (en) | 1993-10-27 | 1997-05-27 | Fuji Xerox Co., Ltd. | System for managing hypertext node information and link information |
+US5801702A (en) | 1995-03-09 | 1998-09-01 | Terrabyte Technology | System and method for adding network links in a displayed hierarchy |
+US7148991B2 (en) | 1995-04-18 | 2006-12-12 | Fuji Xerox Co., Ltd. | Job scheduling system for print processing |
+US20020065827A1 (en) * | 1995-05-31 | 2002-05-30 | David Christie | Method and apparatus for workgroup information replication |
+US6049804A (en) | 1995-11-01 | 2000-04-11 | Filetek, Inc. | Method and apparatus for segmenting a database |
+US6269370B1 (en) | 1996-02-21 | 2001-07-31 | Infoseek Corporation | Web scan process |
+US6068363A (en) | 1996-07-04 | 2000-05-30 | Canon Kabushiki Kaisha | Recording head and apparatus employing multiple temperature sensors to effect temperature control |
+US6189019B1 (en) | 1996-08-14 | 2001-02-13 | Microsoft Corporation | Computer system and computer-implemented process for presenting document connectivity |
+US6336123B2 (en) | 1996-10-02 | 2002-01-01 | Matsushita Electric Industrial Co., Ltd. | Hierarchical based hyper-text document preparing and management apparatus |
+US6263350B1 (en) | 1996-10-11 | 2001-07-17 | Sun Microsystems, Inc. | Method and system for leasing storage |
+US6003060A (en) | 1996-12-20 | 1999-12-14 | International Business Machines Corporation | Method and apparatus to share resources while processing multiple priority data flows |
+US6285999B1 (en) | 1997-01-10 | 2001-09-04 | The Board Of Trustees Of The Leland Stanford Junior University | Method for node ranking in a linked database |
+US6012087A (en) | 1997-01-14 | 2000-01-04 | Netmind Technologies, Inc. | Unique-change detection of dynamic web pages using history tables of signatures |
+US6219818B1 (en) | 1997-01-14 | 2001-04-17 | Netmind Technologies, Inc. | Checksum-comparing change-detection tool indicating degree and location of change of internet documents |
+US5898836A (en) | 1997-01-14 | 1999-04-27 | Netmind Services, Inc. | Change-detection tool indicating degree and location of change of internet documents by comparison of cyclic-redundancy-check(CRC) signatures |
+US6404446B1 (en) | 1997-08-15 | 2002-06-11 | International Business Machines Corporation | Multi-node user interface component and method thereof for use in displaying visual indication of search results |
+US6243091B1 (en) | 1997-11-21 | 2001-06-05 | International Business Machines Corporation | Global history view |
+US6638314B1 (en) | 1998-06-26 | 2003-10-28 | Microsoft Corporation | Method of web crawling utilizing crawl numbers |
+US6424966B1 (en) | 1998-06-30 | 2002-07-23 | Microsoft Corporation | Synchronizing crawler with notification source |
+US6594662B1 (en) | 1998-07-01 | 2003-07-15 | Netshadow, Inc. | Method and system for gathering information resident on global computer networks |
+US6418433B1 (en) | 1999-01-28 | 2002-07-09 | International Business Machines Corporation | System and method for focussed web crawling |
+US6836768B1 (en) | 1999-04-27 | 2004-12-28 | Surfnotes | Method and apparatus for improved information representation |
+US6772203B1 (en) | 1999-05-14 | 2004-08-03 | Pivia, Inc. | Updating data objects for dynamic application caching |
+US7343412B1 (en) | 1999-06-24 | 2008-03-11 | International Business Machines Corporation | Method for maintaining and managing dynamic web pages stored in a system cache and referenced objects cached in other data stores |
+US6547829B1 (en) | 1999-06-30 | 2003-04-15 | Microsoft Corporation | Method and system for detecting duplicate documents in web crawls |
+US6631369B1 (en) | 1999-06-30 | 2003-10-07 | Microsoft Corporation | Method and system for incremental web crawling |
+US6701350B1 (en) | 1999-09-08 | 2004-03-02 | Nortel Networks Limited | System and method for web page filtering |
+US6263364B1 (en) | 1999-11-02 | 2001-07-17 | Alta Vista Company | Web crawler system using plurality of parallel priority level queues having distinct associated download priority levels for prioritizing document downloading and maintaining document freshness |
+US6377984B1 (en) | 1999-11-02 | 2002-04-23 | Alta Vista Company | Web crawler system using parallel queues for queing data sets having common address and concurrently downloading data associated with data set in each queue |
+US6321265B1 (en) | 1999-11-02 | 2001-11-20 | Altavista Company | System and method for enforcing politeness while scheduling downloads in a web crawler |
+US6351755B1 (en) | 1999-11-02 | 2002-02-26 | Alta Vista Company | System and method for associating an extensible set of data with documents downloaded by a web crawler |
+US6418452B1 (en) | 1999-11-03 | 2002-07-09 | International Business Machines Corporation | Network repository service directory for efficient web crawling |
+US6418453B1 (en) | 1999-11-03 | 2002-07-09 | International Business Machines Corporation | Network repository service for efficient web crawling |
+US6751612B1 (en) | 1999-11-29 | 2004-06-15 | Xerox Corporation | User query generate search results that rank set of servers where ranking is based on comparing content on each server with user query, frequency at which content on each server is altered using web crawler in a search engine |
+WO2001050320A1 (en) | 1999-12-30 | 2001-07-12 | Auctionwatch.Com, Inc. | Minimal impact crawler |
+US20050165778A1 (en) | 2000-01-28 | 2005-07-28 | Microsoft Corporation | Adaptive Web crawling using a statistical model |
+US20020023158A1 (en) | 2000-04-27 | 2002-02-21 | Polizzi Kathleen Riddell | Method and apparatus for implementing search and channel features in an enterprise-wide computer system |
+WO2001086507A1 (en) | 2000-05-08 | 2001-11-15 | The Johns Hopkins University | Relevant search rankings using high refresh-rate distributed crawling |
+US7260543B1 (en) | 2000-05-09 | 2007-08-21 | Sun Microsystems, Inc. | Automatic lease renewal with message gates in a distributed computing environment |
+US6952730B1 (en) | 2000-06-30 | 2005-10-04 | Hewlett-Packard Development Company, L.P. | System and method for efficient filtering of data set addresses in a web crawler |
+US20020010682A1 (en) | 2000-07-20 | 2002-01-24 | Johnson Rodney D. | Information archival and retrieval system for internetworked computers |
+US20020052928A1 (en) | 2000-07-31 | 2002-05-02 | Eliyon Technologies Corporation | Computer method and apparatus for collecting people and organization information from Web sites |
+US20060277175A1 (en) | 2000-08-18 | 2006-12-07 | Dongming Jiang | Method and Apparatus for Focused Crawling |
+US7080073B1 (en) | 2000-08-18 | 2006-07-18 | Firstrain, Inc. | Method and apparatus for focused crawling |
+US7231606B2 (en) * | 2000-10-31 | 2007-06-12 | Software Research, Inc. | Method and system for testing websites |
+US7139747B1 (en) | 2000-11-03 | 2006-11-21 | Hewlett-Packard Development Company, L.P. | System and method for distributed web crawling |
+US20020087515A1 (en) | 2000-11-03 | 2002-07-04 | Swannack Christopher Martyn | Data acquisition system |
+US7043473B1 (en) | 2000-11-22 | 2006-05-09 | Widevine Technologies, Inc. | Media tracking system and method |
+US20020099602A1 (en) | 2000-12-04 | 2002-07-25 | Paul Moskowitz | Method and system to provide web site schedules |
+US7047491B2 (en) | 2000-12-05 | 2006-05-16 | Schubert Daniel M | Electronic information management system for abstracting and reporting document information |
+US20020073188A1 (en) | 2000-12-07 | 2002-06-13 | Rawson Freeman Leigh | Method and apparatus for partitioning system management information for a server farm among a plurality of leaseholds |
+US20040128285A1 (en) | 2000-12-15 | 2004-07-01 | Jacob Green | Dynamic-content web crawling through traffic monitoring |
+US6950874B2 (en) | 2000-12-15 | 2005-09-27 | International Business Machines Corporation | Method and system for management of resource leases in an application framework system |
+US20020129062A1 (en) | 2001-03-08 | 2002-09-12 | Wood River Technologies, Inc. | Apparatus and method for cataloging data |
+US20020143932A1 (en) | 2001-04-02 | 2002-10-03 | The Aerospace Corporation | Surveillance monitoring and automated reporting method for detecting data changes |
+US20020152201A1 (en) | 2001-04-17 | 2002-10-17 | International Business Machines Corporation | Mining of generalised disjunctive association rules |
+US20030158839A1 (en) | 2001-05-04 | 2003-08-21 | Yaroslav Faybishenko | System and method for determining relevancy of query responses in a distributed network search mechanism |
+US7299219B2 (en) | 2001-05-08 | 2007-11-20 | The Johns Hopkins University | High refresh-rate retrieval of freshly published content using distributed crawling |
+US20040044962A1 (en) | 2001-05-08 | 2004-03-04 | Green Jacob William | Relevant search rankings using high refresh-rate distributed crawling |
+US20030126136A1 (en) | 2001-06-22 | 2003-07-03 | Nosa Omoigui | System and method for knowledge retrieval, management, delivery and presentation |
+US7171619B1 (en) | 2001-07-05 | 2007-01-30 | Sun Microsystems, Inc. | Methods and apparatus for accessing document content |
+US7089233B2 (en) | 2001-09-06 | 2006-08-08 | International Business Machines Corporation | Method and system for searching for web content |
+US20030061260A1 (en) | 2001-09-25 | 2003-03-27 | Timesys Corporation | Resource reservation and priority management |
+US6763362B2 (en) | 2001-11-30 | 2004-07-13 | Micron Technology, Inc. | Method and system for updating a search engine |
+US20030131005A1 (en) | 2002-01-10 | 2003-07-10 | International Business Machines Corporation | Method and apparatus for automatic pruning of search engine indices |
+US7200592B2 (en) | 2002-01-14 | 2007-04-03 | International Business Machines Corporation | System for synchronizing of user's affinity to knowledge |
+US7447777B1 (en) | 2002-02-11 | 2008-11-04 | Extreme Networks | Switching system |
+US6993534B2 (en) | 2002-05-08 | 2006-01-31 | International Business Machines Corporation | Data store for knowledge-based data mining system |
+US20040064442A1 (en) | 2002-09-27 | 2004-04-01 | Popovitch Steven Gregory | Incremental search engine |
+US20040088369A1 (en) | 2002-10-31 | 2004-05-06 | Yeager William J. | Peer trust evaluation using mobile agents in peer-to-peer networks |
+US20040225642A1 (en) | 2003-05-09 | 2004-11-11 | International Business Machines Corporation | Method and apparatus for web crawler data collection |
+US7454410B2 (en) | 2003-05-09 | 2008-11-18 | International Business Machines Corporation | Method and apparatus for web crawler data collection |
+US20040225644A1 (en) | 2003-05-09 | 2004-11-11 | International Business Machines Corporation | Method and apparatus for search engine World Wide Web crawling |
+US20120066576A1 (en) | 2003-07-03 | 2012-03-15 | Huican Zhu | Anchor Tag Indexing in a Web Crawler System |
+US7725452B1 (en) | 2003-07-03 | 2010-05-25 | Google Inc. | Scheduler for search engine crawler |
+US20100241621A1 (en) | 2003-07-03 | 2010-09-23 | Randall Keith H | Scheduler for Search Engine Crawler |
+US8042112B1 (en) | 2003-07-03 | 2011-10-18 | Google Inc. | Scheduler for search engine crawler |
+US8161033B2 (en) | 2003-07-03 | 2012-04-17 | Google Inc. | Scheduler for search engine crawler |
+US20120173552A1 (en) | 2003-07-03 | 2012-07-05 | Huican Zhu | Assigning Document Identification Tags |
+US7308643B1 (en) | 2003-07-03 | 2007-12-11 | Google Inc. | Anchor tag indexing in a web crawler system |
+US20050071766A1 (en) * | 2003-09-25 | 2005-03-31 | Brill Eric D. | Systems and methods for client-based web crawling |
+US7346839B2 (en) | 2003-09-30 | 2008-03-18 | Google Inc. | Information retrieval based on historical data |
+US20050086206A1 (en) | 2003-10-15 | 2005-04-21 | International Business Machines Corporation | System, Method, and service for collaborative focused crawling of documents on a network |
+US20050240253A1 (en) | 2003-11-26 | 2005-10-27 | Wicab, Inc. | Systems and methods for altering vestibular biology |
+US20050154746A1 (en) | 2004-01-09 | 2005-07-14 | Yahoo!, Inc. | Content presentation and management system associating base content and relevant additional content |
+US7483891B2 (en) | 2004-01-09 | 2009-01-27 | Yahoo, Inc. | Content presentation and management system associating base content and relevant additional content |
+US20050192936A1 (en) | 2004-02-12 | 2005-09-01 | Meek Christopher A. | Decision-theoretic web-crawling and predicting web-page change |
+US7310632B2 (en) | 2004-02-12 | 2007-12-18 | Microsoft Corporation | Decision-theoretic web-crawling and predicting web-page change |
+US20050210008A1 (en) | 2004-03-18 | 2005-09-22 | Bao Tran | Systems and methods for analyzing documents over a network |
+US20050216522A1 (en) | 2004-03-23 | 2005-09-29 | Integrated Data Corporation | Multi-tier document management system |
+US20060036605A1 (en) | 2004-04-14 | 2006-02-16 | Microsoft Corporation | System and method for storage power, thermal and acoustic management in server systems |
+US7565423B1 (en) | 2004-06-30 | 2009-07-21 | Google Inc. | System and method of accessing a document efficiently through multi-tier web caching |
+US20090037393A1 (en) | 2004-06-30 | 2009-02-05 | Eric Russell Fredricksen | System and Method of Accessing a Document Efficiently Through Multi-Tier Web Caching |
+US7987172B1 (en) | 2004-08-30 | 2011-07-26 | Google Inc. | Minimizing visibility of stale content in web searching including revising web crawl intervals of documents |
+US20110258176A1 (en) | 2004-08-30 | 2011-10-20 | Carver Anton P T | Minimizing Visibility of Stale Content in Web Searching Including Revising Web Crawl Intervals of Documents |
+US8407204B2 (en) | 2004-08-30 | 2013-03-26 | Google Inc. | Minimizing visibility of stale content in web searching including revising web crawl intervals of documents |
+US20060069663A1 (en) | 2004-09-28 | 2006-03-30 | Eytan Adar | Ranking results for network search query |
+US7769742B1 (en) | 2005-05-31 | 2010-08-03 | Google Inc. | Web crawler scheduler that utilizes sitemaps from websites |
+US7966337B2 (en) | 2006-03-29 | 2011-06-21 | International Business Machines Corporation | System and method for prioritizing websites during a webcrawling process |
+US7475069B2 (en) | 2006-03-29 | 2009-01-06 | International Business Machines Corporation | System and method for prioritizing websites during a webcrawling process |
+US8180760B1 (en) | 2007-12-20 | 2012-05-15 | Google Inc. | Organization system for ad campaigns |
+US8392396B1 (en) | 2007-12-20 | 2013-03-05 | Google Inc. | Organization system for ad campaigns |
+Non-Patent Citations (36)
+Title |
+---|
+Ali, What's Changed? Measuring Document Change in Web Crawling for Search Engines, SPIRE 2003, LNCS 2857, 2003, pp. 28-42, Springer-Verlag, Berlin, Germany. |
+Arasu, Searching the Web, ACM Transactions on Internet Technology, ACM Transactions on Internet Technology, vol. 1, No. 1, Aug. 2001, pp. 2-43. |
+Baeza-Yates, Balancing Volume, Quality and Freshness in Web Crawling, Center for Web Research, Dept. of Computer Science, University of Chile, 2002, pp. 1-10. |
+Brandman, Crawler-Friendly Web Servers, ACM Sigmetrics Performance Evaluation Review, vol. 28, Issue 2, Sep. 2000, pp. 9-14. |
+Brin, S., et al., "The Anatomy of a Large-Scale Hypertextual Web Search Engine," In Proc. of the 7th Int'l World Wide Web Conf., 1998. |
+Brusilovsky, Map-Based Horizontal Navigation in Educations Hypertext, ACM Press, Jun. 2002, pp. 1-10. |
+Bullot, A Data-Mining Approach for Optimizing Performance of an Incremental Crawler, WI '03, Oct. 13-17, 2003, pp. 610-615. |
+Buyukkokten, O., "Power Browser: Efficient Web Browsing for PDAs," CHI Letters, vol. 2, Issue 1, Apr. 2000, 8 pages. |
+Cho, Crawling the Web: Discovery and Maintenance of Large-Scale Web Data, PhD Thesis, Dept. of Computer Science, Stanford University, Nov. 2001, 188 pages. |
+Cho, Effective Page Refresh Policies for Web Crawlers, ACM Transactions on Database Systems, vol. 28, No. 4, Dec. 2003, pp. 390-426. |
+Cho, Efficient Crawling Through URL Ordering, Computer Networks and ISDN Systems, vol. 30, Issues 1-7, Apr. 1998, pp. 161-172. |
+Cho, Estimating Frequency of Change, ACM Transactions on Internet Technology, vol. 3, No. 3, Aug. 2003, pp. 256-290. |
+Cho, Synchronizing a Database to Improve Freshness, MOD 2000, Dallas, TX, Jun. 2000, pp. 117-128. |
+Cho, The Evolution of the Web and Implications for an Incremental Crawler, Proceedings of the 26th VLDB Conf., Cairo, Egypt, 2000, pp. 200-209. |
+Coffman, Optimal Robot Scheduling for Web Search Engines, Tech. Rep. RR3317, 1997, 19 pages. |
+Douglis, Rate of Change and Other Metrics: a Live Study of the World Wide Web, USENIX Symposium on Internetworking Technologies and Systems, Monterey, CA, Dec. 1997, pp. I and 1-13. |
+Douglis, The AT&T Internet Difference Engine: Tracking and Viewing Changes on the Web, World Wide Web, vol. 1, No. 1, Mar. 1998, pp. 27-44. |
+Fetterly, A Large-Scale Study of the Evolution of Web Pages, WWW 2003, Budapest, Hungary, May 20-24, 2003, pp. 669-678. |
+Haveliwala, T.H., "Topic-Sensitive PageRank," In Proc. of the 11th Int'l World Wide Web Conf., May 2002. |
+Henzinger, Web Information Retrieval-an Algorithmic Perspective, ESA 2000, LNCS 1879, 2000, pp. 1-8, Springer-Verlag, Berlin, Germany. |
+Heydon, Mercator: A Scalable, Extensible Web Crawler, World Wide Web, vol. 2, No. 4, Dec. 1999, pp. 219-229. |
+Hirai, WebBase: A Repository of Web Pages, Computer Networks, vol. 33, Jun. 2000, pp. 277-293. |
+Introna, Defining the Web: The Politics of Search Engines, Computer, vol. 22, Issue 1, Jan. 2000, pp. 54-62. |
+Jeh, G., et al., "Scaling Personalized Web Search," In Proc. of the 12th Int'l World Wide Web Conf., 2003. |
+Kamvar, S.D., et al., "Exploiting the Block Structure of the Web for Computing PageRank," Stanford Univ. Technical Report, 2003. |
+Klemm, WebCompanion: A Friendly Client-Side Web Prefetching Agent, IEEE Transactions on Knowledge and Data Engineering, vol. 11, No. 4, Jul./Aug. 1999, pp. 577-594. |
+Lagrange multiplier, Wikipedia, en.wikipedia.org/wiki/Lagrange-multipliers, Jun. 3, 2011, 11 pgs. |
+Lee, Intelligent Agents for Matching Information Providers and Consumers on the World-Wide-Web, Proc. of the 13th Annual Hawaii International Conf. on System Sciences, 1997, 11 pages. |
+Najork, "Breadth-First Search Crawling Yields High-Quality Pages," WWW10, May 1-5, 2001, Hong Kong, pp. 114-118. |
+Najork, A., "High-Performance Web Crawling," COMPAQ, Systems Research Center, Sep. 26, 2001, 26 pages. |
+Nekrestyanov, I., "Building Topic-Specific Collections with Intelligent Agents," IS&N '99, Proc. of the 6th International Conf. on Intelligence and Services in Networks: Paving the Way for an Open Service Market, Springer-Verlag, 1999, 13 pages. |
+Pandey, Monitoring the Dynamic Web to Respond to Continuous Queries, WWW2003, Budapest, Hungary, May 20-24, 2003, pp. 659-668. |
+Pretto, A Theoretical Analysis of Google's Pagerank, Sep. 11-13, 2002, 14 pgs. |
+Shkapenyuk, Design and Implementation of a High-Performance Distributed Web Crawler, ICDE '02, San Jose, CA, Feb. 26-Mar. 1, 2002, pp. 357-368. |
+Suel, Odissea: A Peer-to-Peer Architecture for Scalable Web Search and Information Retrieval, WebDB, San Diego, CA, Jun. 12-13, 2003, pp. 1-6. |
+Wolf, Optimal Crawling Strategies for Web Search Engines, WWW 2002, Honolulu, Hawaii, May 7-11, 2002, pp. 136-147. |
+Cited By (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US10216847B2 (en) | 2003-07-03 | 2019-02-26 | Google Llc | Document reuse in a search engine crawler |
+US20110307467A1 (en) * | 2010-06-10 | 2011-12-15 | Stephen Severance | Distributed web crawler architecture |
+US20130060930A1 (en) * | 2011-09-02 | 2013-03-07 | Kenneth Alexander Ellis | Systems, methods, and interfaces for analyzing webpage portions |
+US9846743B2 (en) * | 2011-09-02 | 2017-12-19 | Thomson Reuters Global Resources Unlimited Company | Systems, methods, and interfaces for analyzing webpage portions |
+Also Published As
+Publication number | Publication date |
+---|---|
+US10216847B2 (en) | 2019-02-26 |
+US8042112B1 (en) | 2011-10-18 |
+US20180089317A1 (en) | 2018-03-29 |
+US20140222776A1 (en) | 2014-08-07 |
+US8707313B1 (en) | 2014-04-22 |
+US9679056B2 (en) | 2017-06-13 |
+US20170091324A9 (en) | 2017-03-30 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US10216847B2 (en) | Document reuse in a search engine crawler | |
+US10621241B2 (en) | Scheduler for search engine crawler | |
+US8484548B1 (en) | Anchor tag indexing in a web crawler system | |
+US7984054B2 (en) | Representative document selection for sets of duplicate documents in a web crawler system | |
+US6952730B1 (en) | System and method for efficient filtering of data set addresses in a web crawler | |
+KR100971863B1 (en) | System and method for batched indexing of network documents | |
+US6377984B1 (en) | Web crawler system using parallel queues for queing data sets having common address and concurrently downloading data associated with data set in each queue | |
+US6061679A (en) | Creating and searching a data structure ordered by ranges of key masks associated with the data structure | |
+US6263364B1 (en) | Web crawler system using plurality of parallel priority level queues having distinct associated download priority levels for prioritizing document downloading and maintaining document freshness | |
+US7107261B2 (en) | Search engine providing match and alternative answer | |
+EP1027793B1 (en) | Communication system and method | |
+US8620926B2 (en) | Using a hashing mechanism to select data entries in a directory for use with requested operations | |
+US7676553B1 (en) | Incremental web crawler using chunks | |
+US20050086192A1 (en) | Method and apparatus for improving the integration between a search engine and one or more file servers | |
+CN1202257A (en) | System and method for locating pages on the world wide web and for locating documents from network of computers | |
+WO1998029792A2 (en) | System and method for distributing and indexing computerized documents using independent agents | |
+US11308066B1 (en) | Optimized database partitioning | |
+JP2002222111A (en) | Device and method for data communication | |
+US11734291B2 (en) | Parallel execution of API calls using local memory of distributed computing devices | |
+JPH05233417A (en) | Directory control method for distributed filing system | |
+CRAWLER | 20 Web crawling and indexes | |
+CN1298155A (en) | Permanent cache memory for light weight | |
+JPH1083359A (en) | Master downloading system, its network and method | |
+JPH04111035A (en) | Distributed resource information managing device |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:ZHU, HUICAN;IBEL, MAXIMILIAN;ACHARYA, ANURAG;AND OTHERS;SIGNING DATES FROM 20040920 TO 20041005;REEL/FRAME:015392/0115 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+CC | Certificate of correction | ||
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044277/0001Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551)Year of fee payment: 4 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

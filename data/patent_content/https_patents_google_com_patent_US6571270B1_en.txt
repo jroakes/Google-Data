@@ -1,0 +1,437 @@
+US6571270B1 - Timeout detection facility - Google Patents
+Timeout detection facility Download PDFInfo
+- Publication number
+- US6571270B1 US6571270B1 US09/267,356 US26735699A US6571270B1 US 6571270 B1 US6571270 B1 US 6571270B1 US 26735699 A US26735699 A US 26735699A US 6571270 B1 US6571270 B1 US 6571270B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- detection process
+- program
+- active
+- wait time
+- time
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/466—Transaction processing
+-
+- Y—GENERAL TAGGING OF NEW TECHNOLOGICAL DEVELOPMENTS; GENERAL TAGGING OF CROSS-SECTIONAL TECHNOLOGIES SPANNING OVER SEVERAL SECTIONS OF THE IPC; TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10—TECHNICAL SUBJECTS COVERED BY FORMER USPC
+- Y10S—TECHNICAL SUBJECTS COVERED BY FORMER USPC CROSS-REFERENCE ART COLLECTIONS [XRACs] AND DIGESTS
+- Y10S707/00—Data processing: database and file management or data structures
+- Y10S707/99951—File or database maintenance
+- Y10S707/99952—Coherency, e.g. same view to multiple users
+- Y10S707/99953—Recoverability
+Definitions
+- This invention relates to a method, computer system, and computer program product that relates to the database management system IMS® available from INTERNATIONAL BUSINESS MACHINES CORPORATION®.
+- this invention relates to solving a problem in that transactions sometimes hang after an asynchronous APPC call issued by IMS from the IMS dependent region during syncpoint processing.
+- IMS/ESA Information management system/Enterprise systems architecture
+- IMS/ESA Information management system/Enterprise systems architecture
+- IMS/ESA There are two major parts to IMS/ESA: a database system (IMS Database or IMS DB), and a data communications system (IMS Transaction Manager or IMS TM). Together, they create a complete online transaction processing environment providing continuous availability and data integrity.
+- IMS Database IMS Database
+- IMS Transaction Manager IMS Transaction Manager
+- IMS/ESA runs under the MVS/ESA or OS/390 operating systems, which run on the S/390 platform.
+- IMS databases are hierarchic collections of data, information organized in a pyramid fashion with data at each level of the hierarchy related to, and in some way dependent upon, data at the higher level of the hierarchy.
+- DL/I calls provide for the creation and manipulation of these IMS databases.
+- the IMS DB function provides a full-function resource manager and a fast path resource manager for hierarchical database management. These resource managers map the data language (DL/I) application call interface to the underlying operating system access methods. This mapping enables the application code to function independently of operating system access methods and to remain transparent to the physical storage of the data.
+- the data managed by IMS are organized in hierarchical database records.
+- a database record is composed of segments, a segment being the smallest piece of information that IMS can store.
+- a segment contains fields that are the smallest pieces of data an application program can manipulate.
+- a field identified as a unique key field can be used to navigate the database to find a specific segment.
+- the hierarchical structure of the segments establishes the structure of the database record.
+- a root segment identifies a database record, and a database record cannot exist without a root segment.
+- Dependent segments are the pieces of data that complete the rest of a database record.
+- the IMS DB full-function resource manager provides sequential access, indexed sequential access, and direct access for database processing.
+- the fast path DB resource manager provides the direct method for processing data by using direct access pointers to the segments.
+- IMS transaction manager is a message-based transaction processor that is designed to use the OS/390 or MVS/ESA environment to advantage.
+- IMS TM provides services to process messages received from the terminal network (input messages) and messages created by application programs (output messages). It also provides an underlying queuing mechanism for handling these messages.
+- IMS TM provides for a variety of online processing options. For example, transactions may be defined for high-volume data-entry applications, for interactive applications, or to support predefined queries. IMS TM supports a wide variety of terminals and devices. It also enables the development of a wide range of high-volume, rapid-response applications, and the dispersal of data processing locations geographically, while keeping centralized control of databases.
+- a transaction is a specific set of input data that triggers the execution of a specific process or job.
+- a message destined for an application program and the return of any results is considered by IMS TM to be one transaction.
+- IMS TM running with IMS DB is designed to handle thousands of transactions per second.
+- IMS DB contains a program isolation local lock manager to support concurrent application program processing.
+- the local lock manager controls access to the database records to ensure data integrity by preventing duplicate access to the same record until the application program completes its processing of the record.
+- the database record is locked when a position is first obtained on is the record.
+- the item locked is the root segment.
+- the database record is locked until position is changed to a different database record or until the application program reaches a commit point.
+- IMS determines whether any application programs hold locks on dependent segments. If there are no locks on dependent segments, it is not necessary to lock dependent segments when they are accessed. When an application program updates a segment, the segment, not the database record, is locked. IMS DB uses the Internal Resource Lock Manager (IRLM) global lock manager to support the global sharing of databases across systems in a sysplex (discussed below). When the IRLM is used, no lock is obtained when a dependent segment is updated. Instead, the root lock is held at single update level when exiting the database record. Therefore, no additional locks are required if a dependent segment is inserted, deleted, or replaced. This establishes the foundation for two-way data sharing and N-ways data sharing in a System/390 (S/390) Parallel Sysplex cluster.
+- S/390 System/390
+- IMS logger function provides recovery and restart capability for the system. IMS logs the following events:
+- the IMS logger writes log records to a direct access storage device (DASD) logger to support high-volume traffic.
+- IMS first writes log records to a high-speed DASD data set called the Write-Ahead Data Set (WADS).
+- WADS Write-Ahead Data Set
+- IMS copies the entire track to another DASD data set called the Online Log Data Set (OLDS).
+- OLDS Online Log Data Set
+- IMS is close to filling the last available OLDS, it archives the full ones to System Log Data Sets (SLDSs).
+- SLDSs System Log Data Sets
+- SLDSs System Log Data Sets
+- RLDS Recovery Log Data Set
+- the RLDS contains only the log records needed for database recovery.
+- the Database Recovery Control (DBRC) facility is used to support log management, database recovery control, and data sharing.
+- DBRC Database Recovery Control
+- DBRC automatically records all log data sets produced by the on-line IMS subsystem and by log archiving jobs in a pair of Key-Sequenced Data Sets (KSDS) called RECON (recovery control). IMS uses this information for database recovery jobs if databases are registered and also for IMS restart. DBRC also tracks the archiving requirements of the on-line data set (OLDS) and, if requested, generates and submits the Job Control Language (JCL) for archiving jobs.
+- KSDS Key-Sequenced Data Sets
+- DBRC also records:
+- DBRC Because DBRC records this information in the RECON, DBRC can generate JCL for executing a database recovery.
+- Data sharing requires that the databases be registered with DBRC.
+- DBRC checks on whether subsystems have authority to perform the requested task and whether other subsystems are not currently reserving the database.
+- Concurrent access to databases by systems in one or more processors is controlled with a common (shared) DBRC RECON data set.
+- status indicators in the RECON data set control concurrent access and recovery actions for the databases.
+- This common RECON data set is required in a data-sharing environment so that a given database is identified to all the sharing subsystems.
+- IMS preserves the ability of the application program to process data, even application programs written decades ago.
+- control region for each IMS system.
+- This region is the heart and brain of the IMS system: it controls the message queues, scheduling of applications, recoveries, and so on.
+- Each IMS system also has one or more dependent regions. The control and dependent regions are brought up and kept up until IMS needs to come down. IMS applications are processed within the dependent regions.
+- the fundamental architecture of IMS thus consists of a control region, a DLI secondary address space (DLISAS), a DBRC address space, an IRLM address space, and one or more dependent regions.
+- DLI secondary address space DLI secondary address space
+- DBRC address space DBRC address space
+- IRLM address space IRLM address space
+- the control region is the execution environment for the IMS system software, the control blocks, and storage pools required for managing communication access and application program scheduling.
+- the control region also contains the fast path system software for managing access to fast path databases. This isolates the IMS system functions from customer application programs to maintain the integrity of the IMS system.
+- the DLISAS execution environment contains the IMS DB full-function system software, control blocks, and storage pools for managing access to the full-function databases.
+- the dependent regions provide the execution environments for the application programs to process transactions.
+- IMS schedules a customer's application programs in the dependent regions to provide for parallel processing and a separation of application program processing.
+- the scheduling of an application program in its own dependent region also provides application program integrity.
+- the IMS scheduling function checks for a dependent region that is available for running the application program.
+- the available dependent region is supplied with the name of the application program to be loaded and executed in the dependent region.
+- the application program uses the DL/I calls for message queue processing to retrieve the message from the message queue and to process the request.
+- the application program completes the processing of the request, this indicates the completion of the unit-of-work, and the IMS sync-point manager initiates the two-phase commit process.
+- sync-point processing also referred to as syncpoint processing
+- IMS creates a log record to establish commitment of database changes and availability of output messages. The commit process is not complete until IMS physically writes this log is record to the OLDS.
+- the IMS transaction manager (TM) will check on whether there are any more work requests for the application program. If no additional work is ready to be processed, IMS TM determines whether the region can become pseudo wait-for-input (pseudo WFI). If the region is eligible for pseudo WFI, the region remains scheduled for the transaction and waits until another message is entered for the region. If the next message is for the scheduled transaction, the message is passed to the application program.
+- pseudo wait-for-input prseudo WFI
+- IMS TM terminates the application program and schedules a new application program to process the new message.
+- This self-tuning technique is used to maximize the use of a dependent region by an application program.
+- the ability to support multiple dependent regions facilitates workload balancing and application program isolation.
+- IMS distributes the workload among processors by off-loading some of the IMS control region task control block (TCB) work to dependent region TCBs.
+- TLB task control block
+- the following functions operate in dependent region TCBs using the cross-memory facility of the Multiple Virtual Storage (MVS*) operating system to communicate with the IMS control region for:
+- VMS* Multiple Virtual Storage
+- the IMS multiaddress space architecture exploits the multiprocessing architecture of MVS and the transformation of the S/390 platform to the S/390 Parallel Enterprise Server.
+- the IMS control region also provides the functions that support communication access.
+- a key concept supported by the IMS transaction manager is to view communication devices and end users in a logical fashion. This concept provides transparency for the application program and security for end-user messages.
+- the application program does not have to know the characteristics of the communication device when sending data to or receiving data from the device.
+- the IMS TM function uses the message queue resource manager and expedited message handler (EMH) resource manager to manage the communication messages to be processed by the application program. These resource managers support the DL/I communication message application call interface to provide a communication message to the application.
+- the IMS TM resource managers use the concept of a message segment to manage a communication message, and multiple message segments can be used to support a complete communication message.
+- the application programs use the DL/I interface to receive and send message segments. Another key function of message segments is to provide network transparency to the application programs.
+- the IMS TM resource managers use the IMS TM communication functions to interface to the network protocols for communication message processing.
+- the IMS TM communication manager function supports the S/390 Virtual Telecommunications Access Method (VTAM).
+- the communication manager is the interface between the message queue and EMH resource managers and VTAM.
+- IMS TM also provides a multiple systems coupling (MSC) feature.
+- MSC is a private IMS TM protocol that only permits the coupling of IMS systems to other IMS systems.
+- MSC is an extension of the IMS TM communication and scheduling capabilities and enables the user to perceive one virtual IMS system while the transactions are being routed across a complex of IMS subsystems.
+- the MSC function can be used to provide workload distribution across a single system boundary or across geographical boundaries.
+- IMS TM can also be used to access other types of database subsystems using the external subsystem attach facility (ESAF).
+- ESAF gives application programs running in IMS dependent regions the capability to obtain data from external subsystems, such as DATABASE 2 (DB 2 ).
+- An MVS systems complex may be referred to as a sysplex.
+- a base sysplex provides the cross-system coupling facility (XCF) component of Multiple Virtual Storage/Enterprise Systems Architecture (MVS/ESA).
+- XCF services allow authorized applications on one system to communicate with applications on the same system or on other systems.
+- IMS TM supports the APPC protocols but still preserves the existing application program interface. IMS TM utilizes the APPC/MVS facilities to enable APPC support. APPC/MVS and APPC/IMS are one of the authorized application pairs to implement the XCF protocols for communication. APPC/MVS uses APPC/VTAM macros to communicate with the communications network and uses XCF to communicate with APPC/IMS. An IMS application program can also use APPC/MVS services for direct communication processing. The coordination of processing between two APPC programs is known as the synchronization level (sync_level). APPC sync_level defines the protocol that is used when changing conversation states. APPC and IMS support the following sync_level values:
+- NONE Specificifies that the programs do not perform synchronization
+- CONFIRM Specificifies that the programs can perform confirmation processing on the conversation
+- SYNCPT Specificifies that the programs participate in coordinated commit processing.
+- RRS controls the commitment of protected resources by coordinating the commit or backout request with the participating owners of the updated resources, the resource managers.
+- IMS is thus the resource manager for DL/I, fast path data, and the IMS message queues.
+- the application program decides whether the data are to be committed or aborted, and communicates this decision to the SPM.
+- the SPM then coordinates the actions in support of this decision among the resource managers.
+- IMS interfaces to RRS to provide for coordinated commit. IMS assumes the role of a participant in the two-phase commit process with the sync-point manager, RRS.
+- XCF services now provide a standard MVS sysplex communication protocol.
+- IMS an Open Transaction Manager Access (OTMA) function.
+- the OTMA function uses XCF application programming interfaces to define a transaction pipe (TPIPE) connection between an OTMA client and IMS TM OTMA server function.
+- TPIPE transaction pipe
+- An OTMA client is an MVS application program that sends transactions to an IMS server and receives the output.
+- the MVS application program must be a member of an XCF group that includes IMS and uses the OTMA protocol.
+- OTMA also works with RRS to support coordinated commit processing. In an OTMA environment, OTMA is not a resource manager registered with RRS.
+- the process remains an interprocess protocol between a server (IMS) and a number of clients (application programs)
+- IMS client-adapter code that uses OTMA is responsible for obtaining and owning the context identifier (ID).
+- IMS finds the context-ID in the message, IMS assumes the role of a participant in the two-phase commit process, as it does in the APPC environment.
+- the IMS TM OTMA server function interfaces to the message queue resource manager and the EMH resource manager for delivery of messages to or from application program processing. Since the existing application programs use the DL/I call interface for their message processing requests, they continue to run transparent to the communication protocol supported by the OTMA client interface. The OTMA function opens IMS to access with other communication protocols.
+- IMS provides a TCP/IP OTMA connection (ITOC) client function.
+- ITOC runs as an authorized MVS application program.
+- ITOC provides support for user exit routines that can be used by TCP/IP clients to access IMS.
+- ITOC defines a message prefix that is used to identify the user exit routine and a standard interface for calling the user exit routine.
+- IMS Connectors To support Internet and the World Wide Web application, there is provided “IMS Connectors”, which help enable access to enterprise applications and data over the Internet using a Web browser.
+- the ITOC is one of four IMS Connectors that are provided for communication access to IMS.
+- the interface to IMS TM for the four IMS Connectors for communication access enables DL/I message processing application programs to continue to process without change.
+- the opening of access to IMS also requires the ability to access IMS DB.
+- the IMS Object Connector provides a way to access IMS DB managed data.
+- Object-oriented application programs can use IMS Object Connector to access data managed by IMS.
+- the object-oriented applications can be either IMS DB batch or IMS TM applications.
+- Object-oriented application programs can also be invoked from a Web browser.
+- the IMS Object Connector can use the IMS Open Data Base Access (ODBA) callable interface to access IMS DB.
+- ODBA IMS Open Data Base Access
+- the ODBA connection interface enables any OS/390 application program to access the IMS DB full-function and fast path databases and to use RRS to provide the commit or backout coordination of database updates.
+- IMS DB resource managers support block-level multisystem data sharing.
+- the resource managers can also exploit coupling facility cache structures for database buffer management. This enhances the sharing of databases by multiple IMS systems.
+- the IRLM lock manager uses the coupling facility lock structures to provide the block-level locking of IMS databases.
+- IMS TM supports message queue sharing by using the coupling facility list structures. Multiple IMS systems can access and process messages on the shared message queue.
+- IMS provides the Common Queue Server (CQS) to manage the queues in the coupling facility list structures. CQS has a structured interface that enables other programs besides IMS to connect to it and process the shared message queues.
+- CQS Common Queue Server
+- IMS systems may be defined as clones.
+- a cloned IMS system configuration is one in which the same application system resources (including transactions, programs, and databases) are shared among multiple IMS systems operating in a Parallel Sysplex configuration that is also sharing a common transaction workload. Transactions executing in such a configuration should have access to a common set of DL/I databases through IMS Nways or two-way data sharing.
+- the multisystem data sharing and message queue sharing provides the following capabilities when using the S/390 Parallel Sysplex:
+- Incremental growth As workload increases, new IMS systems can be dynamically added to the sysplex to process the extra workload. This approach supports peak processing periods.
+- any IMS system in the sysplex fails, any of the remaining IMS systems can process the workload in the shared queues. If one or more of the IMS systems requires a cold start, the contents of the shared queues are not affected.
+- LU 6.2 is best understood in the context of the Systems Network Architecture (SNA).
+- SNA Systems Network Architecture
+- SNA is both an architecture and a protocol suite.
+- One function of SNA is to define the rules and message formats by which application programs executing on a PU type 5 (mainframe host) communicate with peripheral devices.
+- a logical unit is an addressable end-point which may participate in a data communications session.
+- a logical unit is also referred to by its acronym, LU.
+- Multiple logical units may be associated with an individual physical unit. Examples of logical units include data entry terminals, printers, and application programs.
+- a logical unit type is a profile of how a logical unit is expected to interact with another logical unit.
+- logical unit type 2 is a data entry terminal.
+- the SNA definition of logical unit type 2 sets parameters for the elements of the SNA protocols that may be used with logical unit of this type. Not all protocol operations available within SNA are appropriate for use when one of the end-points in a session is a data entry terminal.
+- the application software which interacts with such a logical unit need only be concerned with a narrower scope of possible operations.
+- a logical unit type defines a profile describing a generic type of end-point within an SNA environment.
+- LU 6.2 defines an intelligent device supporting program-to-program communications.
+- An LU-to-LU session is established between two logical units. These logical units must be of the same type.
+- An example of an LU-to-LU session is a session between a terminal and an application program on the mainframe. In this example session, one of the LU partners in this session is the terminal device itself. The executing instance of the application program which is presenting information on the terminal display, and processing user input, is also considered a logical unit. Because both partners in this session are of the same type, both end-points have fixed knowledge as to the capabilities of the other end-point.
+- SNA also defines the rules and message formats by which application programs on separate processing systems communicate with each other.
+- API's Application Program Interfaces
+- An API defines the functional procedures by which a user-written program manages a session with another program, and by which it interchanges messages with that other program.
+- Standard SNA API's include HLLAPI, APPC, and CPI-C.
+- ITASK an ITASK is similar to a process
+- ITASK detection process
+- FIG. 1 shows, in a simplified manner, a portion of the processing according to the invention.
+- FIG. 2 shows another portion of the processing according to the invention.
+- FIG. 3 shows a detailed view of one of the operations depicted in FIG. 2 .
+- the IMS/ESA Transaction Manager handles operations relating to messages, transactions and message queues. It manages a network of IMS terminals, routes messages between terminals and applications, queues input and output messages, schedules application programs, and provides various other system control facilities.
+- IMS/ESA includes a function called IMS/APPC (Advanced Program-to-Program Communication).
+- APPC provides enhanced SNA support for distributed processing.
+- APPC describes the protocols used by programs in separate processors to communicate with each other in the execution of a (single) distributed transaction.
+- IMS/APPC support enables IMS to participate in open and distributed environments by providing additional connectivity capability and LU 6.2 device or platform independence.
+- IMS/APPC supports IMS applications in three general forms.
+- IMS application programs execute unchanged in the IMS dependent region when invoked from LU 6.2 devices using APPC. IMS issues all APPC verbs or CPI communication calls on behalf of IMS application programs.
+- a new CPI application program is designed to use APPC verbs or CPI communication calls directly.
+- IMS/ESA includes OTMA (Open Transaction Manager Access).
+- OTMA is a transactional-based, connectionless client/server protocol. Though easily generalized, its implementation is specific to IMS in an MVS Sysplex environment. An important capability of OTMA is that existing IMS application programs can run without modification and interact with OTMA clients.
+- the invention resides in a new method of processing that ensures that IMS itself will detect hang situations with APPC devices.
+- the invention more particularly, involves the following steps:
+- IMS creates a new ITASK (an ITASK is similar to a process) that will check periodically if any IMS application program is in a wait for a response from an APPC device.
+- the ITASK calculates the time it has to wait (sleep) before the next check occurs. This is done by finding out which application program is the closest to expire and calculating when this application program would exceed the time-out limit specified in the startup parameter. The ITASK adds 4 seconds to make sure that this application program's APPC call will be expired when the next check occurs. The minimum wait time for the checking by the detection process is 30 seconds. If there is no application program waiting to complete an APPC call the wait time is set to the maximum allowed wait time, which is defined as a startup parameter.
+- the ITASK sets itself into a wait (sends itself to sleep).
+- the ITASK gets started by IMS after the wait time expires.
+- the detection process now checks all the active application programs. If an application program is waiting for a response, the ITASK will calculate the wait time and compare it with the maximum wait time allowed, which is a startup parameter. If the specified time is exceeded, a warning message will be issued to make an operator aware of a possible hang situation. After checking all the application programs, the ITASK recalculates the ITASK wait time and waits.
+- a time-stamp is written before the APPC call is issued.
+- the time-stamp is cleared after APPC response comes back.
+- the time-out detection only works for implicit APPC transactions.
+- a step 40 indicated as IMS startup is taken. This step causes startup parameters to be read.
+- a particular parameter that indicates the maximum allowed program (T max ) wait time is read.
+- the ITASK is created, and knows the maximum allowed program wait time.
+- IMS connects to APPC/IMS.
+- ITASK is initialized.
+- the ITASK calculates the ITASK wait time (I wait ). This may be accomplished in a number of ways.
+- the very first wait time may be arbitrarily set, in a startup parameter, at 30 seconds. After the first wait time, the next wait time may be determined in a manner to be discussed below with respect to step 800 .
+- Step 400 represents a wait state of the ITASK; processing continues to step 500 only after the wait time calculated in step 300 passes.
+- the ITASK becomes active (step 500 ) and checks each active application program as shown in steps 600 and 700 .
+- Steps 600 and 700 represent an iteration in which all active programs are checked. Once all active programs are checked, processing continues to step 800 .
+- the set of active programs may be understood to be n in number, and a given one of the active programs may be represented as p i .
+- step 610 it is determined whether the active program is awaiting a response. If no response is being awaited, then there is no possibility that the transaction of the active program is hung, and so the scrutiny of the active program is ended with processing passing to step 650 .
+- step 620 the amount of time the program has been waiting for a response is determined. This amount of time is the program wait time, which is not the same as the ITASK wait time computed in step 300 .
+- the program wait time relies on a time-stamp written by the active program before an APPC call is issued. This time-stamp is compared with the current time to determine the complete program wait time. This time-stamp is automatically cleared after the APPC response comes back.
+- the time stamp of a given program may be said to correspond to the start time of the transaction for which the program is in a wait state. Of course, the time stamp may not reflect the precise start time, but it is taken so close to the start time of the transaction that any difference between the start time as time-stamped and the exact transaction start time is de minimis.
+- the program wait time is compared with the maximum allowed program wait time in step 630 . It will be recalled that the maximum allowed program wait time was discussed with reference to step 50 , above.
+- the program wait time i.e., the length of time that the program has been waiting a response from an APPC call
+- the maximum allowed program wait time exceeds the maximum allowed program wait time, it is assumed that the transaction is hung, and processing continues to step 640 , in which the operator is apprised of the hang.
+- processing goes from step 630 to 650 .
+- Step 640 may be understood to be a step of taking a remedial measure.
+- a warning to the operator is thus a remedial measure.
+- Other remedial measures are possible, such as deleting the transaction hung or the like.
+- Step 650 control is returned to the processing shown in FIG. 2, step 700 .
+- Step 800 relates to the time until expiration for the active programs. It will be understood that, for a set of I given active programs, each may be represented as p i , and the time until expiration for each may be represented by:
+- T e i T max ⁇ ( T current ⁇ T stamp i )
+- T e i is the time until expiration for p i ;
+- T max is the maximum allowed program wait time
+- T current is the current time
+- T stamp i is the time stamp for p i .
+- the shortest time until expiration T e min may be given by:
+- T e min min[ T e 1 . . . T e n ]
+- the ITASK wait time may be set to an arbitrary amount. Once each of the active programs has been scrutinized for hanging, however, it is more useful to dynamically set the ITASK wait time based on the prevailing conditions.
+- the ITASK wait time I wait is usually set to T e min +4 seconds. This 4 seconds may be thought of as a predetermined offset interval, and may be changed depending on the nature of the transactions typical of the computing environment.
+- a minimum ITASK wait interval may be specified.
+- the minimum ITASK wait interval I wait min is is set to 30 seconds.
+- I wait will be the greater of I wait min and T e min +four seconds, or:
+- I wait max[( I wait min ),( T e min +4)]
+- the I wait min of 30 seconds, and the 4 seconds added to T e min also are representative only, and may be varied without departing from the spirit of the invention. Likewise, other ways of determining I wait are possible and will present themselves to one familiar with this field.
+- the disclosed embodiment is advantageous in that the T e min is determined dynamically.
+- the software that enables the computer system to perform the above-identified approach and operations of the invention is supplied on any one of a variety of media.
+- the actual implementation of the approach and operations of the invention are actually statements written in a programming language. Such programming language statements, when executed by a computer, cause the computer to act in accordance with the particular content of the statements.
+- the software that enables a computer system to act in accordance with the invention may be provided in any number of forms including, but not limited to, original source code, assembly code, object code, machine language, compressed or encrypted versions of the foregoing, and any and all equivalents.
+- media may include a diskette, a tape, a compact disc, an integrated circuit, a cartridge, a remote transmission via a communications circuit, or any other similar medium useable by computers.
+- the supplier might provide a diskette or might transmit the software in some form via satellite transmission, via a direct telephone link, or via the Internet.
+- the enabling software might be “written on” a diskette, “stored in” an integrated circuit, or “carried over” a communications circuit, it will be appreciated that, for the purposes of this application, the computer usable medium will be referred to as “bearing” the software, or the software will be referred to as being “on” the medium. Thus, the term “bearing” is intended to encompass the above and all equivalent ways in which software is associated with a computer usable medium.
+- program product is thus used to refer to a computer useable medium, as defined above, which bears in any form of software to enable a computer system to operate according to the above-identified invention.
+- the invention is also embodied in a program product bearing software which enables a computer to perform hung transaction detection according to the invention.
+- the computer hardware upon which the invention is effected contains one or more processors, operating together or substantially independently, and includes memory for storing the instructions and calculations necessary to perform the invention.
+Abstract
+Description
+Claims (12)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/267,356 US6571270B1 (en) | 1999-03-15 | 1999-03-15 | Timeout detection facility |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/267,356 US6571270B1 (en) | 1999-03-15 | 1999-03-15 | Timeout detection facility |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US6571270B1 true US6571270B1 (en) | 2003-05-27 |
+Family
+ID=23018452
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/267,356 Expired - Lifetime US6571270B1 (en) | 1999-03-15 | 1999-03-15 | Timeout detection facility |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US6571270B1 (en) |
+Cited By (15)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020062356A1 (en) * | 2000-11-18 | 2002-05-23 | International Business Machines Corporation | Method and apparatus for communication of message data |
+US20020199023A1 (en) * | 2001-06-02 | 2002-12-26 | Ravi Chandra | Method and apparatus for process sync restart |
+US20040039777A1 (en) * | 2002-08-26 | 2004-02-26 | International Business Machines Corporation | System and method for processing transactions in a multisystem database environment |
+US7089324B1 (en) * | 2001-06-14 | 2006-08-08 | Gateway Inc. | Dynamic internet gateway service |
+US20060277447A1 (en) * | 2005-06-01 | 2006-12-07 | Freescale Semiconductor, Inc. | Method of monitoring timeout conditions and device therefor |
+US20070094651A1 (en) * | 2005-10-20 | 2007-04-26 | Microsoft Corporation | Load balancing |
+US20070226269A1 (en) * | 2006-03-24 | 2007-09-27 | International Business Machines Corporation | Method and system for an update synchronization of a domain information file |
+US20080168300A1 (en) * | 2007-01-10 | 2008-07-10 | International Business Machines Corporation | Methods, systems, and computer products for detection of and policy directed resolution of signaling sympathy sickness in a multisystem cluster |
+US20090296711A1 (en) * | 2008-05-30 | 2009-12-03 | International Business Machines Corporation | Affinity-based transaction processing |
+US8255747B1 (en) | 2004-11-30 | 2012-08-28 | Centurylink Intellectual Property Llc | System and method for providing resolutions for abnormally ended jobs on a mainframe computer system |
+US20130198722A1 (en) * | 2012-01-31 | 2013-08-01 | International Business Machines Corporation | Managing transactions within a middleware container |
+US8548955B1 (en) * | 2004-11-30 | 2013-10-01 | Centurylink Intellectual Property Llc | System and method for automating disaster recovery of a mainframe computing system |
+US8595564B2 (en) | 2010-10-14 | 2013-11-26 | International Business Machines Corporation | Artifact-based software failure detection |
+CN108829497A (en) * | 2018-05-31 | 2018-11-16 | 阿里巴巴集团控股有限公司 | The bearing calibration of affairs causal ordering and device, electronic equipment |
+US20230082068A1 (en) * | 2021-09-13 | 2023-03-16 | Capital One Services, Llc | Preventing duplicative file processing |
+Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5095421A (en) * | 1989-08-17 | 1992-03-10 | International Business Machines Corporation | Transaction processing facility within an operating system environment |
+US5835766A (en) * | 1994-11-04 | 1998-11-10 | Fujitsu Limited | System for detecting global deadlocks using wait-for graphs and identifiers of transactions related to the deadlocks in a distributed transaction processing system and a method of use therefore |
+US5845117A (en) * | 1993-03-19 | 1998-12-01 | Fujitsu Limited | Deadlock detecting device |
+US6041425A (en) * | 1996-09-03 | 2000-03-21 | Hitachi, Ltd. | Error recovery method and apparatus in a computer system |
+US6223200B1 (en) * | 1989-12-22 | 2001-04-24 | International Business Machines Corporation | System and method for reducing research time through a lock wait matrix |
+US6226377B1 (en) * | 1998-03-06 | 2001-05-01 | Avaya Technology Corp. | Prioritized transaction server allocation |
+US6374282B1 (en) * | 1998-08-28 | 2002-04-16 | Compaq Computer Corporation | Method and apparatus for tracking multi-threaded system area network (SAN) traffic |
+-
+1999
+- 1999-03-15 US US09/267,356 patent/US6571270B1/en not_active Expired - Lifetime
+Patent Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5095421A (en) * | 1989-08-17 | 1992-03-10 | International Business Machines Corporation | Transaction processing facility within an operating system environment |
+US6223200B1 (en) * | 1989-12-22 | 2001-04-24 | International Business Machines Corporation | System and method for reducing research time through a lock wait matrix |
+US5845117A (en) * | 1993-03-19 | 1998-12-01 | Fujitsu Limited | Deadlock detecting device |
+US5835766A (en) * | 1994-11-04 | 1998-11-10 | Fujitsu Limited | System for detecting global deadlocks using wait-for graphs and identifiers of transactions related to the deadlocks in a distributed transaction processing system and a method of use therefore |
+US6041425A (en) * | 1996-09-03 | 2000-03-21 | Hitachi, Ltd. | Error recovery method and apparatus in a computer system |
+US6226377B1 (en) * | 1998-03-06 | 2001-05-01 | Avaya Technology Corp. | Prioritized transaction server allocation |
+US6374282B1 (en) * | 1998-08-28 | 2002-04-16 | Compaq Computer Corporation | Method and apparatus for tracking multi-threaded system area network (SAN) traffic |
+Non-Patent Citations (2)
+Title |
+---|
+(No author given) "Concurrency Control Service Proposal" OMG TC Document 93.11.8, Transarc Corporation, pp. 11, 24, 35, published 1993.* * |
+Yeung et al. "A New Deadlock Detection Algorighms for Distributed Real-Time Database Systems". IEEE, 1995. * |
+Cited By (31)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20020062356A1 (en) * | 2000-11-18 | 2002-05-23 | International Business Machines Corporation | Method and apparatus for communication of message data |
+US6999997B2 (en) * | 2000-11-18 | 2006-02-14 | International Business Machines Corporation | Method and apparatus for communication of message data using shared queues |
+US20020199023A1 (en) * | 2001-06-02 | 2002-12-26 | Ravi Chandra | Method and apparatus for process sync restart |
+US8423674B2 (en) * | 2001-06-02 | 2013-04-16 | Ericsson Ab | Method and apparatus for process sync restart |
+US7089324B1 (en) * | 2001-06-14 | 2006-08-08 | Gateway Inc. | Dynamic internet gateway service |
+US7814176B2 (en) * | 2002-08-26 | 2010-10-12 | International Business Machines Corporation | System and method for processing transactions in a multisystem database environment |
+US7406511B2 (en) * | 2002-08-26 | 2008-07-29 | International Business Machines Corporation | System and method for processing transactions in a multisystem database environment |
+US20080228872A1 (en) * | 2002-08-26 | 2008-09-18 | Steven Michael Bock | System and method for processing transactions in a multisystem database environment |
+US20040039777A1 (en) * | 2002-08-26 | 2004-02-26 | International Business Machines Corporation | System and method for processing transactions in a multisystem database environment |
+US8548955B1 (en) * | 2004-11-30 | 2013-10-01 | Centurylink Intellectual Property Llc | System and method for automating disaster recovery of a mainframe computing system |
+US8255747B1 (en) | 2004-11-30 | 2012-08-28 | Centurylink Intellectual Property Llc | System and method for providing resolutions for abnormally ended jobs on a mainframe computer system |
+US20060277447A1 (en) * | 2005-06-01 | 2006-12-07 | Freescale Semiconductor, Inc. | Method of monitoring timeout conditions and device therefor |
+US7480837B2 (en) | 2005-06-01 | 2009-01-20 | Freescale Semiconductor, Inc. | Method of monitoring timeout conditions and device therefor |
+US20070094651A1 (en) * | 2005-10-20 | 2007-04-26 | Microsoft Corporation | Load balancing |
+US10334031B2 (en) | 2005-10-20 | 2019-06-25 | Microsoft Technology Licensing, Llc | Load balancing based on impending garbage collection in execution environment |
+US8234378B2 (en) | 2005-10-20 | 2012-07-31 | Microsoft Corporation | Load balancing in a managed execution environment |
+CN101043419B (en) * | 2006-03-24 | 2010-08-11 | 国际商业机器公司 | Method for an update synchronization of a domain information file and a requester data processing node |
+US7870226B2 (en) * | 2006-03-24 | 2011-01-11 | International Business Machines Corporation | Method and system for an update synchronization of a domain information file |
+US20070226269A1 (en) * | 2006-03-24 | 2007-09-27 | International Business Machines Corporation | Method and system for an update synchronization of a domain information file |
+US8006122B2 (en) * | 2007-01-10 | 2011-08-23 | International Business Machines Corporation | Methods, systems, and computer products for detection of and policy directed resolution of signaling sympathy sickness in a multisystem cluster |
+US20080168300A1 (en) * | 2007-01-10 | 2008-07-10 | International Business Machines Corporation | Methods, systems, and computer products for detection of and policy directed resolution of signaling sympathy sickness in a multisystem cluster |
+US20090296711A1 (en) * | 2008-05-30 | 2009-12-03 | International Business Machines Corporation | Affinity-based transaction processing |
+US8285872B2 (en) | 2008-05-30 | 2012-10-09 | International Business Machines Corporation | Affinity-based transaction processing |
+US8131872B2 (en) | 2008-05-30 | 2012-03-06 | International Business Machines Corporation | Affinity-based transaction processing |
+US8595564B2 (en) | 2010-10-14 | 2013-11-26 | International Business Machines Corporation | Artifact-based software failure detection |
+US8595556B2 (en) | 2010-10-14 | 2013-11-26 | International Business Machines Corporation | Soft failure detection |
+US20130198722A1 (en) * | 2012-01-31 | 2013-08-01 | International Business Machines Corporation | Managing transactions within a middleware container |
+US8898641B2 (en) * | 2012-01-31 | 2014-11-25 | International Business Machines Corporation | Managing transactions within a middleware container |
+CN108829497A (en) * | 2018-05-31 | 2018-11-16 | 阿里巴巴集团控股有限公司 | The bearing calibration of affairs causal ordering and device, electronic equipment |
+US20230082068A1 (en) * | 2021-09-13 | 2023-03-16 | Capital One Services, Llc | Preventing duplicative file processing |
+US11924271B2 (en) * | 2021-09-13 | 2024-03-05 | Capital One Services, Llc | Preventing duplicative file processing |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6571270B1 (en) | Timeout detection facility | |
+US5095421A (en) | Transaction processing facility within an operating system environment | |
+US5923833A (en) | Restart and recovery of OMG-compliant transaction systems | |
+EP0783150B1 (en) | System, method, storage medium and computer-readable modules for space efficient object locking | |
+US6157927A (en) | Methods and apparatus for enabling a component in a first transaction processing environment to access a resource in another environment that is under the control of an Xatmi complaint transaction manager | |
+US6988099B2 (en) | Systems and methods for maintaining transactional persistence | |
+US5561797A (en) | Method for synchronizing transaction processing in a distributed heterogeneous system | |
+EP1099164B1 (en) | Method and program for processing administrative requests of a distributed network application executing in a clustered computing environment | |
+US7349970B2 (en) | Workload management of stateful program entities | |
+EP1015983B1 (en) | Data sharing method and computer architecture | |
+US6665814B2 (en) | Method and apparatus for providing serialization support for a computer system | |
+US5835764A (en) | Transaction processing system and method having a transactional subsystem integrated within a reduced kernel operating system | |
+US6745350B1 (en) | Automated failure recovery service | |
+US20040158549A1 (en) | Method and apparatus for online transaction processing | |
+US6061708A (en) | System and method for supporting mixed-phase transactions in an object-oriented environment | |
+WO1993018454A1 (en) | Distributed transaction processing system | |
+GB2506930A (en) | Improved request-response operation for asynchronous messaging | |
+Son et al. | Performance evaluation of real-time locking protocols using a distributed software prototyping environment | |
+Peddi et al. | A replication strategy for distributed real-time object-oriented databases | |
+CN110737510A (en) | Block device management system | |
+US7346910B1 (en) | Administration of groups of computer programs, data processing systems, or system resources | |
+Blackman | IMS celebrates thirty years as an IBM product | |
+EP0817019B1 (en) | Method of stratified transaction processing | |
+US20240126742A1 (en) | Transaction manager library for automatic enlisting of distributed xa participants | |
+Maslak et al. | Coordinated resource recovery in VM/ESA |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: INTERNATIONAL BUSINESS MACHINES CORPORATION, CALIFFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:LAI, ROBERT S.;SCHNEIDER, RICHARD;REEL/FRAME:009830/0234Effective date: 19990309 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+REMI | Maintenance fee reminder mailed | ||
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+SULP | Surcharge for late payment |
+Year of fee payment: 7 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:INTERNATIONAL BUSINESS MACHINES CORPORATION;REEL/FRAME:026664/0866Effective date: 20110503 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |

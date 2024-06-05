@@ -1,0 +1,891 @@
+US7650331B1 - System and method for efficient large-scale data processing - Google Patents
+System and method for efficient large-scale data processing Download PDFInfo
+- Publication number
+- US7650331B1 US7650331B1 US10/871,244 US87124404A US7650331B1 US 7650331 B1 US7650331 B1 US 7650331B1 US 87124404 A US87124404 A US 87124404A US 7650331 B1 US7650331 B1 US 7650331B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- map
+- distinct
+- tasks
+- reduce
+- application
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/50—Allocation of resources, e.g. of the central processing unit [CPU]
+- G06F9/5061—Partitioning or combining of resources
+- G06F9/5066—Algorithms for mapping a plurality of inter-dependent sub-tasks onto a plurality of physical CPUs
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/54—Interprogram communication
+- G06F9/544—Buffers; Shared memory; Pipes
+Definitions
+- the disclosed embodiments relate generally to data processing systems and methods, and in particular to a framework for simplifying large-scale data processing.
+- Large-scale data processing involves extracting data of interest from raw data in one or more datasets and processing it into a useful data product.
+- the implementation of large-scale data processing in a parallel and distributed processing environment typically includes the distribution of data and computations among multiple disks and processors to make efficient use of aggregate storage space and computing power.
+- a system and method for large-scale data processing includes operations for automatically handling programming details associated with parallelization, distribution, and fault-recovery.
+- application programmers can process large amounts of data by specifying map and reduce operations.
+- the map operations retrieve data (e.g., key/value pairs) from input data files and produce intermediate data values in accordance with the mapping operations.
+- the reduce operations merge or otherwise combine the intermediate data values in accordance with the reduce operations (e.g., combining intermediate values that share the same key).
+- the system and methods use a master process to manage tasks and one or more local databases to reduce network traffic and file system (FS) reads.
+- FS file system
+- a system for large-scale processing of data in a parallel processing environment includes one or more map modules configured to read input data and to apply at least one application-specific map operation to the input data to produce intermediate data values.
+- An intermediate data structure stores the intermediate data values.
+- the system also includes reduce modules, which are configured to retrieve the intermediate data values from the intermediate data structure and to apply at least one user-specified reduce operation to the intermediate data values to provide output data.
+- the map and/or reduce operations are automatically parallelized across multiple processors in the parallel processing environment.
+- the programs or instructions for handling parallelization of the map and reduce operation are application independent.
+- the input data and the intermediate data values can include key/value pairs and the reduce operation can include combining intermediate data values having the same key.
+- the intermediate data structure can include one or more intermediate data files coupled to each map module for storing intermediate data values.
+- the map and reduce operations can be implemented on different processors coupled to a distributed network.
+- the output data can be written to a file system, which is accessible via the distributed network.
+- a system for large-scale processing of data in a parallel processing environment includes a set of interconnected computing systems. At least one of the computing systems includes a set of application independent map modules configured for reading portions of input files containing data, and for applying at least one application-specific map operation to the data to produce intermediate key-value pairs.
+- the system also includes a set of application independent reduce modules, which are configured to apply at least one application-specific reduce operation to the intermediate key-value pairs so as to combine intermediate values sharing the same key.
+- the application independent map modules and application independent reduce modules are both incorporated into a same process, sometimes called a worker process.
+- FIG. 1 is a block diagram of a large-scale data processing model.
+- FIG. 2 is a block diagram of a large-scale data processing system.
+- FIG. 3 is a block diagram of a large-scale data processing system, including a master process for managing tasks.
+- FIG. 4 is a block diagram of a computer system for the data processing systems shown in FIGS. 2 and 3 .
+- FIG. 5 is a block diagram of a data distribution network for large-scale data processing.
+- FIG. 6 is a flow diagram of an embodiment of a process for assigning tasks to processes.
+- FIG. 7A is a block diagram of an exemplary task status table.
+- FIG. 7B is a block diagram of an exemplary process status table.
+- FIG. 1 is a block diagram of a large-scale data processing model 100 .
+- the model 100 generally includes mapping operations 102 and reduction operations 104 .
+- the mapping operations 102 apply one or more mapping operations to a set of input data ⁇ i (e.g., text files, records, logs, sorted maps, etc.) to provide a set of intermediate data values ⁇ i .
+- the reduction operations 104 apply one or more reduction operations to the set of intermediate data values ⁇ i to provide a set of output data ⁇ i (e.g., tables, sorted maps, record I/O, etc.).
+- the mapping operations 102 are implemented by one or more application-specific mapping functions, which map a set of input data ⁇ i to a set of intermediate data values ⁇ i .
+- the intermediate data values ⁇ i are stored in one or more intermediate data structures. Some examples of intermediate data structures include, without limitation, files, buffers, histograms, count tables and any other suitable data structure or device for storing digital information.
+- the intermediate data values ⁇ i are processed by the reduction operations 104 , which are implemented by one or more application-specific reduction functions, which reduce the set of intermediate data values ⁇ i to a set of output data ⁇ i .
+- the embodiments described here can be performed by a set of interconnected processors that are interconnected by one or more communication networks.
+- FIG. 5 is a block diagram of an exemplary distributed data processing system 500 .
+- the system 500 is used to store data, perform computational tasks, and transmit data between datacenters DC 1 -DC 4 .
+- the system may include any number of data centers DCx, and thus the number of data centers shown in FIG. 5 is only exemplary.
+- the system 500 may include dedicated optical links or other dedicated communication channels, as well as supporting hardware such as modems, bridges, routers, switches, wireless antennas and towers, and the like.
+- the network 500 includes one or more wide area networks (WANs) as well as multiple local area networks (LANs).
+- the system 500 utilizes a private network, i.e., the system and its interconnections are designed and operated exclusively for a particular company or customer. Alternatively, a public network may be used.
+- each datacenter includes multiple racks.
+- datacenter 502 (DC 1 ) includes multiple racks 508 a , . . . , 508 n .
+- the racks 508 can include frames or cabinets into which components are mounted.
+- Each rack can include one or more processors (CPUs) 510 .
+- the rack 508 a includes CPUs 510 a , . . . , 510 n (slaves 1 - 16 ) and the nth rack 506 n includes multiple CPUs 510 (CPUs 17 - 31 ).
+- the processors 510 can include data processors, network attached storage devices, and other computer controlled devices. In some embodiments, at least one of processors 510 operates as a master processor, and controls the scheduling and data distribution tasks performed throughout the network 500 . In some embodiments, one or more processors 510 may take on one or more roles, such as a master and/or slave.
+- a rack can include storage (e.g., one or more network attached disks) that is shared by the one or more processors 510 .
+- the processors 510 within each rack 508 are interconnected to one another through a rack switch 506 . Furthermore, all racks 508 within each datacenter 502 are also interconnected via a datacenter switch 504 . As noted above, the present invention can be implemented using other arrangements of multiple interconnected processors.
+- processors shown in FIG. 5 are replaced by a single large-scale multiprocessor.
+- map and reduce operations are automatically assigned to processes running on the processors of the large-scale multiprocessor.
+- FIG. 2 is a block diagram of a large-scale data processing system 200 .
+- the system 200 provides application programmers with an application-independent framework for writing data processing software that can run in parallel across multiple different machines on a distributed network.
+- the system 200 is typically a distributed system having multiple processors, possibly including network attached storage nodes, that are interconnected by one or more communication networks.
+- FIG. 2 provides a logical view of a system 200 , which in some embodiments may be implemented on a system having the physical structure shown in FIG. 5 .
+- the system 200 operates within a single data center of the system 500 shown in FIG. 5 , while in another embodiment, the system 200 operates over two or more data centers of the system 500 .
+- a set of input files 202 are processed by a first set of processes 204 , herein called map processes, to produce a set of intermediate data, represented here by files 206 .
+- the intermediate data 206 is processed by a second set of processes 208 , herein called reduce processes, to produce output data 210 .
+- each “map process” is a process configured (or configurable) to perform map functions and to execute an application-specific map operator.
+- Each “reduce process” is a process configured (or configurable) to perform reduce functions and to execute an application-specific reduce operator.
+- a control or supervisory process, herein called the work queue master 214 controls the set of processing tasks.
+- the work queue master 214 determines how many map tasks to use, how many reduce tasks to use, which processes and processors to use to perform those tasks, where to store the intermediate data and output data, how to respond to any processing failures, and so on.
+- the work queue master 214 assigns tasks to processes, and that multiple processes may be executed by each of the processors in the group of processors that are available to do the work assigned by the work queue master 214 .
+- the set of processes controlled by the work queue master 214 may be a subset of the full set of processes executed by the system, and furthermore the set of processors available to do the work assigned by the work queue master 214 may be fewer than the full set of processors in the system.
+- Some of the resources of the system may be used for other tasks, such as tasks that generate the input data 202 , or that utilize the output data 210 .
+- some or all of the tasks that generate the input data 202 or utilize the output data 210 may also be controlled or supervised by the work queue master 214 .
+- processors can be added or removed from the processing system during the execution of a map-reduce operation.
+- the work queue master 214 keeps track of the processors in the system and the available processes executing on those processors.
+- Application programmers are provided with a restricted set of application-independent operators for reading input data and generating output data.
+- the operators invoke library functions that automatically handle data partitioning, parallelization of computations, fault tolerance (e.g., recovering from process and machine failures) and I/O scheduling.
+- fault tolerance e.g., recovering from process and machine failures
+- I/O scheduling e.g., I/O scheduling.
+- map( ) and reduce( ) two application-specific data processing operators
+- the map( ) operator specifies how input data is to be processed to produce intermediate data and the reduce( ) operator specifies how the intermediate data values are to be merged or otherwise combined.
+- the disclosed embodiments are not limited to any particular type or number of operators.
+- Other types of operators e.g., data filters
+- the application programmers provide a partition operator, in addition to the map( ) and reduce( ) operators.
+- the partition( ) operator specifies how the intermediate data is to be partitioned over a set of intermediate files.
+- a set of input files 202 are split into multiple data blocks 0 , . . . , N- 1 of either a specified or predefined size (e.g., 64 MB). Alternately, in some embodiments the input files 202 have a predefined maximum size (e.g., 1 GB), and the individual files are the data blocks.
+- a data block is a subset of data that is retrieved during processing. In some embodiments, the data blocks are distributed across multiple storage devices (e.g., magnetic or optical disks) in a data distribution network to fully utilize the aggregate storage space and disk bandwidth of the data processing system.
+- the input data files 202 are stored in one or more data centers DC 1 -DC 4 .
+- the work queue master 214 assigns tasks to processors 510 in datacenters where the input files are stored so as to minimize network traffic whenever possible.
+- the work queue master 214 uses input file information received from a file system to determine the appropriate processor or process for executing a task, using a hierarchical decision process. When a process in a processor in a datacenter DC 1 -DC 4 is idle, it requests a task from the work queue master 214 .
+- the work queue master 214 searches the input file information received from the file system (e.g., FS 446 , FIG.
+- the work queue master 214 searches the file information for an unprocessed data block on the same rack 508 as the machine assigned to process the task. If none are available, the work queue master 214 searches the file information for an unprocessed data block in the same datacenter as the machine assigned to process the task. If none are available, the work queue master 214 will search for unprocessed blocks in other datacenters.
+- map( ) and/or reduce( ) operators which are computer programs that process input data and intermediate, respectively.
+- these operators are compiled into binary files 212 suitable for use on a particular processing platform.
+- the binary files 202 are loaded into a work queue master module 214 , which manages jobs submitted by users of the system 200 .
+- the work queue master 214 loads (or causes to be loaded) onto each process to which it allocates a map or reduce task, the library procedures, and the map( ) or reduce( ) operator required to perform the task assigned to the process.
+- the work queue master 214 when it receives a request to process a set of data using a specified set application-specific map( ), reduce( ) and, optionally, partition( ) operators, determines the number of map tasks and reduce tasks to be performed to process the input data. This may be based on the amount of input data to be processed. For example, a job may include 10,000 map tasks and 10 reduce tasks.
+- the work queue master module generates a task status table having entries representing all the tasks to be performed, and then begins assigning those tasks to idle processes. As noted above, tasks may be allocated to idle processes based on a resource allocation scheme (e.g., priority, round-robin, weighted round-robin, etc.).
+- FIG. 6 is a flow diagram of an embodiment of a process 600 for assigning tasks to processes.
+- Process 600 parallelizes a data processing task over as many processes as is consistent with the available computing resources. While the process 600 described below includes a number of steps that appear to occur in a specific order, it should be apparent that the process 600 steps are not limited to any particular order, and, moreover, the process 600 can include more or fewer steps, which can be executed serially or in parallel (e.g., using parallel processors or a multi-threading environment). Further, it should noted that the steps or acts in process 600 are application-independent and are implemented using modules or instructions that are application-independent.
+- the process 600 begins by determining if there are tasks waiting to be assigned to a process (step 606 ). If there are no tasks waiting, then the process 600 waits for all the tasks to complete (step 604 ). If there are tasks waiting, then the process 600 determines if there are any idle processes (step 608 ). If there are idle processes, then the process 600 assigns a waiting task to an idle process (step 610 ) and returns to step 606 . If there are no idle processes, the process 600 waits for an idle process (step 614 ). Whenever a process completes a task, the process sends a corresponding message to the work queue master 214 , which updates the process and task status tables (step 612 ).
+- the work queue master 214 may then assign a new task to the idle process, if it has any unassigned tasks waiting for processing resources. For reduce tasks, the work queue master 214 may defer assigning any particular reduce task to an idle process until such time that the intermediate data to be processed by the reduce task has, in fact, been generated by the map tasks. Some reduce tasks may be started long before the last of the map tasks are started if the intermediate data to be processed by those reduce tasks is ready for reduce processing.
+- the work queue master 214 determines what task was running in the failed process, if any, (B) assigns that task to a new process, waiting if necessary until an idle process becomes available, and (C) updates its process and task status tables accordingly.
+- the work queue master 214 may undertake remedial measures (step 602 ), such as causing the failed process to be restarted or replaced by a new process.
+- the work queue master may further detect when such remedial measures fail and then update its process status table to indicate such failures.
+- FIG. 7A shows an exemplary task status table for keeping track of the status of map and reduce tasks.
+- each task e.g., map, reduce
+- the input files field may specify a portion of an input file (e.g., where the portion comprises a data block) to be processed by the task, or this field may specify portions of two of more input files.
+- the status field indicates the current status of the task (e.g., waiting, in-progress, completed, or failed), which is being performed by the assigned process identified in the process field.
+- the process retrieves data from one or more input files (or the one or more input file portions) identified in the input file field and writes the results of the task ID to one or more output files identified in the output file field.
+- task Red 0000 is assigned to process P 0033 , which is still in progress.
+- the process P 0033 retrieves data blocks from input file 12340 (e.g., intermediate file A, FIG. 2 ) and writes the results of the task to output file 14000 .
+- the process field in the task status table indicates that no process has yet been assigned to perform that task. It should be apparent that there could be more or fewer fields in the task status table than shown in FIG. 7A , such as multiple fields for identifying output and input files.
+- FIG. 7B shows a process status table for keeping track of the status of all the processes to which the work queue master 214 can assign tasks.
+- each process is assigned to a task and a location.
+- each process is permanently assigned to a particular location (i.e., a particular processor).
+- the status field indicates the current status of the process, which performs the assigned task at the assigned location.
+- process P 0010 is “Busy” performing task Map 0103 on location CPU 011 . It should be apparent that there could be more or fewer field in the process status table than shown in FIG. 7B , such as assigning multiple locations assigned to a single task (e.g., parallel processing).
+- the set of application-specific data processing operations that the map( ) operator can perform is constrained.
+- the map( ) operator may be required to process the input data one record at a time, proceeding monotonically from the first record to the last record in the data block being processed.
+- the map( ) operator may be required to generate its output data in the form of key/value pairs. Either the key or value or both can comprise structured data, as long as the data can be encoded into a string.
+- the key may have multiple parts, or the value may have multiple parts.
+- the resulting intermediate data can be mapped to a set of intermediate data files in accordance with a partition( ) operator.
+- An exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the first byte of the key.
+- Another exemplary partition( ) operator may specify that all intermediate data is to be directed to an intermediate file corresponding to the value of the function “hash(Key) modulo N”, where N is a value specified by the application programmer and “hash(Key)” represents the value produced by applying a hash function to the key of the key/value pairs in the intermediate data.
+- the partition operator is always a modulo function and the application programmer only specifies the modulus to be used by the modulo function. In one embodiment, the partition operator is automatically selected by the work queue master 214 , or by one of the application-independent library functions, discussed below.
+- the data blocks 0 , . . . , N- 1 are automatically assigned to map tasks (executed by map processes 204 - 0 , . . . , 204 -N- 1 ) in an application independent manner, by the work queue master 214 .
+- the work queue master 214 is configured to determine the number of data blocks to be processed, and to create a corresponding number of instances of the map process 204 . Stated in another way, the work queue master 214 assigns a corresponding number of map tasks to processes, as suitable processes become available.
+- the work queue master 214 Since the number of map tasks may exceed the number of processes available to the work queue master 214 , the work queue master 214 will assign as many map tasks as it can to available processes, and will continue to assign the remaining map tasks to processes as the processes complete previously assigned tasks and become available to take on new tasks.
+- the work queue master 214 uses the task status table and process status tables, described above, to coordinate its efforts.
+- Application independent reduce modules 208 read intermediate data values (e.g., key/value pairs) from the intermediate files 206 .
+- each reduce module 208 reads from only one intermediate file 206 .
+- the reduce modules 208 sort the intermediate data values, merge or otherwise combine sorted intermediate data values having the same key and then write the key and combined values to one or more output files 210 .
+- the intermediate file 206 and the output files 210 are stored in a File System (FS), which is accessible to other systems via a distributed network.
+- FS File System
+- the map and reduce modules 204 and 208 are implemented as user-defined objects with methods to carry out application-specific processing on data using known object oriented programming techniques.
+- a MapReduction base class can be created that includes methods and data for counting the number of input files that contain a particular term or pattern of terms, sorting the results of the sort, eliminating duplicates in the sorted results and counting the number of occurrences of the term.
+- Application programmers can derive other classes from the base class and instantiate the base class as an object in the application code to access its data and methods.
+- the performance of the system 200 may diminish as the amount of data to be processed and thus the number of tasks increases. For instance, performance may be diminished when the size of the data blocks is decreased, thereby increasing the number of map tasks.
+- the intermediate files 206 are stored in the FS, an increase in tasks results in an increase in intermediate file access requests and an associated increase in network traffic.
+- a single work queue master 214 can only handle a limited number of task assignments per time period, beyond which the work queue master 214 begins to limit system performance. Increasing the size of those tasks to accommodate additional jobs could result in load imbalances in the system 200 .
+- FIG. 3 is a block diagram of a large-scale data processing system 300 , including a master process 320 (sometimes called a supervisory process) for managing tasks.
+- a master process 320 (sometimes called a supervisory process) for managing tasks.
+- one or more master processes 320 assign one or more tasks to one or more worker processes 304 and 308 .
+- the master process 320 is a task itself (e.g., task 0 ) initiated by the work queue master module 314 and is responsible for assigning all other tasks (e.g., mapping and reducing tasks) to the worker processes 304 , 308 , in a master/slave type relationship.
+- the worker processes 304 , 308 include two or more process threads, each of which can be invoked based on the particular task assigned to it by the master process 320 .
+- each worker process 304 invokes a map thread to handle an assigned map task and invokes a reduce thread to handle an assigned reduce task.
+- the worker processes 304 , 308 include one or more additional threads.
+- a distinct thread may be used to receive remote procedure calls (e.g., from the master process) and to coordinate work done by the other threads.
+- a distinct thread may be used to handle remote read requests received from other processors (i.e., peers) in the system.
+- the number of worker processes is equal to the number of machines available in the system 300 (i.e., one worker process per machine). In another embodiment, two or more worker processes are used in each of the machines in the system 300 . If a worker process fails, its task is reassigned to another worker process by the master process 320 . In some embodiments, the master process 320 or the work queue master 314 may undertake remedial measures to repair, restart or replace a failed worker process.
+- the work queue master 314 when the work queue master 314 receives a map/reduce data processing job, the work queue master 314 allocates the job to a master process 320 .
+- the master process 320 determines the number (M) of map tasks and the number (R) of reduce tasks to be performed, and then makes a request to the work queue master 314 for M+R processes (M+R+1, including the master process 320 ) to be allocated to the map/reduce data processing job.
+- the work queue master 314 responds by assigning a number of processes to the job, and sends that information to the master process 320 , which will then manage the performance of the data processing job. If the number of processes requested exceeds the number of processes available, or otherwise exceeds the number of processes that the work queue master 314 is allowed to assign to the job, the number of processes assigned to the job will be less than the number requested.
+- all R of the reduce tasks are all immediately assigned to processes, but the reduce tasks do not begin work (e.g., on data sorting) until the master process 320 informs them that there are intermediate files ready for processing.
+- a single worker process 304 / 308 can be assigned both a map task and a reduce task, simultaneously (with each being executed by a distinct process thread), and therefore assigning reduce tasks to processes at the beginning of the job does not reduce the throughput of the system.
+- the division of input files 302 into data blocks 0 , . . . , N- 1 may be handled automatically by the application independent code. Alternately, the user may set an optional flag, or specify a parameter, so as to control the size of the data blocks into which the input files are divided. Furthermore, the input data may come from sources other than files, such as a database or in-memory data structures.
+- the input data blocks 0 , . . . , N- 1 which may in some embodiments be treated as key/value pairs, are read by application independent worker processes 304 - 0 , . . . , 304 -N- 1 , as shown in FIG. 3 .
+- the input files 302 can include a variety of data types typically used in data processing systems, including without limitation text files, record I/O, sorted data structures (such as B-trees), tables and the like.
+- Each of the worker processes 304 to which a map task has been assigned applies the application-specific map( ) operator to the respective input data block so as generate intermediate data values.
+- the intermediate data values are collected and written to one or more intermediate files 306 , which are stored locally at the machine (e.g., in one or more local databases) in which the worker process 304 is executed.
+- the intermediate files 306 are retained (i.e., they are persistent) until the reduce phase completes.
+- each of the intermediate files 306 receives output from only one worker process 304 , as shown in FIG. 3 .
+- a worker process 304 completes its assigned task, it informs the master process 320 of the task status (e.g., complete or error). If the task was successfully completed, the worker process's status report is treated by the master process 320 as a request for another task.
+- the system need not write any data to files on local disks. This optimization reduces execution time for map-reduce operations in which the number of worker processes is sufficient to handle all the map tasks at once, and the amount of intermediate data is sufficiently small to be kept in memory.
+- the application-specific Reduce function is both commutative and associative.
+- a special optimization can be used to significantly reduce execution time of the map-reduce task.
+- An example of a situation in which the optimization can be applied is a map-reduce operation for counting the number of occurrences of each distinct word in a large collection of documents.
+- the application-specific map function (sometimes called the map( ) operator elsewhere in this document) outputs a key/value pair for every word w in every document in the collection, where the key/value pair is ⁇ w, 1>.
+- the application-specific reduce function (sometimes called the reduce( ) operator elsewhere in this document) for this example is:
+- Each map task in this example will produce hundreds or thousands of records of the form ⁇ word, 1>.
+- the Reduce function simply adds up the count values.
+- the user may provide an application-specific Combiner function or operator.
+- the Combiner function is invoked with each unique intermediate key and a partial set of intermediate values for the key. This is similar to the Reduce function, except that it gets executed at the end of each Map task by the same machine and process that performed by Map task.
+- the Combiner function partially summarizes the intermediate key/value pairs. In fact, when using a Combiner function, the same function is typically specified for the Combiner and Reduce operations.
+- the partial combining performed by the Combiner operation significantly speeds up certain classes of Map-Reduce operations, in part by significantly reducing the amount of information that must be conveyed from the processors that handle Map tasks to processors handling Reduce tasks, and in part by reducing the complexity and computation time required by the data sorting and Reduce function performed by the Reduce tasks.
+- Application independent worker processes 308 which have been assigned reduce tasks read data from the locally stored intermediate files 306 .
+- the master process 320 informs the worker processes 308 where to find intermediate data files 306 and schedules read requests for retrieving intermediate data values from the intermediate data files 306 .
+- each of the worker processes 308 reads a corresponding one of the intermediate files 306 produced by all or a subset of the worker processes 304 . For example, consider a system in which each of the worker processes 304 assigned a map task outputs M (e.g., 100 ) intermediate files, which we will call Partion- 1 ,j through Partition-M,j, where j is an index identifying the map task that produced the intermediate files.
+- M e.g. 100
+- the system will have 100 worker processes 308 , Worker- 1 to Worker-M, each of which reads a corresponding subset of the intermediate files, Partition-p,j for all valid values of “j,” produced by the worker processes 304 , where “p” indicates the partition assigned to a particular worker process Worker-P ( 304 ) and “j” is an index identifying the map tasks that produced the intermediate files.
+- Each worker process 308 sorts the intermediate data values in the subset of the intermediate files read by that worker process in accordance with the key of the key/value pairs in the intermediate data.
+- the sorting of the key/value pairs is an application independent function of the reduce threads in the worker processes 308 .
+- Each worker process 308 also merges or otherwise combines the sorted intermediate data values having the same key, and writes the key and combined values to one or more output files 310 .
+- the merging or other combining operation performed on the sorted intermediate data is performed by an application-specific reduce( ) operator.
+- the output files 310 are stored in a File System, which is accessible to other systems via a distributed network.
+- a worker process 308 When a worker process 308 completes its assigned reduce task, it informs the master process 320 of the task status (e.g., complete or error). If the reduce task was completed successfully, the worker process's status report is treated by the master process 320 as a request for another task. If the reduce task failed, the master process 320 reassigns the reduce task to another worker process 308 .
+- the task status e.g., complete or error
+- the master process 320 is configured to detect task and processor failures. When a task failure is detected, the master process 320 reassigns the task to another process. In some embodiments, the master process 320 redistributes the work of the failed task over a larger number of tasks so as to complete that task more quickly than by simply re-executing the task on another process. The master process subdivides the work assigned to the failed task to a plurality of newly mini-tasks, and then resumes normal operation by assigning the mini-tasks to available processes. The number of mini-tasks may be a predefined number, such as a number between 8 and 32, or it may be dynamically determined based on the number of idle processes available to the master process.
+- division of the work assigned to the failed task means assigning smaller data blocks to the mini-tasks.
+- division of the work assigned to the failed task may mean assigning the data sorting portion of the reduce task to a larger number of worker processes, thereby performing a distributed sort and merge.
+- the resulting sorted data may, in some embodiments, be divided into a number of files or portions, each of which is then processed using the reduce( ) operator to produce output data.
+- the master process 320 determines all the tasks that ran on the processor, and also determines which of those tasks need to be re-executed (e.g., because the results of the tasks are unavailable and are still needed). The master process 320 then updates its status tables to indicate that these identified tasks are waiting for assignment to worker tasks. Thereafter, re-execution of the identified tasks is automatically handled using the processes and mechanisms described elsewhere in this document.
+- an additional mechanism herein called backup tasks, is used to guard against task failures as well as task slow downs.
+- backup tasks One of the main problems that lengthens the total time taken for a map-reduce operation to complete is the occurrence of “straggler” tasks or machines.
+- a straggler is a process or machine that takes an unusually long time to complete one of the last few map or reduce tasks in the computation. Stragglers can arise for many reasons, including both hardware and software errors or conditions. When a large map-reduce operation is divided into thousands of map and reduce tasks executed by thousands of processes, the risk of a straggler task occurring is significant.
+- the master process determines when the map-reduce operation is close to completion.
+- the criteria for being close to completion is that the percentage of map tasks that have completed is above a threshold.
+- the criteria for being close to completion is that the percentage of map and reduce tasks, taken together, that have completed is above a threshold.
+- the threshold can be any reasonably number, such as 95, 98, or 99 percent, or any percentage above 90 percent.
+- FIG. 7A shows an exemplary backup task, Map 103 b , in the task status table.
+- Each task is marked as completed when either the primary or backup execution completes.
+- This mechanism obviously increases the computational resources, and thus in some embodiments the criteria for invoking this mechanism are selected so as to increase the computational resources by no more than a few percent (e.g., five percent).
+- the use of backup tasks significantly reduces the time to complete large map-reduce operations, often by more than twenty-five percent.
+- the master process 320 is responsible for assigning tasks to the worker processes 304 and 308 and for tracking their status and output. Periodically, the master process 320 solicits a report from each worker process assigned a task to determine its task status. In some embodiments, the report can be solicited using a polling scheme (e.g., round-robin). If the task status indicates that the worker process has failed, then the task is put back in the appropriate task queue to be reassigned to another worker process. In some embodiments, the master process 320 maintains status tables 326 for managing tasks, as described with respect to FIGS. 7A and 7B .
+- a polling scheme e.g., round-robin
+- a locking mechanism is used to ensure that each of the entries of the status tables is modified by only one of the master processes at any one time.
+- the master process first acquires (or attempts to acquire) a lock on the corresponding status table entry. If the lock is refused, the master process concludes that the map/reduce task is being managed by another master process and therefore the master process looks for another map/reduce task to manage.
+- the task status table is divided into portions, with each master process being given ownership of a corresponding portion of the task status table, and responsibility for managing the map/reduce tasks in that portion of the task status table.
+- Each master process can read other portions of the task status table, but only uses information in entries indicating that the corresponding task has been completed.
+- the system 300 provides several advantages over other systems and methods by using one or more master processes to assign and manage tasks, together with local databases to store intermediate results produced by the tasks. For example, by distributing file reads over multiple local databases more machines can be used to complete tasks faster. Moreover, since smaller tasks are spread across many machines, a machine failure will result in less lost work and a reduction in the latency introduced by such failure.
+- the FS load for system 200 is O(M*R) file opens and the FS load for system 300 is O(M) input file opens +O(R) output file opens, where M is the number of map tasks and R is the number of reduce tasks.
+- the system 200 requires significantly more file system file open operations than the system 300 .
+- FIG. 4 is a computer system 400 for the data processing systems 200 and 300 shown in FIGS. 2 and 3 .
+- the computer system 400 generally includes one or more processing units (CPUs) 402 , one or more network or other communications interfaces 410 , memory 412 , and one or more communication buses 414 for interconnecting these components.
+- the system 400 may optionally include a user interface 404 , for instance a display 406 and a keyboard 408 .
+- Memory 412 may include high speed random access memory and may also include non-volatile memory, such as one or more magnetic disk storage devices.
+- Memory 412 may include mass storage that is remotely located from the central processing unit(s) 402 .
+- the memory 412 stores an operating system 416 (e.g., Linux or Unix), a network communication module 418 , a system initialization module 420 , application software 422 and a library 430 .
+- the operating system 416 generally includes procedures for handling various basic system services and for performing hardware dependent tasks.
+- the network communication module 418 is used for connecting the system 400 to a file system (FS) 446 , servers or other computing devices via one or more communication networks, such as the Internet, other wide area networks, local area networks, metropolitan area networks, and the like.
+- the system initialization module 420 initializes other modules and data structures stored in memory 414 required for the appropriate operation of the system 400 .
+- the application software 422 includes a map operator 424 , a reduce operator 426 and a partition operator 428 , and the library 430 includes application-independent map functions 432 , reduce functions 434 , and partition functions 436 .
+- the application software 422 may also include a combiner operator 425 when the map-reduce operation meets certain conditions.
+- the functions, procedures or instructions in the library 430 handle the application independent aspects of large scaled data processing jobs, while the application software 422 provides the application-specific functions for producing output data.
+- the application software 422 may include source programs for the map, combiner, reduce and partition operators as well as the corresponding compiled programs, represented by binary files 212 and 312 in FIGS. 2 and 3 , respectively.
+- One or more status tables 444 are also included to track tasks and processes, as described with respect to FIGS. 7A and 7B .
+- the computer system 400 includes worker processes 438 , intermediate files 440 , and one or more master process(es) 442 . The interaction of worker processes 438 and master processes 442 were described with respect to FIG. 3 .
+- an application programmer can create a script or program using the application software 422 , which includes one or more operators 424 , 426 and 428 .
+- the script or program is processed into binary files 212 , 312 and provided to the work queue master 214 , 314 .
+- input files 202 are split into multiple data blocks and assigned by the work queue master 214 to individual, application independent map and reduce processes 204 and 208 .
+- the processes 204 invoke map functions 432 to process the input data (e.g., counting the number of occurrences of a term) to provide intermediate data values.
+- the input data is structured in the form of key-value pairs.
+- the partition function 436 partitions the map output into one or more intermediate files 440 , which are stored on the FS 446 .
+- the intermediate data values are processed by the map and reduce processes 204 and 208 , which invoke reduce functions 208 for sorting and combining intermediate data values having the same key, and for storing the key and values in one or more output files 210 located on the FS 446 .
+- the work queue master 214 manages the map and reduce processes 204 and 208 with the assistance of status tables 444 , as described with respect to FIGS. 7A and 7B .
+- input files 302 are split into multiple data blocks and assigned by the master process 442 to individual, application independent worker processes 438 .
+- the worker processes 438 invoke map functions 432 for operating on blocks of input data (e.g., counting the number of occurrences of a term) to provide intermediate data values.
+- the partition function 436 partitions the map output into one or more intermediate files 440 , which are stored locally in memory 412 .
+- the intermediate data values are processed by application independent worker processes 438 , which invoke reduce functions 434 for sorting and combining intermediate data values having the same key, and for storing the resulting output data in one or more output files 310 located on the file system 446 .
+- the master process 442 manages the worker processes 436 with the assistance of status tables 444 , as described with respect to FIGS. 7A and 7B .
+Abstract
+Description
+-
+- result+=ParseInt(v);
+Claims (16)
+Priority Applications (7)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/871,244 US7650331B1 (en) | 2004-06-18 | 2004-06-18 | System and method for efficient large-scale data processing |
+US10/954,692 US7590620B1 (en) | 2004-06-18 | 2004-09-29 | System and method for analyzing data records |
+US12/533,955 US8126909B2 (en) | 2004-06-18 | 2009-07-31 | System and method for analyzing data records |
+US13/407,632 US9405808B2 (en) | 2004-06-18 | 2012-02-28 | System and method for analyzing data records |
+US15/226,795 US9830357B2 (en) | 2004-06-18 | 2016-08-02 | System and method for analyzing data records |
+US15/799,939 US11275743B2 (en) | 2004-06-18 | 2017-10-31 | System and method for analyzing data records |
+US17/673,049 US20220171781A1 (en) | 2004-06-18 | 2022-02-16 | System And Method For Analyzing Data Records |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US10/871,244 US7650331B1 (en) | 2004-06-18 | 2004-06-18 | System and method for efficient large-scale data processing |
+Related Child Applications (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/954,692 Continuation-In-Part US7590620B1 (en) | 2004-06-18 | 2004-09-29 | System and method for analyzing data records |
+US10/954,682 Continuation-In-Part US7523064B2 (en) | 2002-11-13 | 2004-09-30 | System and method for facilitating trading of multiple tradeable objects in an electronic trading environment |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US7650331B1 true US7650331B1 (en) | 2010-01-19 |
+Family
+ID=41509957
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US10/871,244 Active 2026-12-23 US7650331B1 (en) | 2004-06-18 | 2004-06-18 | System and method for efficient large-scale data processing |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US7650331B1 (en) |
+Cited By (176)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20060254453A1 (en) * | 2005-05-11 | 2006-11-16 | Jose E. Leal | Reusable marker projectile |
+US20070179927A1 (en) * | 2006-01-27 | 2007-08-02 | Kalyanaraman Vaidyanathan | Method and apparatus for reducing execution time for parallel support vector machine computations |
+US20070234364A1 (en) * | 2006-03-30 | 2007-10-04 | Daniel Lipton | Post-processing phase in a distributed computing system |
+US20090157592A1 (en) * | 2007-12-12 | 2009-06-18 | Sun Microsystems, Inc. | Method and system for distributed bulk matching and loading |
+US20090313635A1 (en) * | 2008-06-12 | 2009-12-17 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US20100050182A1 (en) * | 2007-12-03 | 2010-02-25 | Zircon Computing Llc | Parallel processing system |
+US20100115246A1 (en) * | 2008-10-31 | 2010-05-06 | Yahoo! Inc. | System and method of data partitioning for parallel processing of dynamically generated application data |
+US20100115046A1 (en) * | 2008-10-31 | 2010-05-06 | Software Ag | Method and server cluster for map reducing flow services and large documents |
+US20100125718A1 (en) * | 2008-11-14 | 2010-05-20 | D.E. Shaw Research, Llc | Parallel analysis of time series data |
+US20100175049A1 (en) * | 2009-01-07 | 2010-07-08 | Microsoft Corporation | Scope: a structured computations optimized for parallel execution script language |
+US20100186020A1 (en) * | 2009-01-20 | 2010-07-22 | Sap Ag | System and method of multithreaded processing across multiple servers |
+US20100241828A1 (en) * | 2009-03-18 | 2010-09-23 | Microsoft Corporation | General Distributed Reduction For Data Parallel Computing |
+US20100257198A1 (en) * | 2009-04-02 | 2010-10-07 | Greeenplum, Inc. | Apparatus and method for integrating map-reduce into a distributed relational database |
+US20110087731A1 (en) * | 2009-10-08 | 2011-04-14 | Laura Wong | Systems and methods to process a request received at an application program interface |
+US20110213802A1 (en) * | 2010-02-26 | 2011-09-01 | Ebay Inc. | Parallel data stream processing system |
+DE102010016324A1 (en) | 2010-04-05 | 2011-10-06 | Tim Frey | System, method and arrangements for securing resources |
+WO2011140201A1 (en) * | 2010-05-04 | 2011-11-10 | Google Inc. | Parallel processing of data |
+WO2011142733A1 (en) * | 2010-05-11 | 2011-11-17 | Thomson Licensing | A configurable computing architecture |
+WO2011156692A1 (en) | 2010-06-11 | 2011-12-15 | Ingenix, Inc. | Apparatuses and methods for parallel analytics |
+US20110313973A1 (en) * | 2010-06-19 | 2011-12-22 | Srivas Mandayam C | Map-Reduce Ready Distributed File System |
+CN102436408A (en) * | 2011-10-10 | 2012-05-02 | 上海交通大学 | Data storage cloud and cloud backup method based on Map/Dedup |
+US20120151292A1 (en) * | 2010-12-14 | 2012-06-14 | Microsoft Corporation | Supporting Distributed Key-Based Processes |
+US8229864B1 (en) | 2011-05-06 | 2012-07-24 | Google Inc. | Predictive model application programming interface |
+US8244831B1 (en) | 2011-05-23 | 2012-08-14 | Ilesfay Technology Group, LLC | Method for the preemptive creation of binary delta information within a computer network |
+US8250009B1 (en) | 2011-01-26 | 2012-08-21 | Google Inc. | Updateable predictive analytical modeling |
+US8261295B1 (en) | 2011-03-16 | 2012-09-04 | Google Inc. | High-level language for specifying configurations of cloud-based deployments |
+US20120226639A1 (en) * | 2011-03-01 | 2012-09-06 | International Business Machines Corporation | Systems and Methods for Processing Machine Learning Algorithms in a MapReduce Environment |
+US8276140B1 (en) | 2011-11-14 | 2012-09-25 | Google Inc. | Adjustable virtual network performance |
+US20120254193A1 (en) * | 2011-04-01 | 2012-10-04 | Google Inc. | Processing Data in a Mapreduce Framework |
+US8311967B1 (en) | 2010-05-14 | 2012-11-13 | Google Inc. | Predictive analytical model matching |
+DE102011121803A1 (en) | 2011-05-23 | 2012-11-29 | Avaya Inc. | SYSTEM AND METHOD FOR SEARCH-BASED WORKING ASSIGNMENTS IN A CONTACT CENTER |
+US8364613B1 (en) | 2011-07-14 | 2013-01-29 | Google Inc. | Hosting predictive models |
+US8370280B1 (en) | 2011-07-14 | 2013-02-05 | Google Inc. | Combining predictive models in predictive analytical modeling |
+US8370279B1 (en) | 2011-09-29 | 2013-02-05 | Google Inc. | Normalization of predictive model scores |
+US20130086355A1 (en) * | 2011-09-30 | 2013-04-04 | International Business Machines Corporation | Distributed Data Scalable Adaptive Map-Reduce Framework |
+US20130104135A1 (en) * | 2010-04-30 | 2013-04-25 | New Orchard Road | Data center operation |
+US8438122B1 (en) | 2010-05-14 | 2013-05-07 | Google Inc. | Predictive analytic modeling platform |
+US8443013B1 (en) | 2011-07-29 | 2013-05-14 | Google Inc. | Predictive analytical modeling for databases |
+US8473431B1 (en) | 2010-05-14 | 2013-06-25 | Google Inc. | Predictive analytic modeling platform |
+US8495218B1 (en) | 2011-01-21 | 2013-07-23 | Google Inc. | Managing system resources |
+US8494850B2 (en) | 2011-06-30 | 2013-07-23 | Google Inc. | Speech recognition using variable-length context |
+US8510538B1 (en) * | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+WO2013123106A1 (en) | 2012-02-17 | 2013-08-22 | Google Inc. | A system and method for a map flow worker |
+US8527478B1 (en) | 2010-12-20 | 2013-09-03 | Google Inc. | Handling bulk and incremental updates while maintaining consistency |
+US8533343B1 (en) | 2011-01-13 | 2013-09-10 | Google Inc. | Virtual network pairs |
+US8533796B1 (en) | 2011-03-16 | 2013-09-10 | Google Inc. | Providing application programs with access to secured resources |
+US8533224B2 (en) | 2011-05-04 | 2013-09-10 | Google Inc. | Assessing accuracy of trained predictive models |
+US8533423B2 (en) | 2010-12-22 | 2013-09-10 | International Business Machines Corporation | Systems and methods for performing parallel multi-level data computations |
+US20130239113A1 (en) * | 2010-10-05 | 2013-09-12 | Fujitsu Limited | Information processing apparatus, computer product, and information processing method |
+WO2013144535A1 (en) | 2012-03-30 | 2013-10-03 | Khalifa University of Science, Technology, and Research | Method and system for processing data queries |
+US20130263142A1 (en) * | 2012-03-27 | 2013-10-03 | Fujitsu Limited | Control device, control method, computer readable recording medium in which program is recorded, and distributed processing system |
+WO2013153027A1 (en) | 2012-04-12 | 2013-10-17 | Telefónica, S.A. | Method and system for streaming processing in a map and reduce distributed computing platform |
+WO2013153029A1 (en) | 2012-04-12 | 2013-10-17 | Telefonica, S.A. | Method and system for managing and processing data in a distributed computing platform |
+US20130297624A1 (en) * | 2012-05-07 | 2013-11-07 | Microsoft Corporation | Interoperability between Map-Reduce and Distributed Array Runtimes |
+US8595732B2 (en) | 2010-11-15 | 2013-11-26 | International Business Machines Corporation | Reducing the response time of flexible highly data parallel task by assigning task sets using dynamic combined longest processing time scheme |
+US8595154B2 (en) | 2011-01-26 | 2013-11-26 | Google Inc. | Dynamic predictive modeling platform |
+US20130332612A1 (en) * | 2010-03-31 | 2013-12-12 | International Business Machines Corporation | Transmission of map/reduce data in a data center |
+CN103514205A (en) * | 2012-06-27 | 2014-01-15 | 中国电信股份有限公司 | Mass data processing method and system |
+US8645242B1 (en) | 2005-05-11 | 2014-02-04 | Morgan Stanley | Systems and methods for compiling and analyzing bids in an auction of securities |
+US20140040292A1 (en) * | 2012-08-03 | 2014-02-06 | Tata Consultancy Services Limited | System and method for massive call data storage and retrieval |
+US8677449B1 (en) | 2012-03-19 | 2014-03-18 | Google Inc. | Exposing data to virtual machines |
+US20140095505A1 (en) * | 2012-10-01 | 2014-04-03 | Longsand Limited | Performance and scalability in an intelligent data operating layer system |
+US8694540B1 (en) | 2011-09-01 | 2014-04-08 | Google Inc. | Predictive analytical model selection |
+US8706656B1 (en) | 2011-08-26 | 2014-04-22 | Google Inc. | Multi-label modeling using a plurality of classifiers |
+US20140115019A1 (en) * | 2012-10-18 | 2014-04-24 | Hitachi, Ltd. | Distribution processing unit of shared storage |
+US20140123115A1 (en) * | 2012-10-26 | 2014-05-01 | Jsmapreduce Corporation | Hybrid local/remote infrastructure for data processing with lightweight setup, powerful debuggability, controllability, integration, and productivity features |
+US8732702B2 (en) | 2011-03-23 | 2014-05-20 | Emc Corporation | File system for storage area network |
+US8745329B2 (en) | 2011-01-20 | 2014-06-03 | Google Inc. | Storing data across a plurality of storage nodes |
+US8800009B1 (en) | 2011-12-30 | 2014-08-05 | Google Inc. | Virtual machine service access |
+US8812586B1 (en) | 2011-02-15 | 2014-08-19 | Google Inc. | Correlating status information generated in a computer network |
+US8819335B1 (en) | 2013-08-30 | 2014-08-26 | NXGN Data, Inc. | System and method for executing map-reduce tasks in a storage device |
+CN104009904A (en) * | 2014-05-23 | 2014-08-27 | 清华大学 | Method and system for establishing virtual network for big data processing of cloud platform |
+US8874888B1 (en) | 2011-01-13 | 2014-10-28 | Google Inc. | Managed boot in a cloud system |
+US20140358869A1 (en) * | 2013-05-31 | 2014-12-04 | Samsung Sds Co., Ltd. | System and method for accelerating mapreduce operation |
+US8909939B1 (en) | 2012-04-04 | 2014-12-09 | Google Inc. | Distribution of cryptographic host keys in a cloud computing environment |
+US8910188B1 (en) * | 2011-07-14 | 2014-12-09 | Google Inc. | Deterministic data processing |
+WO2014200877A1 (en) * | 2013-06-12 | 2014-12-18 | Microsoft Corporation | Deterministic progressive big data analytics |
+US8924426B2 (en) | 2011-04-29 | 2014-12-30 | Google Inc. | Joining tables in a mapreduce procedure |
+US8930896B1 (en) * | 2010-07-23 | 2015-01-06 | Amazon Technologies, Inc. | Data anonymity and separation for user computation |
+US8930954B2 (en) | 2010-08-10 | 2015-01-06 | International Business Machines Corporation | Scheduling parallel data tasks |
+US8958293B1 (en) | 2011-12-06 | 2015-02-17 | Google Inc. | Transparent load-balancing for cloud computing services |
+US8966198B1 (en) | 2011-09-01 | 2015-02-24 | Google Inc. | Providing snapshots of virtual storage devices |
+CN104378665A (en) * | 2014-11-24 | 2015-02-25 | 深圳市天威视讯股份有限公司 | Distributed transcoding system and method based on digital television |
+US8972986B2 (en) | 2012-05-25 | 2015-03-03 | International Business Machines Corporation | Locality-aware resource allocation for cloud computing |
+US20150074071A1 (en) * | 2013-09-12 | 2015-03-12 | Neustar,Inc. | Method and system for performing transactional updates in a key-value store |
+US8984516B2 (en) | 2012-05-31 | 2015-03-17 | International Business Machines Corporation | System and method for shared execution of mixed data flows |
+US8983860B1 (en) | 2012-01-30 | 2015-03-17 | Google Inc. | Advertising auction system |
+US8996887B2 (en) | 2012-02-24 | 2015-03-31 | Google Inc. | Log structured volume encryption for virtual machines |
+US20150128150A1 (en) * | 2012-08-02 | 2015-05-07 | Fujitsu Limited | Data processing method and information processing apparatus |
+US20150160974A1 (en) * | 2013-12-11 | 2015-06-11 | Dropbox, Inc. | Job-processing systems and methods with inferred dependencies between jobs |
+US9063818B1 (en) | 2011-03-16 | 2015-06-23 | Google Inc. | Automated software updating based on prior activity |
+US9069806B2 (en) | 2012-03-27 | 2015-06-30 | Google Inc. | Virtual block devices |
+US9069616B2 (en) | 2011-09-23 | 2015-06-30 | Google Inc. | Bandwidth throttling of virtual disks |
+US9075979B1 (en) | 2011-08-11 | 2015-07-07 | Google Inc. | Authentication based on proximity to mobile device |
+US20150205633A1 (en) * | 2013-05-24 | 2015-07-23 | Google Inc. | Task management in single-threaded environments |
+US9105042B2 (en) | 2013-02-07 | 2015-08-11 | Verizon Patent And Licensing Inc. | Customer sentiment analysis using recorded conversation |
+US20150244757A1 (en) * | 2012-11-27 | 2015-08-27 | Tencent Technology (Shenzhen) Company Limited | Transcoding Method and System, and Distributed File Apparatus |
+US9124508B2 (en) | 2011-05-23 | 2015-09-01 | Nec Corporation | Communication control device communication control system, communication control method and program |
+US9135037B1 (en) | 2011-01-13 | 2015-09-15 | Google Inc. | Virtual network protocol |
+WO2015152871A1 (en) * | 2014-03-31 | 2015-10-08 | Hewlett-Packard Development Company, L.P. | Prioritization of network traffic in a distributed processing system |
+US9158803B2 (en) | 2010-12-20 | 2015-10-13 | Google Inc. | Incremental schema consistency validation on geographic features |
+DE202013012168U1 (en) | 2012-11-08 | 2015-10-15 | Linkedln Corporation | competence confirmations |
+US9170848B1 (en) | 2010-07-27 | 2015-10-27 | Google Inc. | Parallel processing of data |
+US9176759B1 (en) | 2011-03-16 | 2015-11-03 | Google Inc. | Monitoring and automatically managing applications |
+US9178698B1 (en) | 2011-12-21 | 2015-11-03 | Google Inc. | Dynamic key management |
+US20150326644A1 (en) * | 2014-05-07 | 2015-11-12 | Microsoft Corporation | Traveling map-reduce architecture |
+US20150371633A1 (en) * | 2012-11-01 | 2015-12-24 | Google Inc. | Speech recognition using non-parametric models |
+US9237087B1 (en) | 2011-03-16 | 2016-01-12 | Google Inc. | Virtual machine name resolution |
+US9239827B2 (en) | 2012-06-19 | 2016-01-19 | Microsoft Technology Licensing, Llc | Identifying collocations in a corpus of text in a distributed computing environment |
+US9244721B2 (en) | 2011-11-24 | 2016-01-26 | Hitachi, Ltd. | Computer system and divided job processing method and program |
+US9269057B1 (en) | 2013-12-11 | 2016-02-23 | Google, Inc. | Using specialized workers to improve performance in machine learning |
+US9292567B2 (en) | 2007-12-12 | 2016-03-22 | Oracle International Corporation | Bulk matching with update |
+US9336024B1 (en) | 2012-12-27 | 2016-05-10 | Google Inc. | Clustering for parallel processing |
+US9338234B2 (en) | 2014-04-16 | 2016-05-10 | Microsoft Technology Licensing, Llc | Functional programming in distributed computing |
+US9369350B2 (en) | 2011-12-01 | 2016-06-14 | International Business Machines Corporation | Method and system of network transfer adaptive optimization in large-scale parallel computing system |
+US9419921B1 (en) | 2011-01-13 | 2016-08-16 | Google Inc. | Network address translation for virtual machines |
+US9424074B1 (en) * | 2013-07-01 | 2016-08-23 | Google Inc. | Method for learning backup policies for large-scale distributed computing |
+US9430255B1 (en) | 2013-03-15 | 2016-08-30 | Google Inc. | Updating virtual machine generated metadata to a distribution service for sharing and backup |
+US9436740B2 (en) | 2012-04-04 | 2016-09-06 | Microsoft Technology Licensing, Llc | Visualization of changing confidence intervals |
+US9448851B2 (en) | 2013-06-19 | 2016-09-20 | International Business Machines Corporation | Smarter big data processing using collaborative map reduce frameworks |
+US9465653B2 (en) | 2013-12-11 | 2016-10-11 | Dropbox, Inc. | Automated invalidation of job output data in a job-processing system |
+EP2548113A4 (en) * | 2010-03-18 | 2016-10-26 | Microsoft Technology Licensing Llc | Coordinating communication medium state for subtasks |
+US20160352820A1 (en) * | 2014-04-30 | 2016-12-01 | Hewlett Packard Enterprise Development Lp | Reducing data in a network device |
+US9558049B1 (en) * | 2015-10-12 | 2017-01-31 | International Business Machines Corporation | Shuffle optimization in map-reduce processing |
+CN106407231A (en) * | 2015-08-03 | 2017-02-15 | 天脉聚源（北京）科技有限公司 | A data multi-thread export method and system |
+US9607045B2 (en) | 2012-07-12 | 2017-03-28 | Microsoft Technology Licensing, Llc | Progressive query computation using streaming architectures |
+US9613127B1 (en) * | 2014-06-30 | 2017-04-04 | Quantcast Corporation | Automated load-balancing of partitions in arbitrarily imbalanced distributed mapreduce computations |
+US9613436B1 (en) | 2013-12-23 | 2017-04-04 | Sensing Electromagnetic Plus Corp. | Optimization methods for feature detection |
+US9612883B2 (en) | 2004-06-18 | 2017-04-04 | Google Inc. | System and method for large-scale data processing using an application-independent framework |
+US9619662B1 (en) | 2011-01-13 | 2017-04-11 | Google Inc. | Virtual network pairs |
+US9652502B2 (en) | 2012-03-30 | 2017-05-16 | Khalifa University Of Science, Technology And Research | Method and system for continuous query processing |
+US9672052B1 (en) | 2012-02-16 | 2017-06-06 | Google Inc. | Secure inter-process communication |
+US9679012B1 (en) | 2014-02-28 | 2017-06-13 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9684671B1 (en) | 2014-02-28 | 2017-06-20 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9684666B1 (en) | 2014-02-28 | 2017-06-20 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9742674B1 (en) | 2012-08-15 | 2017-08-22 | F5 Networks, Inc. | Methods for distributed application visibility and reporting and devices thereof |
+US9747131B1 (en) * | 2012-05-24 | 2017-08-29 | Google Inc. | System and method for variable aggregation in order for workers in a data processing to share information |
+US20170323028A1 (en) * | 2016-05-04 | 2017-11-09 | Uncharted Software Inc. | System and method for large scale information processing using data visualization for multi-scale communities |
+US9830357B2 (en) | 2004-06-18 | 2017-11-28 | Google Inc. | System and method for analyzing data records |
+EP2591421A4 (en) * | 2010-07-07 | 2017-12-06 | Alibaba Group Holding Limited | Data analysis using multiple systems |
+CN107515880A (en) * | 2016-06-17 | 2017-12-26 | 宏碁股份有限公司 | data distributed processing system and method |
+US9858922B2 (en) | 2014-06-23 | 2018-01-02 | Google Inc. | Caching speech recognition scores |
+TWI614682B (en) * | 2016-03-24 | 2018-02-11 | 聯發科技股份有限公司 | Efficient work execution in a parallel computing system |
+US20180081664A1 (en) * | 2016-09-20 | 2018-03-22 | Bluedata Software, Inc. | Generation and deployment of scripts for large scale processing framework services |
+US9992269B1 (en) * | 2013-02-25 | 2018-06-05 | EMC IP Holding Company LLC | Distributed complex event processing |
+US9996597B2 (en) | 2014-06-06 | 2018-06-12 | The Mathworks, Inc. | Unified mapreduce framework for large-scale data processing |
+US10114581B1 (en) | 2016-12-27 | 2018-10-30 | EMC IP Holding Company LLC | Creating a virtual access point in time on an object based journal replication |
+US10176092B2 (en) | 2016-09-21 | 2019-01-08 | Ngd Systems, Inc. | System and method for executing data processing tasks using resilient distributed datasets (RDDs) in a storage device |
+US10204619B2 (en) | 2014-10-22 | 2019-02-12 | Google Llc | Speech recognition using associative mapping |
+US10228959B1 (en) | 2011-06-02 | 2019-03-12 | Google Llc | Virtual network for virtual machine communication and migration |
+US20190121894A1 (en) * | 2017-10-20 | 2019-04-25 | Intuit Inc. | Parallel map and reduce on hash chains |
+CN109710263A (en) * | 2018-12-18 | 2019-05-03 | 北京字节跳动网络技术有限公司 | Compilation Method, device, storage medium and the electronic equipment of code |
+US10311105B2 (en) | 2010-12-28 | 2019-06-04 | Microsoft Technology Licensing, Llc | Filtering queried data on data stores |
+US10359953B2 (en) * | 2016-12-16 | 2019-07-23 | Western Digital Technologies, Inc. | Method and apparatus for offloading data processing to hybrid storage devices |
+US10438129B1 (en) | 2013-12-30 | 2019-10-08 | Google Llc | Regularization relaxation scheme |
+US10505818B1 (en) | 2015-05-05 | 2019-12-10 | F5 Networks. Inc. | Methods for analyzing and load balancing based on server health and devices thereof |
+US10552435B2 (en) | 2017-03-08 | 2020-02-04 | Microsoft Technology Licensing, Llc | Fast approximate results and slow precise results |
+EP3627346A1 (en) | 2018-09-20 | 2020-03-25 | Amadeus S.A.S. | Function call sequence processing |
+US10740328B2 (en) | 2016-06-24 | 2020-08-11 | Microsoft Technology Licensing, Llc | Aggregate-query database system and processing |
+US10776211B1 (en) | 2016-12-27 | 2020-09-15 | EMC IP Holding Company LLC | Methods, systems, and apparatuses to update point in time journal using map reduce to create a highly parallel update |
+US10803024B2 (en) | 2017-04-02 | 2020-10-13 | Sas Institute Inc. | Techniques for reading from and writing to distributed data stores |
+US10878336B2 (en) | 2016-06-24 | 2020-12-29 | Intel Corporation | Technologies for detection of minority events |
+US10990324B2 (en) | 2019-06-25 | 2021-04-27 | Western Digital Technologies, Inc. | Storage node processing of predefined data functions |
+US10999240B1 (en) * | 2016-08-31 | 2021-05-04 | Verisign, Inc. | Client controlled domain name service (DNS) resolution |
+US11055018B2 (en) * | 2019-06-25 | 2021-07-06 | Western Digital Technologies, Inc. | Parallel storage node processing of data functions |
+US11061942B2 (en) | 2018-09-07 | 2021-07-13 | Graywell, Inc. | Unstructured data fusion by content-aware concurrent data processing pipeline |
+US11144931B2 (en) | 2013-02-25 | 2021-10-12 | At&T Mobility Ip, Llc | Mobile wireless customer micro-care apparatus and method |
+US11169993B2 (en) | 2014-06-06 | 2021-11-09 | The Mathworks, Inc. | Datastore mechanism for managing out-of-memory data |
+US11281531B2 (en) * | 2019-06-25 | 2022-03-22 | Western Digital Technologies, Inc. | Serial storage node processing of data functions |
+US11314593B2 (en) * | 2019-06-25 | 2022-04-26 | Western Digital Technologies, Inc. | Storage node processing of data functions using overlapping symbols |
+US11621940B2 (en) | 2017-01-21 | 2023-04-04 | Verisign, Inc. | Systems, devices, and methods for generating a domain name using a user in interface |
+US11687451B2 (en) | 2017-03-23 | 2023-06-27 | Telefonaktiebolaget Lm Ericsson (Publ) | Memory allocation manager and method performed thereby for managing memory allocation |
+US11726955B2 (en) | 2010-06-19 | 2023-08-15 | Hewlett Packard Enterprise Development Lp | Methods and apparatus for efficient container location database snapshot operation |
+US11882109B2 (en) | 2011-10-03 | 2024-01-23 | Verisign, Inc. | Authenticated name resolution |
+US11893267B2 (en) | 2022-01-14 | 2024-02-06 | Bank Of America Corporation | Data flow control and routing using machine learning |
+US11985105B2 (en) | 2022-03-24 | 2024-05-14 | Verisign, Inc. | Techniques for directing a domain name service (DNS) resolution process |
+Citations (16)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US3905023A (en) * | 1973-08-15 | 1975-09-09 | Burroughs Corp | Large scale multi-level information processing system employing improved failsaft techniques |
+US5872981A (en) * | 1997-05-30 | 1999-02-16 | Oracle Corporation | Method for managing termination of a lock-holding process using a waiting lock |
+US6041384A (en) * | 1997-05-30 | 2000-03-21 | Oracle Corporation | Method for managing shared resources in a multiprocessing computer system |
+US6088511A (en) * | 1998-05-13 | 2000-07-11 | Microsoft Corporation | Nested parallel 2D Delaunay triangulation method |
+US6182061B1 (en) * | 1997-04-09 | 2001-01-30 | International Business Machines Corporation | Method for executing aggregate queries, and computer system |
+US6192359B1 (en) * | 1993-11-16 | 2001-02-20 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US6292822B1 (en) * | 1998-05-13 | 2001-09-18 | Microsoft Corporation | Dynamic load balancing among processors in a parallel computer |
+US6351749B1 (en) * | 1999-09-30 | 2002-02-26 | Ncr Corporation | Multi-threading, multi-tasking architecture for a relational database management system |
+US20020095260A1 (en) * | 2000-11-28 | 2002-07-18 | Surromed, Inc. | Methods for efficiently mining broad data sets for biological markers |
+US20020196799A1 (en) * | 2001-06-26 | 2002-12-26 | Remer Eric B. | Throttling queue |
+US20030177240A1 (en) * | 2001-12-04 | 2003-09-18 | Powerllel Corporation | Parallel computing system, method and architecture |
+US20040148273A1 (en) * | 2003-01-27 | 2004-07-29 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US20040267807A1 (en) * | 2000-10-13 | 2004-12-30 | Miosoft Corporation, A Delaware Corporation | Persistent data storage techniques |
+US20050044067A1 (en) * | 2003-08-22 | 2005-02-24 | Jameson Kevin Wade | Collection processing system |
+US20050234985A1 (en) * | 2004-04-09 | 2005-10-20 | Nexjenn Media, Inc. | System, method and computer program product for extracting metadata faster than real-time |
+US7386849B2 (en) * | 1999-09-27 | 2008-06-10 | Oracle International Corporation | Managing parallel execution of work granules according to their affinity |
+-
+2004
+- 2004-06-18 US US10/871,244 patent/US7650331B1/en active Active
+Patent Citations (18)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US3905023A (en) * | 1973-08-15 | 1975-09-09 | Burroughs Corp | Large scale multi-level information processing system employing improved failsaft techniques |
+US6192359B1 (en) * | 1993-11-16 | 2001-02-20 | Hitachi, Ltd. | Method and system of database divisional management for parallel database system |
+US6182061B1 (en) * | 1997-04-09 | 2001-01-30 | International Business Machines Corporation | Method for executing aggregate queries, and computer system |
+US5872981A (en) * | 1997-05-30 | 1999-02-16 | Oracle Corporation | Method for managing termination of a lock-holding process using a waiting lock |
+US6041384A (en) * | 1997-05-30 | 2000-03-21 | Oracle Corporation | Method for managing shared resources in a multiprocessing computer system |
+US6088511A (en) * | 1998-05-13 | 2000-07-11 | Microsoft Corporation | Nested parallel 2D Delaunay triangulation method |
+US6292822B1 (en) * | 1998-05-13 | 2001-09-18 | Microsoft Corporation | Dynamic load balancing among processors in a parallel computer |
+US7386849B2 (en) * | 1999-09-27 | 2008-06-10 | Oracle International Corporation | Managing parallel execution of work granules according to their affinity |
+US6351749B1 (en) * | 1999-09-30 | 2002-02-26 | Ncr Corporation | Multi-threading, multi-tasking architecture for a relational database management system |
+US20040267807A1 (en) * | 2000-10-13 | 2004-12-30 | Miosoft Corporation, A Delaware Corporation | Persistent data storage techniques |
+US20060259246A1 (en) * | 2000-11-28 | 2006-11-16 | Ppd Biomarker Discovery Sciences, Llc | Methods for efficiently mining broad data sets for biological markers |
+US20020095260A1 (en) * | 2000-11-28 | 2002-07-18 | Surromed, Inc. | Methods for efficiently mining broad data sets for biological markers |
+US20020196799A1 (en) * | 2001-06-26 | 2002-12-26 | Remer Eric B. | Throttling queue |
+US20030177240A1 (en) * | 2001-12-04 | 2003-09-18 | Powerllel Corporation | Parallel computing system, method and architecture |
+US20040148273A1 (en) * | 2003-01-27 | 2004-07-29 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US7146365B2 (en) * | 2003-01-27 | 2006-12-05 | International Business Machines Corporation | Method, system, and program for optimizing database query execution |
+US20050044067A1 (en) * | 2003-08-22 | 2005-02-24 | Jameson Kevin Wade | Collection processing system |
+US20050234985A1 (en) * | 2004-04-09 | 2005-10-20 | Nexjenn Media, Inc. | System, method and computer program product for extracting metadata faster than real-time |
+Non-Patent Citations (6)
+Title |
+---|
+Barroso, L.A., et al., "Web Search for a Planet: The Google Cluster Architecture," IEEE Micro, 23(2):22-28, Apr. 2003. |
+Ghemawat, S., et al., "The Google File System," 19th Symposium on Operating Systems Principles, pp. 29-43, Lake George, New York, 2003. |
+Rabin, M.O., "Efficient Dispersal of Information for Security, Load Balancing and Fault Tolerance," Journal of the ACM, 36(2):335-348, Apr. 1989. |
+Riedel, E., et al., "Active Disk for Large-Scale Data Processing," IEEE Computer, pp. 68-74, Jun. 2001. |
+Thain, D., et al., "Distributed Computing in Practice: The Condor Experience," Concurrency and Computation: Practice and Experience, 17:323-356, 2004. |
+Valiant, L.G., "A Bridging Model for Parallel Computation," Communications of the ACM, 33(8):103-111, Aug. 1990. |
+Cited By (304)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20230385262A1 (en) * | 2004-06-18 | 2023-11-30 | Google Llc | System And Method For Large-Scale Data Processing Using An Application-Independent Framework |
+US11366797B2 (en) | 2004-06-18 | 2022-06-21 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US9830357B2 (en) | 2004-06-18 | 2017-11-28 | Google Inc. | System and method for analyzing data records |
+US11650971B2 (en) | 2004-06-18 | 2023-05-16 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US10296500B2 (en) | 2004-06-18 | 2019-05-21 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US10885012B2 (en) | 2004-06-18 | 2021-01-05 | Google Llc | System and method for large-scale data processing using an application-independent framework |
+US9612883B2 (en) | 2004-06-18 | 2017-04-04 | Google Inc. | System and method for large-scale data processing using an application-independent framework |
+US11275743B2 (en) | 2004-06-18 | 2022-03-15 | Google Llc | System and method for analyzing data records |
+US8645242B1 (en) | 2005-05-11 | 2014-02-04 | Morgan Stanley | Systems and methods for compiling and analyzing bids in an auction of securities |
+US20060254453A1 (en) * | 2005-05-11 | 2006-11-16 | Jose E. Leal | Reusable marker projectile |
+US20070179927A1 (en) * | 2006-01-27 | 2007-08-02 | Kalyanaraman Vaidyanathan | Method and apparatus for reducing execution time for parallel support vector machine computations |
+US7865898B2 (en) * | 2006-01-27 | 2011-01-04 | Oracle America, Inc. | Repartitioning parallel SVM computations using dynamic timeout |
+US8307366B2 (en) * | 2006-03-30 | 2012-11-06 | Apple Inc. | Post-processing phase in a distributed processing system using assignment information |
+US20070234364A1 (en) * | 2006-03-30 | 2007-10-04 | Daniel Lipton | Post-processing phase in a distributed computing system |
+US20100050182A1 (en) * | 2007-12-03 | 2010-02-25 | Zircon Computing Llc | Parallel processing system |
+US9292567B2 (en) | 2007-12-12 | 2016-03-22 | Oracle International Corporation | Bulk matching with update |
+US8943057B2 (en) * | 2007-12-12 | 2015-01-27 | Oracle America, Inc. | Method and system for distributed bulk matching and loading |
+US20090157592A1 (en) * | 2007-12-12 | 2009-06-18 | Sun Microsystems, Inc. | Method and system for distributed bulk matching and loading |
+US8726290B2 (en) * | 2008-06-12 | 2014-05-13 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US20090313635A1 (en) * | 2008-06-12 | 2009-12-17 | Yahoo! Inc. | System and/or method for balancing allocation of data among reduce processes by reallocation |
+US20100115246A1 (en) * | 2008-10-31 | 2010-05-06 | Yahoo! Inc. | System and method of data partitioning for parallel processing of dynamically generated application data |
+US8682998B2 (en) * | 2008-10-31 | 2014-03-25 | Software Ag | Method and server cluster for map reducing flow services and large documents |
+US20100115046A1 (en) * | 2008-10-31 | 2010-05-06 | Software Ag | Method and server cluster for map reducing flow services and large documents |
+US20100125718A1 (en) * | 2008-11-14 | 2010-05-20 | D.E. Shaw Research, Llc | Parallel analysis of time series data |
+US20100175049A1 (en) * | 2009-01-07 | 2010-07-08 | Microsoft Corporation | Scope: a structured computations optimized for parallel execution script language |
+US8832173B2 (en) * | 2009-01-20 | 2014-09-09 | Sap Ag | System and method of multithreaded processing across multiple servers |
+US20100186020A1 (en) * | 2009-01-20 | 2010-07-22 | Sap Ag | System and method of multithreaded processing across multiple servers |
+US20100241828A1 (en) * | 2009-03-18 | 2010-09-23 | Microsoft Corporation | General Distributed Reduction For Data Parallel Computing |
+US8239847B2 (en) * | 2009-03-18 | 2012-08-07 | Microsoft Corporation | General distributed reduction for data parallel computing |
+US8713038B2 (en) * | 2009-04-02 | 2014-04-29 | Pivotal Software, Inc. | Integrating map-reduce into a distributed relational database |
+US9514188B2 (en) | 2009-04-02 | 2016-12-06 | Pivotal Software, Inc. | Integrating map-reduce into a distributed relational database |
+US20100257198A1 (en) * | 2009-04-02 | 2010-10-07 | Greeenplum, Inc. | Apparatus and method for integrating map-reduce into a distributed relational database |
+US8510538B1 (en) * | 2009-04-13 | 2013-08-13 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US9396036B2 (en) | 2009-04-13 | 2016-07-19 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US20130332931A1 (en) * | 2009-04-13 | 2013-12-12 | Google Inc. | System and Method for Limiting the Impact of Stragglers in Large-Scale Parallel Data Processing |
+US9047141B2 (en) * | 2009-04-13 | 2015-06-02 | Google Inc. | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US9886325B2 (en) | 2009-04-13 | 2018-02-06 | Google Llc | System and method for limiting the impact of stragglers in large-scale parallel data processing |
+US9043401B2 (en) * | 2009-10-08 | 2015-05-26 | Ebay Inc. | Systems and methods to process a request received at an application program interface |
+US20110087731A1 (en) * | 2009-10-08 | 2011-04-14 | Laura Wong | Systems and methods to process a request received at an application program interface |
+US9794334B2 (en) | 2009-10-08 | 2017-10-17 | Paypal, Inc. | Systems and methods to process a request received at an application program interface |
+US9805101B2 (en) * | 2010-02-26 | 2017-10-31 | Ebay Inc. | Parallel data stream processing system |
+US11789955B2 (en) | 2010-02-26 | 2023-10-17 | Ebay Inc. | Parallel data stream processing system |
+US20110213802A1 (en) * | 2010-02-26 | 2011-09-01 | Ebay Inc. | Parallel data stream processing system |
+EP2548113A4 (en) * | 2010-03-18 | 2016-10-26 | Microsoft Technology Licensing Llc | Coordinating communication medium state for subtasks |
+US20130332612A1 (en) * | 2010-03-31 | 2013-12-12 | International Business Machines Corporation | Transmission of map/reduce data in a data center |
+US9590915B2 (en) * | 2010-03-31 | 2017-03-07 | International Business Machines Corporation | Transmission of Map/Reduce data in a data center |
+GB2491730B (en) * | 2010-03-31 | 2018-05-16 | Ibm | Transmission of map-reduce data based on a storage network or a storage network file system |
+WO2011124221A2 (en) | 2010-04-05 | 2011-10-13 | Tim Frey | System, method and arrangements for securing resources |
+DE102010016324A1 (en) | 2010-04-05 | 2011-10-06 | Tim Frey | System, method and arrangements for securing resources |
+US20130104135A1 (en) * | 2010-04-30 | 2013-04-25 | New Orchard Road | Data center operation |
+US10831562B2 (en) | 2010-04-30 | 2020-11-10 | International Business Machines Corporation | Method and system for operating a data center by reducing an amount of data to be processed |
+US10114682B2 (en) | 2010-04-30 | 2018-10-30 | International Business Machines Corporation | Method and system for operating a data center by reducing an amount of data to be processed |
+US9378053B2 (en) * | 2010-04-30 | 2016-06-28 | International Business Machines Corporation | Generating map task output with version information during map task execution and executing reduce tasks using the output including version information |
+US9678770B2 (en) | 2010-05-04 | 2017-06-13 | Google Inc. | Parallel processing of data for an untrusted application |
+US9626202B2 (en) * | 2010-05-04 | 2017-04-18 | Google Inc. | Parallel processing of data |
+US8959499B2 (en) | 2010-05-04 | 2015-02-17 | Google Inc. | Parallel processing of data |
+US10338942B2 (en) | 2010-05-04 | 2019-07-02 | Google Llc | Parallel processing of data |
+US9898313B2 (en) | 2010-05-04 | 2018-02-20 | Google Llc | Parallel processing of data for an untrusted application |
+US8887156B2 (en) | 2010-05-04 | 2014-11-11 | Google Inc. | Parallel processing of data |
+US20150248304A1 (en) * | 2010-05-04 | 2015-09-03 | Google Inc. | Parallel Processing of Data |
+US11392398B2 (en) * | 2010-05-04 | 2022-07-19 | Google Llc | Parallel processing of data |
+US8555265B2 (en) | 2010-05-04 | 2013-10-08 | Google Inc. | Parallel processing of data |
+US11755351B2 (en) | 2010-05-04 | 2023-09-12 | Google Llc | Parallel processing of data |
+US10795705B2 (en) | 2010-05-04 | 2020-10-06 | Google Llc | Parallel processing of data |
+DE202011110864U1 (en) | 2010-05-04 | 2017-01-16 | Google Inc. | Parallel processing of data |
+US9477502B2 (en) | 2010-05-04 | 2016-10-25 | Google Inc. | Parallel processing of data for an untrusted application |
+US10133592B2 (en) | 2010-05-04 | 2018-11-20 | Google Llc | Parallel processing of data |
+WO2011140201A1 (en) * | 2010-05-04 | 2011-11-10 | Google Inc. | Parallel processing of data |
+WO2011142733A1 (en) * | 2010-05-11 | 2011-11-17 | Thomson Licensing | A configurable computing architecture |
+US20130061231A1 (en) * | 2010-05-11 | 2013-03-07 | Dong-Qing Zhang | Configurable computing architecture |
+US8706659B1 (en) | 2010-05-14 | 2014-04-22 | Google Inc. | Predictive analytic modeling platform |
+US8473431B1 (en) | 2010-05-14 | 2013-06-25 | Google Inc. | Predictive analytic modeling platform |
+US8521664B1 (en) | 2010-05-14 | 2013-08-27 | Google Inc. | Predictive analytical model matching |
+US8909568B1 (en) | 2010-05-14 | 2014-12-09 | Google Inc. | Predictive analytic modeling platform |
+US8311967B1 (en) | 2010-05-14 | 2012-11-13 | Google Inc. | Predictive analytical model matching |
+US9189747B2 (en) | 2010-05-14 | 2015-11-17 | Google Inc. | Predictive analytic modeling platform |
+US8438122B1 (en) | 2010-05-14 | 2013-05-07 | Google Inc. | Predictive analytic modeling platform |
+US9519754B2 (en) | 2010-06-11 | 2016-12-13 | Optuminsight, Inc. | Apparatuses and methods for parallel analytics |
+WO2011156692A1 (en) | 2010-06-11 | 2011-12-15 | Ingenix, Inc. | Apparatuses and methods for parallel analytics |
+US9646024B2 (en) | 2010-06-19 | 2017-05-09 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US20110313973A1 (en) * | 2010-06-19 | 2011-12-22 | Srivas Mandayam C | Map-Reduce Ready Distributed File System |
+US9798735B2 (en) | 2010-06-19 | 2017-10-24 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US9323775B2 (en) * | 2010-06-19 | 2016-04-26 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US9207930B2 (en) | 2010-06-19 | 2015-12-08 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US11726955B2 (en) | 2010-06-19 | 2023-08-15 | Hewlett Packard Enterprise Development Lp | Methods and apparatus for efficient container location database snapshot operation |
+US11657024B2 (en) | 2010-06-19 | 2023-05-23 | Hewlett Packard Enterprise Development Lp | Map-reduce ready distributed file system |
+US9773016B2 (en) | 2010-06-19 | 2017-09-26 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US10146793B2 (en) | 2010-06-19 | 2018-12-04 | Mapr Technologies, Inc. | Map-reduce ready distributed file system |
+US11100055B2 (en) | 2010-06-19 | 2021-08-24 | Hewlett Packard Enterprise Development Lp | Map-reduce ready distributed file system |
+EP2591421A4 (en) * | 2010-07-07 | 2017-12-06 | Alibaba Group Holding Limited | Data analysis using multiple systems |
+US8930896B1 (en) * | 2010-07-23 | 2015-01-06 | Amazon Technologies, Inc. | Data anonymity and separation for user computation |
+US9710671B1 (en) | 2010-07-23 | 2017-07-18 | Amazon Technologies, Inc. | Data anonymity and separation for user computation |
+US10268841B1 (en) | 2010-07-23 | 2019-04-23 | Amazon Technologies, Inc. | Data anonymity and separation for user computation |
+US9760595B1 (en) | 2010-07-27 | 2017-09-12 | Google Inc. | Parallel processing of data |
+US9536014B1 (en) | 2010-07-27 | 2017-01-03 | Google Inc. | Parallel processing of data |
+US9170848B1 (en) | 2010-07-27 | 2015-10-27 | Google Inc. | Parallel processing of data |
+US9274836B2 (en) | 2010-08-10 | 2016-03-01 | International Business Machines Corporation | Scheduling parallel data tasks |
+US8930954B2 (en) | 2010-08-10 | 2015-01-06 | International Business Machines Corporation | Scheduling parallel data tasks |
+US20130239113A1 (en) * | 2010-10-05 | 2013-09-12 | Fujitsu Limited | Information processing apparatus, computer product, and information processing method |
+US8595732B2 (en) | 2010-11-15 | 2013-11-26 | International Business Machines Corporation | Reducing the response time of flexible highly data parallel task by assigning task sets using dynamic combined longest processing time scheme |
+US20120151292A1 (en) * | 2010-12-14 | 2012-06-14 | Microsoft Corporation | Supporting Distributed Key-Based Processes |
+US8499222B2 (en) * | 2010-12-14 | 2013-07-30 | Microsoft Corporation | Supporting distributed key-based processes |
+US9558211B1 (en) | 2010-12-20 | 2017-01-31 | Google Inc. | Incremental schema consistency validation on geographic features |
+US9158803B2 (en) | 2010-12-20 | 2015-10-13 | Google Inc. | Incremental schema consistency validation on geographic features |
+US8527478B1 (en) | 2010-12-20 | 2013-09-03 | Google Inc. | Handling bulk and incremental updates while maintaining consistency |
+US8533423B2 (en) | 2010-12-22 | 2013-09-10 | International Business Machines Corporation | Systems and methods for performing parallel multi-level data computations |
+US10311105B2 (en) | 2010-12-28 | 2019-06-04 | Microsoft Technology Licensing, Llc | Filtering queried data on data stores |
+US9619662B1 (en) | 2011-01-13 | 2017-04-11 | Google Inc. | Virtual network pairs |
+US9135037B1 (en) | 2011-01-13 | 2015-09-15 | Google Inc. | Virtual network protocol |
+US9419921B1 (en) | 2011-01-13 | 2016-08-16 | Google Inc. | Network address translation for virtual machines |
+US9740516B1 (en) | 2011-01-13 | 2017-08-22 | Google Inc. | Virtual network protocol |
+US8533343B1 (en) | 2011-01-13 | 2013-09-10 | Google Inc. | Virtual network pairs |
+US8874888B1 (en) | 2011-01-13 | 2014-10-28 | Google Inc. | Managed boot in a cloud system |
+US8745329B2 (en) | 2011-01-20 | 2014-06-03 | Google Inc. | Storing data across a plurality of storage nodes |
+US9250830B2 (en) | 2011-01-20 | 2016-02-02 | Google Inc. | Storing data across a plurality of storage nodes |
+US8495218B1 (en) | 2011-01-21 | 2013-07-23 | Google Inc. | Managing system resources |
+US8533222B2 (en) | 2011-01-26 | 2013-09-10 | Google Inc. | Updateable predictive analytical modeling |
+US8595154B2 (en) | 2011-01-26 | 2013-11-26 | Google Inc. | Dynamic predictive modeling platform |
+US8250009B1 (en) | 2011-01-26 | 2012-08-21 | Google Inc. | Updateable predictive analytical modeling |
+US9794144B1 (en) | 2011-02-15 | 2017-10-17 | Google Inc. | Correlating status information generated in a computer network |
+US8812586B1 (en) | 2011-02-15 | 2014-08-19 | Google Inc. | Correlating status information generated in a computer network |
+US20120226639A1 (en) * | 2011-03-01 | 2012-09-06 | International Business Machines Corporation | Systems and Methods for Processing Machine Learning Algorithms in a MapReduce Environment |
+US8612368B2 (en) * | 2011-03-01 | 2013-12-17 | International Business Machines Corporation | Systems and methods for processing machine learning algorithms in a MapReduce environment |
+US8261295B1 (en) | 2011-03-16 | 2012-09-04 | Google Inc. | High-level language for specifying configurations of cloud-based deployments |
+US9231933B1 (en) | 2011-03-16 | 2016-01-05 | Google Inc. | Providing application programs with access to secured resources |
+US9176759B1 (en) | 2011-03-16 | 2015-11-03 | Google Inc. | Monitoring and automatically managing applications |
+US9063818B1 (en) | 2011-03-16 | 2015-06-23 | Google Inc. | Automated software updating based on prior activity |
+US8533796B1 (en) | 2011-03-16 | 2013-09-10 | Google Inc. | Providing application programs with access to secured resources |
+US10241770B2 (en) | 2011-03-16 | 2019-03-26 | Google Llc | Cloud-based deployment using object-oriented classes |
+US9557978B2 (en) | 2011-03-16 | 2017-01-31 | Google Inc. | Selection of ranked configurations |
+US9870211B2 (en) | 2011-03-16 | 2018-01-16 | Google Inc. | High-level language for specifying configurations of cloud-based deployments |
+US9237087B1 (en) | 2011-03-16 | 2016-01-12 | Google Inc. | Virtual machine name resolution |
+US11237810B2 (en) | 2011-03-16 | 2022-02-01 | Google Llc | Cloud-based deployment using templates |
+US8732702B2 (en) | 2011-03-23 | 2014-05-20 | Emc Corporation | File system for storage area network |
+US20120254193A1 (en) * | 2011-04-01 | 2012-10-04 | Google Inc. | Processing Data in a Mapreduce Framework |
+US9798831B2 (en) * | 2011-04-01 | 2017-10-24 | Google Inc. | Processing data in a MapReduce framework |
+US8924426B2 (en) | 2011-04-29 | 2014-12-30 | Google Inc. | Joining tables in a mapreduce procedure |
+US9239986B2 (en) | 2011-05-04 | 2016-01-19 | Google Inc. | Assessing accuracy of trained predictive models |
+US8533224B2 (en) | 2011-05-04 | 2013-09-10 | Google Inc. | Assessing accuracy of trained predictive models |
+US9020861B2 (en) | 2011-05-06 | 2015-04-28 | Google Inc. | Predictive model application programming interface |
+US8229864B1 (en) | 2011-05-06 | 2012-07-24 | Google Inc. | Predictive model application programming interface |
+US9124508B2 (en) | 2011-05-23 | 2015-09-01 | Nec Corporation | Communication control device communication control system, communication control method and program |
+US8244831B1 (en) | 2011-05-23 | 2012-08-14 | Ilesfay Technology Group, LLC | Method for the preemptive creation of binary delta information within a computer network |
+DE102011121803A1 (en) | 2011-05-23 | 2012-11-29 | Avaya Inc. | SYSTEM AND METHOD FOR SEARCH-BASED WORKING ASSIGNMENTS IN A CONTACT CENTER |
+US8996655B2 (en) | 2011-05-23 | 2015-03-31 | Autodesk, Inc. | Method for horizontal scale delta encoding |
+US8369509B2 (en) | 2011-05-23 | 2013-02-05 | Avaya Inc. | System and method for search-based work assignments in a contact center |
+US11915033B2 (en) | 2011-06-02 | 2024-02-27 | Google Llc | Virtual network for virtual machine communication and migration |
+US11321110B1 (en) | 2011-06-02 | 2022-05-03 | Google Llc | Virtual network for virtual machine communication and migration |
+US10228959B1 (en) | 2011-06-02 | 2019-03-12 | Google Llc | Virtual network for virtual machine communication and migration |
+US8494850B2 (en) | 2011-06-30 | 2013-07-23 | Google Inc. | Speech recognition using variable-length context |
+US8959014B2 (en) | 2011-06-30 | 2015-02-17 | Google Inc. | Training acoustic models using distributed computing techniques |
+US8370280B1 (en) | 2011-07-14 | 2013-02-05 | Google Inc. | Combining predictive models in predictive analytical modeling |
+US8910188B1 (en) * | 2011-07-14 | 2014-12-09 | Google Inc. | Deterministic data processing |
+US8364613B1 (en) | 2011-07-14 | 2013-01-29 | Google Inc. | Hosting predictive models |
+US8443013B1 (en) | 2011-07-29 | 2013-05-14 | Google Inc. | Predictive analytical modeling for databases |
+US9769662B1 (en) | 2011-08-11 | 2017-09-19 | Google Inc. | Authentication based on proximity to mobile device |
+US9075979B1 (en) | 2011-08-11 | 2015-07-07 | Google Inc. | Authentication based on proximity to mobile device |
+US10212591B1 (en) | 2011-08-11 | 2019-02-19 | Google Llc | Authentication based on proximity to mobile device |
+US8706656B1 (en) | 2011-08-26 | 2014-04-22 | Google Inc. | Multi-label modeling using a plurality of classifiers |
+US8694540B1 (en) | 2011-09-01 | 2014-04-08 | Google Inc. | Predictive analytical model selection |
+US9501233B2 (en) | 2011-09-01 | 2016-11-22 | Google Inc. | Providing snapshots of virtual storage devices |
+US9251234B1 (en) | 2011-09-01 | 2016-02-02 | Google Inc. | Providing snapshots of virtual storage devices |
+US8966198B1 (en) | 2011-09-01 | 2015-02-24 | Google Inc. | Providing snapshots of virtual storage devices |
+US9069616B2 (en) | 2011-09-23 | 2015-06-30 | Google Inc. | Bandwidth throttling of virtual disks |
+US9406019B2 (en) | 2011-09-29 | 2016-08-02 | Google Inc. | Normalization of predictive model scores |
+US10504024B2 (en) | 2011-09-29 | 2019-12-10 | Google Llc | Normalization of predictive model scores |
+US8370279B1 (en) | 2011-09-29 | 2013-02-05 | Google Inc. | Normalization of predictive model scores |
+US8959138B2 (en) | 2011-09-30 | 2015-02-17 | International Business Machines Corporation | Distributed data scalable adaptive map-reduce framework |
+US20130086355A1 (en) * | 2011-09-30 | 2013-04-04 | International Business Machines Corporation | Distributed Data Scalable Adaptive Map-Reduce Framework |
+US9053067B2 (en) * | 2011-09-30 | 2015-06-09 | International Business Machines Corporation | Distributed data scalable adaptive map-reduce framework |
+US11882109B2 (en) | 2011-10-03 | 2024-01-23 | Verisign, Inc. | Authenticated name resolution |
+CN102436408B (en) * | 2011-10-10 | 2014-02-19 | 上海交通大学 | Data storage cloud and cloud backup method based on Map/Dedup |
+CN102436408A (en) * | 2011-10-10 | 2012-05-02 | 上海交通大学 | Data storage cloud and cloud backup method based on Map/Dedup |
+US8276140B1 (en) | 2011-11-14 | 2012-09-25 | Google Inc. | Adjustable virtual network performance |
+US9244721B2 (en) | 2011-11-24 | 2016-01-26 | Hitachi, Ltd. | Computer system and divided job processing method and program |
+US9609051B2 (en) | 2011-12-01 | 2017-03-28 | International Business Machines Corporation | Method and system of network transfer adaptive optimization in large-scale parallel computing system |
+DE102012221059B4 (en) | 2011-12-01 | 2018-08-02 | International Business Machines Corporation | Method and system of customizable network transmission optimization in large parallel computing systems |
+US9369350B2 (en) | 2011-12-01 | 2016-06-14 | International Business Machines Corporation | Method and system of network transfer adaptive optimization in large-scale parallel computing system |
+US8958293B1 (en) | 2011-12-06 | 2015-02-17 | Google Inc. | Transparent load-balancing for cloud computing services |
+US9178698B1 (en) | 2011-12-21 | 2015-11-03 | Google Inc. | Dynamic key management |
+US8800009B1 (en) | 2011-12-30 | 2014-08-05 | Google Inc. | Virtual machine service access |
+US8983860B1 (en) | 2012-01-30 | 2015-03-17 | Google Inc. | Advertising auction system |
+US9672052B1 (en) | 2012-02-16 | 2017-06-06 | Google Inc. | Secure inter-process communication |
+WO2013123106A1 (en) | 2012-02-17 | 2013-08-22 | Google Inc. | A system and method for a map flow worker |
+US20130219394A1 (en) * | 2012-02-17 | 2013-08-22 | Kenneth Jerome GOLDMAN | System and method for a map flow worker |
+US8996887B2 (en) | 2012-02-24 | 2015-03-31 | Google Inc. | Log structured volume encryption for virtual machines |
+US8677449B1 (en) | 2012-03-19 | 2014-03-18 | Google Inc. | Exposing data to virtual machines |
+US20130263142A1 (en) * | 2012-03-27 | 2013-10-03 | Fujitsu Limited | Control device, control method, computer readable recording medium in which program is recorded, and distributed processing system |
+US9720952B2 (en) | 2012-03-27 | 2017-08-01 | Google Inc. | Virtual block devices |
+US9069806B2 (en) | 2012-03-27 | 2015-06-30 | Google Inc. | Virtual block devices |
+US9639575B2 (en) | 2012-03-30 | 2017-05-02 | Khalifa University Of Science, Technology And Research | Method and system for processing data queries |
+WO2013144535A1 (en) | 2012-03-30 | 2013-10-03 | Khalifa University of Science, Technology, and Research | Method and system for processing data queries |
+US9652502B2 (en) | 2012-03-30 | 2017-05-16 | Khalifa University Of Science, Technology And Research | Method and system for continuous query processing |
+US8909939B1 (en) | 2012-04-04 | 2014-12-09 | Google Inc. | Distribution of cryptographic host keys in a cloud computing environment |
+US9436740B2 (en) | 2012-04-04 | 2016-09-06 | Microsoft Technology Licensing, Llc | Visualization of changing confidence intervals |
+WO2013153029A1 (en) | 2012-04-12 | 2013-10-17 | Telefonica, S.A. | Method and system for managing and processing data in a distributed computing platform |
+WO2013153027A1 (en) | 2012-04-12 | 2013-10-17 | Telefónica, S.A. | Method and system for streaming processing in a map and reduce distributed computing platform |
+US20130297624A1 (en) * | 2012-05-07 | 2013-11-07 | Microsoft Corporation | Interoperability between Map-Reduce and Distributed Array Runtimes |
+US9747131B1 (en) * | 2012-05-24 | 2017-08-29 | Google Inc. | System and method for variable aggregation in order for workers in a data processing to share information |
+US8972986B2 (en) | 2012-05-25 | 2015-03-03 | International Business Machines Corporation | Locality-aware resource allocation for cloud computing |
+US8984515B2 (en) | 2012-05-31 | 2015-03-17 | International Business Machines Corporation | System and method for shared execution of mixed data flows |
+US8984516B2 (en) | 2012-05-31 | 2015-03-17 | International Business Machines Corporation | System and method for shared execution of mixed data flows |
+US9239827B2 (en) | 2012-06-19 | 2016-01-19 | Microsoft Technology Licensing, Llc | Identifying collocations in a corpus of text in a distributed computing environment |
+CN103514205A (en) * | 2012-06-27 | 2014-01-15 | 中国电信股份有限公司 | Mass data processing method and system |
+US9607045B2 (en) | 2012-07-12 | 2017-03-28 | Microsoft Technology Licensing, Llc | Progressive query computation using streaming architectures |
+US10140358B2 (en) | 2012-07-12 | 2018-11-27 | Microsoft Technology Licensing, Llc | Progressive query computation using streaming architectures |
+US20150128150A1 (en) * | 2012-08-02 | 2015-05-07 | Fujitsu Limited | Data processing method and information processing apparatus |
+US20140040292A1 (en) * | 2012-08-03 | 2014-02-06 | Tata Consultancy Services Limited | System and method for massive call data storage and retrieval |
+US9742674B1 (en) | 2012-08-15 | 2017-08-22 | F5 Networks, Inc. | Methods for distributed application visibility and reporting and devices thereof |
+US20140095505A1 (en) * | 2012-10-01 | 2014-04-03 | Longsand Limited | Performance and scalability in an intelligent data operating layer system |
+US9323767B2 (en) * | 2012-10-01 | 2016-04-26 | Longsand Limited | Performance and scalability in an intelligent data operating layer system |
+WO2014061065A1 (en) | 2012-10-18 | 2014-04-24 | Hitachi, Ltd. | Distribution processing unit of shared storage |
+US9146694B2 (en) * | 2012-10-18 | 2015-09-29 | Hitachi, Ltd. | Distribution processing unit of shared storage |
+US20140115019A1 (en) * | 2012-10-18 | 2014-04-24 | Hitachi, Ltd. | Distribution processing unit of shared storage |
+US20140123115A1 (en) * | 2012-10-26 | 2014-05-01 | Jsmapreduce Corporation | Hybrid local/remote infrastructure for data processing with lightweight setup, powerful debuggability, controllability, integration, and productivity features |
+US9146830B2 (en) * | 2012-10-26 | 2015-09-29 | Jsmapreduce Corporation | Hybrid local/remote infrastructure for data processing with lightweight setup, powerful debuggability, controllability, integration, and productivity features |
+US9336771B2 (en) * | 2012-11-01 | 2016-05-10 | Google Inc. | Speech recognition using non-parametric models |
+US20150371633A1 (en) * | 2012-11-01 | 2015-12-24 | Google Inc. | Speech recognition using non-parametric models |
+DE202013012168U1 (en) | 2012-11-08 | 2015-10-15 | Linkedln Corporation | competence confirmations |
+US20150244757A1 (en) * | 2012-11-27 | 2015-08-27 | Tencent Technology (Shenzhen) Company Limited | Transcoding Method and System, and Distributed File Apparatus |
+US10291673B2 (en) * | 2012-11-27 | 2019-05-14 | Tencent Technology (Shenzhen) Company Limited | Transcoding method and system, and distributed file apparatus |
+US9535742B1 (en) | 2012-12-27 | 2017-01-03 | Google Inc. | Clustering for parallel processing |
+US9336024B1 (en) | 2012-12-27 | 2016-05-10 | Google Inc. | Clustering for parallel processing |
+US9105042B2 (en) | 2013-02-07 | 2015-08-11 | Verizon Patent And Licensing Inc. | Customer sentiment analysis using recorded conversation |
+US9992269B1 (en) * | 2013-02-25 | 2018-06-05 | EMC IP Holding Company LLC | Distributed complex event processing |
+US11144931B2 (en) | 2013-02-25 | 2021-10-12 | At&T Mobility Ip, Llc | Mobile wireless customer micro-care apparatus and method |
+US9430255B1 (en) | 2013-03-15 | 2016-08-30 | Google Inc. | Updating virtual machine generated metadata to a distribution service for sharing and backup |
+US20150205633A1 (en) * | 2013-05-24 | 2015-07-23 | Google Inc. | Task management in single-threaded environments |
+US9753783B2 (en) * | 2013-05-31 | 2017-09-05 | Samsung Sds Co., Ltd. | System and method for accelerating mapreduce operation |
+US20140358869A1 (en) * | 2013-05-31 | 2014-12-04 | Samsung Sds Co., Ltd. | System and method for accelerating mapreduce operation |
+WO2014200877A1 (en) * | 2013-06-12 | 2014-12-18 | Microsoft Corporation | Deterministic progressive big data analytics |
+US9514214B2 (en) | 2013-06-12 | 2016-12-06 | Microsoft Technology Licensing, Llc | Deterministic progressive big data analytics |
+US9448851B2 (en) | 2013-06-19 | 2016-09-20 | International Business Machines Corporation | Smarter big data processing using collaborative map reduce frameworks |
+US9424074B1 (en) * | 2013-07-01 | 2016-08-23 | Google Inc. | Method for learning backup policies for large-scale distributed computing |
+US8819335B1 (en) | 2013-08-30 | 2014-08-26 | NXGN Data, Inc. | System and method for executing map-reduce tasks in a storage device |
+US20150074071A1 (en) * | 2013-09-12 | 2015-03-12 | Neustar,Inc. | Method and system for performing transactional updates in a key-value store |
+US9898501B2 (en) * | 2013-09-12 | 2018-02-20 | Neustar, Inc. | Method and system for performing transactional updates in a key-value store |
+US10067788B2 (en) | 2013-12-11 | 2018-09-04 | Dropbox, Inc. | Automated invalidation of job output data in a job processing system |
+US9269057B1 (en) | 2013-12-11 | 2016-02-23 | Google, Inc. | Using specialized workers to improve performance in machine learning |
+US20150160974A1 (en) * | 2013-12-11 | 2015-06-11 | Dropbox, Inc. | Job-processing systems and methods with inferred dependencies between jobs |
+US10372492B2 (en) * | 2013-12-11 | 2019-08-06 | Dropbox, Inc. | Job-processing systems and methods with inferred dependencies between jobs |
+US9465653B2 (en) | 2013-12-11 | 2016-10-11 | Dropbox, Inc. | Automated invalidation of job output data in a job-processing system |
+US9613436B1 (en) | 2013-12-23 | 2017-04-04 | Sensing Electromagnetic Plus Corp. | Optimization methods for feature detection |
+US11663520B1 (en) | 2013-12-30 | 2023-05-30 | Google Llc | Regularization relaxation scheme |
+US10438129B1 (en) | 2013-12-30 | 2019-10-08 | Google Llc | Regularization relaxation scheme |
+US9679012B1 (en) | 2014-02-28 | 2017-06-13 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9684666B1 (en) | 2014-02-28 | 2017-06-20 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9684671B1 (en) | 2014-02-28 | 2017-06-20 | Pivotal Software, Inc. | Parallel streaming of external data |
+US9898469B1 (en) | 2014-02-28 | 2018-02-20 | Pivotal Software, Inc. | Parallel streaming of external data |
+WO2015152871A1 (en) * | 2014-03-31 | 2015-10-08 | Hewlett-Packard Development Company, L.P. | Prioritization of network traffic in a distributed processing system |
+US10153979B2 (en) | 2014-03-31 | 2018-12-11 | Hewlett Packard Enterprise Development Lp | Prioritization of network traffic in a distributed processing system |
+US9338234B2 (en) | 2014-04-16 | 2016-05-10 | Microsoft Technology Licensing, Llc | Functional programming in distributed computing |
+US10291693B2 (en) * | 2014-04-30 | 2019-05-14 | Hewlett Packard Enterprise Development Lp | Reducing data in a network device |
+US20160352820A1 (en) * | 2014-04-30 | 2016-12-01 | Hewlett Packard Enterprise Development Lp | Reducing data in a network device |
+US20150326644A1 (en) * | 2014-05-07 | 2015-11-12 | Microsoft Corporation | Traveling map-reduce architecture |
+CN106462462A (en) * | 2014-05-07 | 2017-02-22 | 微软技术许可有限责任公司 | Traveling map-reduce architecture |
+CN104009904B (en) * | 2014-05-23 | 2017-09-22 | 清华大学 | The virtual network construction method and system of facing cloud platform big data processing |
+CN104009904A (en) * | 2014-05-23 | 2014-08-27 | 清华大学 | Method and system for establishing virtual network for big data processing of cloud platform |
+US11169993B2 (en) | 2014-06-06 | 2021-11-09 | The Mathworks, Inc. | Datastore mechanism for managing out-of-memory data |
+US9996597B2 (en) | 2014-06-06 | 2018-06-12 | The Mathworks, Inc. | Unified mapreduce framework for large-scale data processing |
+US9858922B2 (en) | 2014-06-23 | 2018-01-02 | Google Inc. | Caching speech recognition scores |
+US10642866B1 (en) | 2014-06-30 | 2020-05-05 | Quantcast Corporation | Automated load-balancing of partitions in arbitrarily imbalanced distributed mapreduce computations |
+US9613127B1 (en) * | 2014-06-30 | 2017-04-04 | Quantcast Corporation | Automated load-balancing of partitions in arbitrarily imbalanced distributed mapreduce computations |
+US10204619B2 (en) | 2014-10-22 | 2019-02-12 | Google Llc | Speech recognition using associative mapping |
+CN104378665B (en) * | 2014-11-24 | 2018-02-27 | 深圳市天威视讯股份有限公司 | A kind of distributed trans-coding system and method based on DTV |
+CN104378665A (en) * | 2014-11-24 | 2015-02-25 | 深圳市天威视讯股份有限公司 | Distributed transcoding system and method based on digital television |
+US10505818B1 (en) | 2015-05-05 | 2019-12-10 | F5 Networks. Inc. | Methods for analyzing and load balancing based on server health and devices thereof |
+CN106407231A (en) * | 2015-08-03 | 2017-02-15 | 天脉聚源（北京）科技有限公司 | A data multi-thread export method and system |
+US9645867B2 (en) | 2015-10-12 | 2017-05-09 | International Business Machines Corporation | Shuffle optimization in map-reduce processing |
+US9558049B1 (en) * | 2015-10-12 | 2017-01-31 | International Business Machines Corporation | Shuffle optimization in map-reduce processing |
+TWI614682B (en) * | 2016-03-24 | 2018-02-11 | 聯發科技股份有限公司 | Efficient work execution in a parallel computing system |
+US20170323028A1 (en) * | 2016-05-04 | 2017-11-09 | Uncharted Software Inc. | System and method for large scale information processing using data visualization for multi-scale communities |
+CN107515880A (en) * | 2016-06-17 | 2017-12-26 | 宏碁股份有限公司 | data distributed processing system and method |
+US10878336B2 (en) | 2016-06-24 | 2020-12-29 | Intel Corporation | Technologies for detection of minority events |
+US10740328B2 (en) | 2016-06-24 | 2020-08-11 | Microsoft Technology Licensing, Llc | Aggregate-query database system and processing |
+US10999240B1 (en) * | 2016-08-31 | 2021-05-04 | Verisign, Inc. | Client controlled domain name service (DNS) resolution |
+US11700230B1 (en) | 2016-08-31 | 2023-07-11 | Verisign, Inc. | Client controlled domain name service (DNS) resolution |
+US20180081664A1 (en) * | 2016-09-20 | 2018-03-22 | Bluedata Software, Inc. | Generation and deployment of scripts for large scale processing framework services |
+US10146519B2 (en) * | 2016-09-20 | 2018-12-04 | Bluedata Software, Inc. | Generation and deployment of scripts for large scale processing framework services |
+US10540162B2 (en) * | 2016-09-20 | 2020-01-21 | Hewlett Packard Enterprise Development Lp | Generating service images having scripts for the deployment of services |
+US10176092B2 (en) | 2016-09-21 | 2019-01-08 | Ngd Systems, Inc. | System and method for executing data processing tasks using resilient distributed datasets (RDDs) in a storage device |
+US10359953B2 (en) * | 2016-12-16 | 2019-07-23 | Western Digital Technologies, Inc. | Method and apparatus for offloading data processing to hybrid storage devices |
+US10114581B1 (en) | 2016-12-27 | 2018-10-30 | EMC IP Holding Company LLC | Creating a virtual access point in time on an object based journal replication |
+US10776211B1 (en) | 2016-12-27 | 2020-09-15 | EMC IP Holding Company LLC | Methods, systems, and apparatuses to update point in time journal using map reduce to create a highly parallel update |
+US11621940B2 (en) | 2017-01-21 | 2023-04-04 | Verisign, Inc. | Systems, devices, and methods for generating a domain name using a user in interface |
+US10552435B2 (en) | 2017-03-08 | 2020-02-04 | Microsoft Technology Licensing, Llc | Fast approximate results and slow precise results |
+US11687451B2 (en) | 2017-03-23 | 2023-06-27 | Telefonaktiebolaget Lm Ericsson (Publ) | Memory allocation manager and method performed thereby for managing memory allocation |
+US10803023B2 (en) | 2017-04-02 | 2020-10-13 | Sas Institute Inc. | Techniques for reading from and writing to distributed data stores |
+US10803024B2 (en) | 2017-04-02 | 2020-10-13 | Sas Institute Inc. | Techniques for reading from and writing to distributed data stores |
+US20190121894A1 (en) * | 2017-10-20 | 2019-04-25 | Intuit Inc. | Parallel map and reduce on hash chains |
+US11170000B2 (en) * | 2017-10-20 | 2021-11-09 | Intuit Inc. | Parallel map and reduce on hash chains |
+US11061942B2 (en) | 2018-09-07 | 2021-07-13 | Graywell, Inc. | Unstructured data fusion by content-aware concurrent data processing pipeline |
+CN110928897B (en) * | 2018-09-20 | 2022-04-26 | 艾玛迪斯简易股份公司 | System and method for processing input sequence of multiple function calls on at least one processor |
+FR3086424A1 (en) | 2018-09-20 | 2020-03-27 | Amadeus S.A.S. | PROCESSING A SEQUENCE OF FUNCTIONAL CALLS |
+EP3627346A1 (en) | 2018-09-20 | 2020-03-25 | Amadeus S.A.S. | Function call sequence processing |
+US11157308B2 (en) | 2018-09-20 | 2021-10-26 | Amadeus S.A.S. | Function call sequence processing |
+CN110928897A (en) * | 2018-09-20 | 2020-03-27 | 艾玛迪斯简易股份公司 | Function call sequence handling |
+CN109710263A (en) * | 2018-12-18 | 2019-05-03 | 北京字节跳动网络技术有限公司 | Compilation Method, device, storage medium and the electronic equipment of code |
+US11281531B2 (en) * | 2019-06-25 | 2022-03-22 | Western Digital Technologies, Inc. | Serial storage node processing of data functions |
+US11314593B2 (en) * | 2019-06-25 | 2022-04-26 | Western Digital Technologies, Inc. | Storage node processing of data functions using overlapping symbols |
+US10990324B2 (en) | 2019-06-25 | 2021-04-27 | Western Digital Technologies, Inc. | Storage node processing of predefined data functions |
+US11055018B2 (en) * | 2019-06-25 | 2021-07-06 | Western Digital Technologies, Inc. | Parallel storage node processing of data functions |
+US11893267B2 (en) | 2022-01-14 | 2024-02-06 | Bank Of America Corporation | Data flow control and routing using machine learning |
+US11985105B2 (en) | 2022-03-24 | 2024-05-14 | Verisign, Inc. | Techniques for directing a domain name service (DNS) resolution process |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US11650971B2 (en) | System and method for large-scale data processing using an application-independent framework | |
+US7650331B1 (en) | System and method for efficient large-scale data processing | |
+US9886325B2 (en) | System and method for limiting the impact of stragglers in large-scale parallel data processing | |
+US20220171781A1 (en) | System And Method For Analyzing Data Records | |
+US9760595B1 (en) | Parallel processing of data | |
+US9977689B2 (en) | Dynamic scaling of management infrastructure in virtual environments | |
+US7647590B2 (en) | Parallel computing system using coordinator and master nodes for load balancing and distributing work | |
+US5640584A (en) | Virtual processor method and apparatus for enhancing parallelism and availability in computer systems | |
+CN116302574B (en) | Concurrent processing method based on MapReduce | |
+Bhatt | Performance Evaluation of Load Balancing Algorithms in Hadoop | |
+Bindschaedler | An Architecture for Load Balance in Computer Cluster Applications | |
+Divya et al. | A multi-agent based intelligent query processing system for Hadoop with FIPA-OS using cooperating agent in cloud environment | |
+Vijayasherly et al. | Implementation of Load Balancing Algorithm for Data Intensive Applications using MPI | |
+Sammulal et al. | Performance Improvement in a Multi Cluster using a Modified Scheduling and Global Memory Management with a Novel Load Balancing Mechanism | |
+Mundada et al. | CACHE MECHANISM TO AVOID DULPICATION OF SAME THING IN HADOOP SYSTEM TO SPEED UP THE EXTENSION | |
+Chung et al. | Parallel Distributive Join Algorithm on the Intel Paragon |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE, INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:DEAN, JEFFREY;GHEMAWAT, SANJAY;REEL/FRAME:015090/0038Effective date: 20040628 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+CC | Certificate of correction | ||
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044101/0610Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 12 |

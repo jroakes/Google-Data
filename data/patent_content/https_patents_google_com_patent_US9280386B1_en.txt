@@ -1,0 +1,426 @@
+US9280386B1 - Identifying task instance outliers based on metric data in a large scale parallel processing system - Google Patents
+Identifying task instance outliers based on metric data in a large scale parallel processing system Download PDFInfo
+- Publication number
+- US9280386B1 US9280386B1 US13/183,234 US201113183234A US9280386B1 US 9280386 B1 US9280386 B1 US 9280386B1 US 201113183234 A US201113183234 A US 201113183234A US 9280386 B1 US9280386 B1 US 9280386B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- task
+- computer
+- performance measure
+- task instance
+- instance
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/50—Allocation of resources, e.g. of the central processing unit [CPU]
+- G06F9/5005—Allocation of resources, e.g. of the central processing unit [CPU] to service a request
+- G06F9/5027—Allocation of resources, e.g. of the central processing unit [CPU] to service a request the resource being a machine, e.g. CPUs, Servers, Terminals
+- G06F9/5038—Allocation of resources, e.g. of the central processing unit [CPU] to service a request the resource being a machine, e.g. CPUs, Servers, Terminals considering the execution order of a plurality of tasks, e.g. taking priority or time dependency constraints into consideration
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/48—Program initiating; Program switching, e.g. by interrupt
+- G06F9/4806—Task transfer initiation or dispatching
+- G06F9/4843—Task transfer initiation or dispatching by program, e.g. task dispatcher, supervisor, operating system
+- G06F9/4881—Scheduling strategies for dispatcher, e.g. round robin, multi-level priority queues
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/50—Allocation of resources, e.g. of the central processing unit [CPU]
+- G06F9/5083—Techniques for rebalancing the load in a distributed system
+- G06F9/5088—Techniques for rebalancing the load in a distributed system involving task migration
+Definitions
+- This document relates to managing task performance.
+- Systems for large-scale parallel processing can include performing computer tasks and/or processes on a cluster of computers and/or servers (e.g., task parallelism).
+- Each computer in the cluster can perform part of the task by executing one or more task instances.
+- task instances can be performed in parallel on each server within a cluster of servers and can interact with on the same or different data.
+- Each task instance executes the same software program.
+- the cluster can include computers that share a common platform, e.g., computers that use the same type of CPU and have identical or nearly identical memory configurations, and can include computers of various platform types.
+- multiple servers within a cluster can be implemented on a single physical device.
+- the servers may be implemented as virtual machines, with multiple virtual machines running on a single computer.
+- Each computer in a cluster can instantiate multiple task instances associated with one or more tasks. As a computer in the cluster performs the tasks defined by the task instances, the task instances can use a common resource, such as the CPU or memory. Because the task instances share common resources, one task instance can interfere with the performance of other task instances executing on the same computer. For example, one task instance can require or use a greater share of the CPU or memory than other task instances and can cause the other task instances on the computer to have increased task latency or increase the number of CPU cycles needed to complete an instruction.
+- This specification describes techniques for managing task performance, including identifying poorly performing task instances.
+- one innovative aspect of the subject matter described in this specification can be embodied in methods that include the actions of: receiving metric data associated with an execution of each of a plurality of task instances, with each task instance including one or more computer-executable instructions, wherein the plurality of task instances are executed on one or more computers, the plurality of task instances include task instances associated with a task, and the metric data for each task instance relating to an execution performance of the task instance; for each task instance: determining a deviation of the metric data associated with the task instance relative to an overall measure of the metric data for the plurality of task instances of the task during each of a plurality of intervals; and combining deviation measurements for the task instance that exceed a threshold deviation to obtain a combined deviation value, wherein each deviation measurement corresponds to the deviation of the metric data for one of the plurality of intervals; ranking the combined deviation values associated with at least a subset of the plurality of task instances to identify an outlier; and generating a report including the ranked combined deviation values.
+- the overall measure can include a standard deviation associated with the received metric data associated with the task.
+- the standard deviation can be based on cycle per instruction values associated with the plurality of task instances.
+- the threshold deviation can be based on a function of a mean cycle per instruction value associated with the task performed on the one or more computers and the standard deviation.
+- the deviation measurement can be based on the mean cycle per instruction value associated with the task performed on the one or more computers, the standard deviation associated with the task and the metric data associated with the task instance.
+- the one or more computers can include one or more computers of the same platform.
+- the method can also include modifying an execution of a particular task instance executed on a first computer based on the ranking of the combined deviation values.
+- the method can also include providing the report to a user and receiving an input from the user, wherein the input causes an execution of a particular task instance executed on a first computer to be modified and wherein the input is based on the ranking of the combined deviation values.
+- FIG. 1 is a block diagram of an example environment for managing task performance.
+- FIG. 2 lists example entries in the database.
+- FIG. 3 is a portion of an example file including task instances and metric data associated with each task instance.
+- FIG. 4 is an example performance report.
+- FIG. 5 is an illustration of an example process for managing task performance.
+- a cluster of computer can perform a plurality of tasks by executing multiple task instances on a cluster of computers in parallel (e.g, task parallelism). Each task instance executes the same software code and can have similar workloads.
+- Each computer collects metric data (i.e., performance metrics) associated with the task instances, e.g, the number of instructions and cycles per instruction (“CPI”) used by a task instance to perform a task and cache access and/or memory usage associated with the task instance, and provides the metric data to a metric data engine.
+- the metric data can be monitored or collected as the task instances are performed (e.g., collected on-the-fly) and can be provided to the metric data engine with low latency.
+- the metric data can be provided to the metric data engine via a network connection or other connection.
+- the metric data engine can store the metric data associated with each task instance in a database. For each task performed on a particular platform in the cluster, the metric data engine calculates statistical data based on the metric data for the various task instances that perform the task, e.g., the mean CPI associated with the task and the standard deviation associated with the task.
+- the metric data engine can use the statistical data associated with a task executed on a platform to determine if any of the task instances executed on the platform are performing poorly. For example, an outlier detector can identify task instances with a CPI greater than a threshold value based on the calculated statistical data.
+- a report can be generated listing the task instances having the greatest deviation from the mean CPI of the platform. These poorly performing task instances can be terminated (at least on the current platform or cluster) and/or otherwise adjusted to improve overall performance.
+- FIG. 1 is a block diagram of an example environment 100 for managing task performance.
+- the example environment 100 includes a cluster of computers 102 and a performance analysis engine 104 that includes a metric data engine 106 , a database 108 , an outlier detector 110 , and a report generator 112 .
+- the cluster of computers 102 can include multiple computers and/or servers and can include various platform types.
+- cluster 102 can include five computers associated with a first platform type (2 GHz dual core processors and 6 MB level three (“L3”) cache), two computers associated with a second platform type (2.6 GHz processor and 8 MB L3 cache) and three servers associated with a third platform type (2.2 GHZ quad core processors and 6 MB L3 cache).
+- L3 GHz dual core processors and 6 MB level three
+- the term “computer” will be used to include servers and other types of computers.
+- FIG. 1 illustrates only one cluster, additional clusters can be included in the environment 100 .
+- the cluster 102 can perform a task that is instantiated in multiple task instances, which can be executed in parallel. For example, cluster 102 can execute a dictionary lookup that is searching for words that include a particular substring and is divided into twenty-six task instances (one task instance for each letter of the alphabet). The twenty-six task instances can be distributed across the computers in the cluster 102 and performed in parallel. Each computer in the cluster 102 can perform multiple task instances associated with the same task.
+- the cluster 102 can perform multiple tasks that are each instantiated as multiple parallel task instances.
+- each computer in the cluster 102 can perform dictionary lookup task instances and data modeling task instances.
+- Each computer in the cluster 102 can include one or more performance counters to measure metric data associated with the computer and the task instances executed on the computer.
+- each computer in the cluster 102 can include a CPU that includes a performance counter.
+- a first performance counter can count the number of instructions performed and a second performance counter can count the CPU cycles used by the computer to execute a task instance.
+- the performance counter can determine the memory usage associated with each task instance (e.g., the number of cache misses and the number of cache references, hereinafter referred to as “cache data”) and the amount of time or number of cycles each task instance waits for a memory access.
+- the cache data can be used to calculate a cache hit/miss ratio and/or infer cache occupancy.
+- the performance counter can continuously measure the metric data and provide the metric data associated with each task instance to the performance analysis engine 104 .
+- the metric data can be monitored or collected on-the-fly and can be provided to the performance analysis engine 104 via a network connection or other data connection.
+- the performance counter collects metric data and periodically provides the collected metric data to the performance analysis engine 104 .
+- the performance counter can store metric data in a memory, and the performance analysis engine 104 can periodically retrieve the metric data from the memory.
+- the performance analysis engine 104 can include a metric data engine 106 , a database 108 , an outlier detector and a report generator 112 .
+- the metric data engine 106 can receive metric data from the cluster 102 .
+- the metric data engine 106 can continuously receive the metric data from the cluster 102 or can periodically receive metric data from each computer in the cluster 102 .
+- the metric data engine 106 receives the data from each computer every five minutes.
+- the metric data engine 106 periodically receives the metric data from the cluster 102 , each computer in the cluster 102 can continuously collect the metric data.
+- the metric data engine 106 can store the metric data received from each computer in the cluster 102 in the database 108 .
+- the database 108 can be any appropriate type of database or other memory that can be accessed by the metric data engine 106 , the outlier detector 110 and/or the report generator 112 .
+- the database 108 can store the metric data and organized by time interval associated with the metric data, task instance and the computer that provided the data.
+- the metric data engine 106 can also associate information to uniquely identify a task instance with the metric data associated with the task instance. For example, the metric data engine 106 can store the task name, an index number associated with the task instance and the user that initiated the task corresponding to the task instance.
+- the metric data engine 106 can use the metric data collected from the cluster 102 to determine statistical data for a particular task executed on a particular platform. For example, the metric data engine 106 can determine the mean CPI and the standard deviation associated with the CPI for dictionary lookup task instances executed on computers having a 2 GHz dual core processor with 4 MB L3 cache. In some implementations, the metric data engine 106 can also determine statistical data associated with the cache usage associated with a particular task executed on a particular platform. The statistical data can be stored in the database 108 and can be associated with an indicator or descriptor that describes the task, the platform type and the time at which the mean CPI was calculated. In some implementations, the metric data engine 106 can calculate other statistical data, such as the mean CPI and/or variance of the metric data.
+- FIG. 2 illustrates example entries 200 in the database 108 .
+- Each row includes the statistical data associated with a particular platform and a particular task.
+- row 202 lists the mean CPI and standard deviation associated with the dictionary lookup task performed on Platform A.
+- Row 204 lists the metric data associated with the dictionary lookup task performed on Platform B.
+- the rows 202 and 204 can include other data such as the mean cache data and/or number of task instances associated with the task executed on the same platform.
+- the outlier detector 110 can access the database 108 and analyze the metric data to identify tasks or task instances that are performing poorly. For example, the outlier detector 110 can access the database 108 and analyze metric data associated with a data modeling task performed on computers having a 2.5 GHz processor and 6 MB of L3 cache to determine if a task instance is performing poorly. In some implementations, the outlier detector 110 analyzes the CPI associated with a task instance as it is received from the cluster 102 and compares it to a threshold value.
+- the threshold value can be a function of the statistical data, such as the mean CPI and standard deviation, associated with the task performed on the particular platform.
+- the standard deviation scaling factor e.g., 3 . 3
+- the scaling factor equal to 3.3 decreases the sensitivity for detecting outliers such that the probability that an outlier exists is approximately 1 in 1000 (based on a normal distribution).
+- the scaling factor can be chosen based on Chebyshev's Inequality, assuming the performance of tasks is a random variable.
+- Other threshold values can be used.
+- the threshold value can be a predetermined number, a ratio of the task instance's CPI to the mean CPI or can be a value greater than a predetermined percentage than the mean CPI, such as 30% greater than the mean CPI.
+- the outlier detector 110 analyzes the cache data associated with a task instance and compares it to a threshold value based on the mean cache data associated with the task executed on the platform.
+- the outlier detector 110 can generate a score associated with the task instance.
+- the score can be an indication of how poorly the task instance is performing.
+- Various methods can be used to determine the score associated with the task instance. For example, the outlier detector 110 can generate a score using the task instance's CPI, the mean CPI for the task on the platform, and the standard deviation of the task.
+- a poorly performing task instance is associated with a higher score than a task instance that is not performing poorly.
+- the outlier detector 110 can store the score and the metric data associated with the task instance in a file in the database 108 (an “outlier score file”). For example, the outlier detector 110 can store the task instance's CPI, the time stamp associated with the CPI and a score associated with the task instance.
+- FIG. 3 illustrates a portion of an example outlier score file 300 .
+- the outlier score file 300 includes header information 302 and entries 304 associated with task instances having a CPI greater than the threshold value.
+- the header 302 includes information such as the name of the computer that executed the task instance (“Host”), information to uniquely identify the task instance (“Task,” “Index” and “User”), the mean CPI for the platform (“Mean CPI”), the standard deviation associated with the task across the platform (“STD”) and the threshold value (“Threshold CPI”).
+- the header information 302 is not stored in the outlier score file 300 . Instead, the header information is maintained in a separate file that includes header information for each task instance performed on the platform.
+- Each entry 304 includes the time stamp associated with the task instance's CPI measurement, the CPI measurement collected by the Host, and the score generated by the outlier detector 110 .
+- the entries 304 also include other metric data associated with the task instance, such as the cache data.
+- the outlier detector 110 can update the outlier score file 300 to include the new data sample and the score associated with the task instance.
+- the report generator 112 can access the database 108 and analyze the outlier score files created by the outlier detector 110 . For each outlier score file, the report generator 112 can generate an overall score associated with the task instance. For example, the report generator 112 can determine the overall score associated with the task instance to be the sum of the scores included in the outlier score file such that poorly performing task instances are associated with overall scores greater than a task instance that is not poorly performing. Other methods to calculate the overall score can be used. In some implementations, the report generator 112 can adjust the overall score by various factors such as the number of entries included in the outlier score file and the time intervals between consecutive entries in the outlier score file.
+- the report generator 112 can compare the overall scores to identify the task instances that are the poorest performing tasks. For example, the report generator 112 can determine the three worst performing task instances by analyzing the overall scores associated with each outlier score file and identifying the three task instances with the three highest overall scores. The report generator 112 can generate a report that lists the worst performing task instances.
+- FIG. 4 illustrates an example report 400 created by the report generator 112 .
+- the report 400 lists the five worst performing task instances.
+- report 400 lists the dictionary task as the task instance with the worst performance (i.e., the task instance with the largest overall score).
+- the report 400 can list the task instance's overall score, the name of the computer performing the task instance, the mean CPI associated with the task executed on the platform, the standard deviation associated with the task executed on the platform, the task instance′ most recent CPI, and data to uniquely identify the task instance.
+- the report 400 can also include other metric data associated with the task instances, such as the cache data or time/cycles spent waiting for a memory access.
+- the report generator 112 can provide the report to a user, such as a system administrator or a network administer.
+- the user can analyze the report and take actions to improve the cluster's performance, the platform's performance, the computer's performance or the task's performance. For example, the user can relocate a task instance with the highest overall score and allow the task instance to be performed on a different computer or a different cluster. As another example, the user can analyze the report to determine which task instance has the greatest cache data and relocate that task instance. In some implementations, the user can identify the task instance(s) that are causing the performance problem and terminate or relocate these task instances.
+- the performance analysis engine 104 can access the report generated by the report generator and automatically terminate the worst performing task instance. Similarly, in some implementations, the performance analysis engine 104 can analyze the report and terminate the task instance having the greatest CPU or cache data.
+- FIG. 5 is an illustration of an example process 500 for managing task performance.
+- a plurality of task instances is executed on a cluster of computers.
+- a task such as a dictionary lookup or data modeling
+- the cluster of computers 102 can include computers associated with different platforms.
+- each computer collects metric data associated with each task instance.
+- each computer can record the CPI and cache access associated with each task instance executed by the computer.
+- the metric data can be collected as the task instances are performed (e.g., collected on-the-fly) and can be provided to the metric data engine with low latency.
+- the metric data can be collected at predefined time periods, continuously collected or collected at other appropriate times.
+- the performance analysis engine 104 receives the metric data associated with each task instance performed on a platform.
+- the metric data engine 106 can receive the metric data associated with each task instance from a particular platform type in the cluster 102 .
+- each computer in the cluster 102 having a 2 GHz processor and a 6 MB L3 cache (hereinafter referred to as “Platform A”) and executing an instance of the Dictionary lookup task can send metric data associated with dictionary lookup task instances to the metric data engine 106 .
+- the metric data can include data such as the task instance's CPI and the cache or CPU usage associated with the task instance.
+- the metric data engine 106 can store the collected metric data, information identifying the task instance (e.g., the Index number, the User and the task name) and information identifying the computer performing each task instance (e.g., Host name) in the database 108 .
+- information identifying the task instance e.g., the Index number, the User and the task name
+- information identifying the computer performing each task instance e.g., Host name
+- the metric data engine determines the statistical data associated with a task executed on a particular platform. For example, the metric data engine 106 can access the database 108 and analyze the metric data associated with each dictionary task instance performed on Platform A and determine the mean CPI and standard deviation of the dictionary task. In some implementations, the metric data engine 106 can calculate other statistical data, such as the median CPI. The metric data engine 106 can store the calculated statistical data in the database and include information identifying Platform A and the task instance associated with the statistical data.
+- the outlier detector analyzes the metric data associated with each task instance executed on Platform A.
+- the outlier detector 110 analyzes the most recently collected CPI associated with a task instance and compares it to a threshold value (at 508 ).
+- the threshold value can be a function of the statistical data associated with the task performed on the particular platform.
+- the process returns to 504 and additional metric data is collected from the cluster (at 508 ). If the task instance's metric data is greater than the threshold value, the outlier detector generates a score associated with the task instance ( 510 ). For example, the outlier detector 110 can generate a score using a function of the metric data associated with the task instance and the statistical data associated with Platform A. In some implementations, the outlier detector 110 generates a score based on the task instance's CPI, the mean CPI for the task on Platform A, and the standard deviation of the task on Platform A.
+- the outlier detector 110 can also store the score, the task instance's metric data and the time stamp associated with the metric data in an outlier score file associated with the task instance.
+- FIG. 3 provides an example outlier score file.
+- the outlier detector 110 can store the outlier score file in the database 108 .
+- the process 500 continues and generates an overall score for each task instance (at 514 ).
+- the report generator 112 can access the database 108 and analyze each outlier score file to generate an overall score for each task instance.
+- the report generator 112 can generate a task instance's overall score based on the sum of the scores included in the outlier score file. If a report is not requested, the process 500 returns to 504 and additional metric data is collected.
+- the report generator 112 can rank the task instances based on the task instances' performance (at 516 ). For example, the report generator 112 can rank the task instances based on the overall scores. In some implementations, the task instances with larger overall scores (i.e., poorly performing task instances) are ranked higher than task instances with smaller overall scores.
+- outliers can be identified (at 517 ).
+- the report generator 112 can identify the task instance with the largest overall score as an outlier.
+- the report generator 112 can identify a predetermined number of outliers.
+- the report generator 112 can identify the three task instances with the largest overall scores as the outliers.
+- the report generator 112 then generates a report that includes the overall scores and the identified outliers (at 518 ).
+- the report is analyzed and a task instance can be relocated (at 520 ).
+- the task instance can be executed on a different computer in the cluster or in a computer in a different cluster (at 520 ).
+- the report can be provided to a user, such as a system administrator or network administrator. After reviewing the report, the user can relocate the task instance with the largest overall score or can otherwise adjust resources to improve the computer's performance.
+- the report can be reviewed by the performance analysis engine 104 , which can relocate the task instance with the largest overall score.
+- the task instance with the largest CPU or cache access is relocated.
+- Embodiments of the subject matter and the operations described in this specification can be implemented in digital electronic circuitry, or in computer software, firmware, or hardware, including the structures disclosed in this specification and their structural equivalents, or in combinations of one or more of them.
+- Embodiments of the subject matter described in this specification can be implemented as one or more computer programs, i.e., one or more modules of computer program instructions, encoded on computer storage medium for execution by, or to control the operation of, data processing apparatus.
+- the program instructions can be encoded on an artificially generated propagated signal, e.g., a machine-generated electrical, optical, or electromagnetic signal, that is generated to encode information for transmission to suitable receiver apparatus for execution by a data processing apparatus.
+- a computer storage medium can be, or be included in, a computer-readable storage device, a computer-readable storage substrate, a random or serial access memory array or device, or a combination of one or more of them. Moreover, while a computer storage medium is not a propagated signal, a computer storage medium can be a source or destination of computer program instructions encoded in an artificially generated propagated signal. The computer storage medium can also be, or be included in, one or more separate physical components or media (e.g., multiple CDs, disks, or other storage devices).
+- the operations described in this specification can be implemented as operations performed by a data processing apparatus on data stored on one or more computer-readable storage devices or received from other sources.
+- the term “data processing apparatus” encompasses all kinds of apparatus, devices, and machines for processing data, including by way of example a programmable processor, a computer, a system on a chip, or multiple ones, or combinations, of the foregoing
+- the apparatus can include special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- the apparatus can also include, in addition to hardware, code that creates an execution environment for the computer program in question, e.g., code that constitutes processor firmware, a protocol stack, a database management system, an operating system, a cross-platform runtime environment, a virtual machine, or a combination of one or more of them.
+- the apparatus and execution environment can realize various different computing model infrastructures, such as web services, distributed computing and grid computing infrastructures.
+- a computer program (also known as a program, software, software application, script, or code) can be written in any form of programming language, including compiled or interpreted languages, declarative or procedural languages, and it can be deployed in any form, including as a stand alone program or as a module, component, subroutine, object, or other unit suitable for use in a computing environment.
+- a computer program may, but need not, correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data (e.g., one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (e.g., files that store one or more modules, sub programs, or portions of code).
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network.
+- the processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform actions by operating on input data and generating output.
+- the processes and logic flows can also be performed by, and apparatus can also be implemented as, special purpose logic circuitry, e.g., an FPGA (field programmable gate array) or an ASIC (application specific integrated circuit).
+- processors suitable for the execution of a computer program include, by way of example, both general and special purpose microprocessors, and any one or more processors of any kind of digital computer.
+- a processor will receive instructions and data from a read only memory or a random access memory or both.
+- the essential elements of a computer are a processor for performing actions in accordance with instructions and one or more memory devices for storing instructions and data.
+- a computer will also include, or be operatively coupled to receive data from or transfer data to, or both, one or more mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks.
+- mass storage devices for storing data, e.g., magnetic, magneto optical disks, or optical disks.
+- a computer need not have such devices.
+- a computer can be embedded in another device, e.g., a mobile telephone, a personal digital assistant (PDA), a mobile audio or video player, a game console, a Global Positioning System (GPS) receiver, or a portable storage device (e.g., a universal serial bus (USB) flash drive), to name just a few.
+- Devices suitable for storing computer program instructions and data include all forms of non volatile memory, media and memory devices, including by way of example semiconductor memory devices, e.g., EPROM, EEPROM, and flash memory devices; magnetic disks, e.g., internal hard disks or removable disks; magneto optical disks; and CD ROM and DVD-ROM disks.
+- the processor and the memory can be supplemented by, or incorporated in, special purpose logic circuitry.
+- a computer having a display device, e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor, for displaying information to the user and a keyboard and a pointing device, e.g., a mouse or a trackball, by which the user can provide input to the computer.
+- a display device e.g., a CRT (cathode ray tube) or LCD (liquid crystal display) monitor
+- keyboard and a pointing device e.g., a mouse or a trackball
+- Other kinds of devices can be used to provide for interaction with a user as well; for example, feedback provided to the user can be any form of sensory feedback, e.g., visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, or tactile input.
+- a computer can interact with a user by sending documents to and receiving documents from a device that is used by the user; for example, by sending web pages to a
+- Embodiments of the subject matter described in this specification can be implemented in a computing system that includes a back end component, e.g., as a data server, or that includes a middleware component, e.g., an application server, or that includes a front end component, e.g., a client computer having a graphical user interface or a Web browser through which a user can interact with an implementation of the subject matter described in this specification, or any combination of one or more such back end, middleware, or front end components.
+- the components of the system can be interconnected by any form or medium of digital data communication, e.g., a communication network.
+- Examples of communication networks include a local area network (“LAN”) and a wide area network (“WAN”), an inter-network (e.g., the Internet), and peer-to-peer networks (e.g., ad hoc peer-to-peer networks).
+- LAN local area network
+- WAN wide area network
+- inter-network e.g., the Internet
+- peer-to-peer networks e.g., ad hoc peer-to-peer networks.
+- the computing system can include clients and servers.
+- a client and server are generally remote from each other and typically interact through a communication network. The relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other.
+- a server transmits data (e.g., an HTML page) to a client device (e.g., for purposes of displaying data to and receiving user input from a user interacting with the client device).
+- client device e.g., for purposes of displaying data to and receiving user input from a user interacting with the client device.
+- Data generated at the client device e.g., a result of the user interaction
+- performance analysis engine can filter the metric data received from the cluster by removing potentially unreliable metric data (e.g., data representing low CPU usage or metric data that is extremely high or low). For example the performance analysis engine can compare the metric data to predetermined parameters (e.g., CPU usage thresholds) that indicate the metric data is potentially unreliable. As another example, the threshold value can be based on a weighted average or a piecewise linear function. In some cases, the actions recited in the claims can be performed in a different order and still achieve desirable results. In addition, the processes depicted in the accompanying figures do not necessarily require the particular order shown, or sequential order, to achieve desirable results.
+Abstract
+Description
+Threshold Value=Mean CPI of Task+(3.3*Standard Deviation of the Task's CPI)
+It is noted that the values in the above equation (e.g., Mean CPI of Task and Standard Deviation of the Task's CPI) are associated with a particular task and not with a particular task instance. The standard deviation scaling factor (e.g., 3.3) can be decreased or increased to alter the sensitivity for detecting outliers. For example, the scaling factor equal to 3.3 decreases the sensitivity for detecting outliers such that the probability that an outlier exists is approximately 1 in 1000 (based on a normal distribution). The scaling factor can be chosen based on Chebyshev's Inequality, assuming the performance of tasks is a random variable. Other threshold values can be used. For example, the threshold value can be a predetermined number, a ratio of the task instance's CPI to the mean CPI or can be a value greater than a predetermined percentage than the mean CPI, such as 30% greater than the mean CPI. In some implementations, the
+Score=(CPI Task Instance−Mean CPI)/Standard Deviation of Task's CPI
+In some implementations, a poorly performing task instance is associated with a higher score than a task instance that is not performing poorly. The
+Threshold value=mean CPI of Task+(3.3*Standard Deviation of the Task's CPI)
+Other appropriate threshold values can be used.
+Score=(CPI task instance−Mean CPI)/Standard Deviation of Task's CPI
+The
+Claims (28)
+Priority Applications (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/183,234 US9280386B1 (en) | 2011-07-14 | 2011-07-14 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+US15/042,553 US9880879B1 (en) | 2011-07-14 | 2016-02-12 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/183,234 US9280386B1 (en) | 2011-07-14 | 2011-07-14 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+Related Child Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/042,553 Continuation US9880879B1 (en) | 2011-07-14 | 2016-02-12 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US9280386B1 true US9280386B1 (en) | 2016-03-08 |
+Family
+ID=55410425
+Family Applications (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/183,234 Active 2034-02-23 US9280386B1 (en) | 2011-07-14 | 2011-07-14 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+US15/042,553 Active 2031-08-04 US9880879B1 (en) | 2011-07-14 | 2016-02-12 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+Family Applications After (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US15/042,553 Active 2031-08-04 US9880879B1 (en) | 2011-07-14 | 2016-02-12 | Identifying task instance outliers based on metric data in a large scale parallel processing system |
+Country Status (1)
+Country | Link |
+---|---|
+US (2) | US9280386B1 (en) |
+Cited By (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150324723A1 (en) * | 2012-11-28 | 2015-11-12 | Hewlett-Packard Development Company, L.P. | Regulating application task development |
+US20220224614A1 (en) * | 2019-03-29 | 2022-07-14 | Intel Corporation | Technologies for capturing processing resource metrics as a function of time |
+US11409576B2 (en) * | 2017-12-29 | 2022-08-09 | Entefy Inc. | Dynamic distribution of a workload processing pipeline on a computing infrastructure |
+US11461372B1 (en) * | 2021-03-18 | 2022-10-04 | Bae Systems Information And Electronic Systems Integration Inc. | Data clustering in logic devices using unsupervised learning |
+US11669365B1 (en) * | 2019-08-26 | 2023-06-06 | Amazon Technologies, Inc. | Task pool for managed compute instances |
+Families Citing this family (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+JP7052604B2 (en) * | 2018-07-05 | 2022-04-12 | 富士通株式会社 | Business estimation method, information processing device, and business estimation program |
+Citations (29)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+WO2001093043A1 (en) | 2000-03-27 | 2001-12-06 | Accenture Llp | System, method, and article of manufacture for an automated scripting solution for enterprise testing |
+US6496848B1 (en) * | 1994-12-26 | 2002-12-17 | Mitsubishi Denki Kabushiki Kaisha | Control method for control software execution system |
+US6546364B1 (en) * | 1998-12-18 | 2003-04-08 | Impresse Corporation | Method and apparatus for creating adaptive workflows |
+US20040205206A1 (en) * | 2003-02-19 | 2004-10-14 | Naik Vijay K. | System for managing and controlling storage access requirements |
+US20060059491A1 (en) * | 2001-08-30 | 2006-03-16 | Hitachi, Ltd. | Controller and operating system |
+US20060195508A1 (en) * | 2002-11-27 | 2006-08-31 | James Bernardin | Distributed computing |
+US20060200546A9 (en) * | 2002-09-30 | 2006-09-07 | Bailey Philip G | Reporting of abnormal computer resource utilization data |
+US20070067145A1 (en) * | 2004-08-25 | 2007-03-22 | Sift, Llc | Method and apparatus for function allocation and interface selection |
+US20070216698A1 (en) * | 2003-05-01 | 2007-09-20 | Lockheed Martin Corporation | Method And Apparatus For Status Display |
+US20070266385A1 (en) * | 2006-05-11 | 2007-11-15 | Arm Limited | Performance level setting in a data processing system |
+US20080016412A1 (en) * | 2002-07-01 | 2008-01-17 | Opnet Technologies, Inc. | Performance metric collection and automated analysis |
+US20080306711A1 (en) * | 2007-06-05 | 2008-12-11 | Computer Associates Think, Inc. | Programmatic Root Cause Analysis For Application Performance Management |
+US20090089139A1 (en) * | 2007-08-31 | 2009-04-02 | Roberto Rojas-Cessa | Scheduling processing tasks used in active network measurement |
+US20090281865A1 (en) * | 2008-05-08 | 2009-11-12 | Todor Stoitsev | Method and system to manage a business process |
+US20100174436A1 (en) * | 2007-12-10 | 2010-07-08 | Honda Motor Co., Ltd. | Target route generation system |
+US20100198776A1 (en) * | 2009-02-02 | 2010-08-05 | Haiqin Wang | System and method for dependency and root cause discovery |
+US20110013845A1 (en) * | 2009-07-14 | 2011-01-20 | General Electric Company | Optimal subspaces for face recognition |
+US20110047554A1 (en) * | 2009-08-18 | 2011-02-24 | International Business Machines Corporation | Decentralized load distribution to reduce power and/or cooling costs in an event-driven system |
+US20110078426A1 (en) * | 2009-09-29 | 2011-03-31 | Sap Ag | Systems and methods for scenario-based process modeling |
+US20120066683A1 (en) * | 2010-09-09 | 2012-03-15 | Srinath Nadig S | Balanced thread creation and task allocation |
+US20120089724A1 (en) * | 2010-10-08 | 2012-04-12 | Vmware, Inc. | Diagnosis of application server performance problems via thread level pattern analysis |
+US20120167101A1 (en) * | 2010-12-28 | 2012-06-28 | Microsoft Corporation | System and method for proactive task scheduling |
+US20120179640A1 (en) * | 2011-01-12 | 2012-07-12 | Lance Sherry | Task reliability analysis method and apparatus |
+US8250131B1 (en) * | 2004-12-08 | 2012-08-21 | Cadence Design Systems, Inc. | Method and apparatus for managing a distributed computing environment |
+WO2012151585A2 (en) | 2011-05-05 | 2012-11-08 | The Johns Hopkins University | Method and system for analyzing a task trajectory |
+US20120317580A1 (en) * | 2011-06-10 | 2012-12-13 | International Business Machines Corporation | Apportioning Summarized Metrics Based on Unsummarized Metrics in a Computing System |
+US8413103B2 (en) | 2009-03-13 | 2013-04-02 | Synopsys, Inc. | Execution monitor for electronic design automation |
+US8429187B2 (en) | 2011-03-21 | 2013-04-23 | Amazon Technologies, Inc. | Method and system for dynamically tagging metrics data |
+US8488873B2 (en) | 2009-10-07 | 2013-07-16 | Apple Inc. | Method of computing global-to-local metrics for recognition |
+Family Cites Families (14)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6026425A (en) * | 1996-07-30 | 2000-02-15 | Nippon Telegraph And Telephone Corporation | Non-uniform system load balance method and apparatus for updating threshold of tasks according to estimated load fluctuation |
+US7940844B2 (en) * | 2002-06-18 | 2011-05-10 | Qualcomm Incorporated | Video encoding and decoding techniques |
+US7739143B1 (en) * | 2005-03-24 | 2010-06-15 | Amazon Technologies, Inc. | Robust forecasting techniques with reduced sensitivity to anomalous data |
+US20070136731A1 (en) * | 2005-12-09 | 2007-06-14 | Caterpillar Inc. | Systems and methods for prioritizing tasks |
+US8959515B2 (en) * | 2006-01-18 | 2015-02-17 | International Business Machines Corporation | Task scheduling policy for limited memory systems |
+US20090030753A1 (en) * | 2007-07-27 | 2009-01-29 | General Electric Company | Anomaly Aggregation method |
+US8208893B1 (en) * | 2008-06-30 | 2012-06-26 | Amazon Technologies, Inc. | Performance metrics processing for anticipating unavailability |
+JP5229486B2 (en) * | 2009-02-16 | 2013-07-03 | 株式会社日立製作所 | Management computer and processing management method |
+US20110098973A1 (en) * | 2009-10-23 | 2011-04-28 | Computer Associates Think, Inc. | Automatic Baselining Of Metrics For Application Performance Management |
+US8782653B2 (en) * | 2010-03-26 | 2014-07-15 | Virtualmetrix, Inc. | Fine grain performance resource management of computer systems |
+US8538897B2 (en) * | 2010-12-03 | 2013-09-17 | Microsoft Corporation | Cross-trace scalable issue detection and clustering |
+WO2012164695A1 (en) * | 2011-05-31 | 2012-12-06 | 富士通株式会社 | Data sharing method and data processing system |
+US8612580B2 (en) * | 2011-05-31 | 2013-12-17 | Microsoft Corporation | Distributed computing framework |
+US9588813B1 (en) * | 2013-06-07 | 2017-03-07 | Amazon Technologies, Inc. | Determining cost of service call |
+-
+2011
+- 2011-07-14 US US13/183,234 patent/US9280386B1/en active Active
+-
+2016
+- 2016-02-12 US US15/042,553 patent/US9880879B1/en active Active
+Patent Citations (29)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6496848B1 (en) * | 1994-12-26 | 2002-12-17 | Mitsubishi Denki Kabushiki Kaisha | Control method for control software execution system |
+US6546364B1 (en) * | 1998-12-18 | 2003-04-08 | Impresse Corporation | Method and apparatus for creating adaptive workflows |
+WO2001093043A1 (en) | 2000-03-27 | 2001-12-06 | Accenture Llp | System, method, and article of manufacture for an automated scripting solution for enterprise testing |
+US20060059491A1 (en) * | 2001-08-30 | 2006-03-16 | Hitachi, Ltd. | Controller and operating system |
+US20080016412A1 (en) * | 2002-07-01 | 2008-01-17 | Opnet Technologies, Inc. | Performance metric collection and automated analysis |
+US20060200546A9 (en) * | 2002-09-30 | 2006-09-07 | Bailey Philip G | Reporting of abnormal computer resource utilization data |
+US20060195508A1 (en) * | 2002-11-27 | 2006-08-31 | James Bernardin | Distributed computing |
+US20040205206A1 (en) * | 2003-02-19 | 2004-10-14 | Naik Vijay K. | System for managing and controlling storage access requirements |
+US20070216698A1 (en) * | 2003-05-01 | 2007-09-20 | Lockheed Martin Corporation | Method And Apparatus For Status Display |
+US20070067145A1 (en) * | 2004-08-25 | 2007-03-22 | Sift, Llc | Method and apparatus for function allocation and interface selection |
+US8250131B1 (en) * | 2004-12-08 | 2012-08-21 | Cadence Design Systems, Inc. | Method and apparatus for managing a distributed computing environment |
+US20070266385A1 (en) * | 2006-05-11 | 2007-11-15 | Arm Limited | Performance level setting in a data processing system |
+US20080306711A1 (en) * | 2007-06-05 | 2008-12-11 | Computer Associates Think, Inc. | Programmatic Root Cause Analysis For Application Performance Management |
+US20090089139A1 (en) * | 2007-08-31 | 2009-04-02 | Roberto Rojas-Cessa | Scheduling processing tasks used in active network measurement |
+US20100174436A1 (en) * | 2007-12-10 | 2010-07-08 | Honda Motor Co., Ltd. | Target route generation system |
+US20090281865A1 (en) * | 2008-05-08 | 2009-11-12 | Todor Stoitsev | Method and system to manage a business process |
+US20100198776A1 (en) * | 2009-02-02 | 2010-08-05 | Haiqin Wang | System and method for dependency and root cause discovery |
+US8413103B2 (en) | 2009-03-13 | 2013-04-02 | Synopsys, Inc. | Execution monitor for electronic design automation |
+US20110013845A1 (en) * | 2009-07-14 | 2011-01-20 | General Electric Company | Optimal subspaces for face recognition |
+US20110047554A1 (en) * | 2009-08-18 | 2011-02-24 | International Business Machines Corporation | Decentralized load distribution to reduce power and/or cooling costs in an event-driven system |
+US20110078426A1 (en) * | 2009-09-29 | 2011-03-31 | Sap Ag | Systems and methods for scenario-based process modeling |
+US8488873B2 (en) | 2009-10-07 | 2013-07-16 | Apple Inc. | Method of computing global-to-local metrics for recognition |
+US20120066683A1 (en) * | 2010-09-09 | 2012-03-15 | Srinath Nadig S | Balanced thread creation and task allocation |
+US20120089724A1 (en) * | 2010-10-08 | 2012-04-12 | Vmware, Inc. | Diagnosis of application server performance problems via thread level pattern analysis |
+US20120167101A1 (en) * | 2010-12-28 | 2012-06-28 | Microsoft Corporation | System and method for proactive task scheduling |
+US20120179640A1 (en) * | 2011-01-12 | 2012-07-12 | Lance Sherry | Task reliability analysis method and apparatus |
+US8429187B2 (en) | 2011-03-21 | 2013-04-23 | Amazon Technologies, Inc. | Method and system for dynamically tagging metrics data |
+WO2012151585A2 (en) | 2011-05-05 | 2012-11-08 | The Johns Hopkins University | Method and system for analyzing a task trajectory |
+US20120317580A1 (en) * | 2011-06-10 | 2012-12-13 | International Business Machines Corporation | Apportioning Summarized Metrics Based on Unsummarized Metrics in a Computing System |
+Cited By (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150324723A1 (en) * | 2012-11-28 | 2015-11-12 | Hewlett-Packard Development Company, L.P. | Regulating application task development |
+US10643161B2 (en) * | 2012-11-28 | 2020-05-05 | Micro Focus Llc | Regulating application task development |
+US11409576B2 (en) * | 2017-12-29 | 2022-08-09 | Entefy Inc. | Dynamic distribution of a workload processing pipeline on a computing infrastructure |
+US11645123B1 (en) | 2017-12-29 | 2023-05-09 | Entefy Inc. | Dynamic distribution of a workload processing pipeline on a computing infrastructure |
+US20220224614A1 (en) * | 2019-03-29 | 2022-07-14 | Intel Corporation | Technologies for capturing processing resource metrics as a function of time |
+US11669365B1 (en) * | 2019-08-26 | 2023-06-06 | Amazon Technologies, Inc. | Task pool for managed compute instances |
+US11461372B1 (en) * | 2021-03-18 | 2022-10-04 | Bae Systems Information And Electronic Systems Integration Inc. | Data clustering in logic devices using unsupervised learning |
+Also Published As
+Publication number | Publication date |
+---|---|
+US9880879B1 (en) | 2018-01-30 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US9880879B1 (en) | Identifying task instance outliers based on metric data in a large scale parallel processing system | |
+US11733982B1 (en) | Dynamically changing input data streams processed by data stream language programs | |
+US9652503B2 (en) | Methods and apparatus for monitoring execution of a database query program | |
+US10360216B2 (en) | Dynamic streaming of results of multi-leveled queries | |
+US10318541B2 (en) | Correlating log data with performance measurements having a specified relationship to a threshold value | |
+US9658910B2 (en) | Systems and methods for spatially displaced correlation for detecting value ranges of transient correlation in machine data of enterprise systems | |
+US10997191B2 (en) | Query-triggered processing of performance data and log data from an information technology environment | |
+US8868541B2 (en) | Scheduling resource crawls | |
+US11582130B2 (en) | Performance monitoring in a distributed storage system | |
+US20190179815A1 (en) | Obtaining performance data via an application programming interface (api) for correlation with log data | |
+US8856146B2 (en) | Device for determining internet activity | |
+US7184935B1 (en) | Determining and annotating a signature of a computer resource | |
+CN107924360B (en) | Diagnostic framework in a computing system | |
+US9774654B2 (en) | Service call graphs for website performance | |
+US20220245013A1 (en) | Detecting, diagnosing, and alerting anomalies in network applications | |
+US20170255639A1 (en) | Processing of Performance Data and Structure Data from an Information Technology Environment | |
+US20090006066A1 (en) | Method and System for Automatic Selection of Test Cases | |
+US9596298B1 (en) | Load balancing in a distributed processing system | |
+US20180121856A1 (en) | Factor-based processing of performance metrics | |
+US20160225042A1 (en) | Determining a cost of an application programming interface | |
+US20150222717A1 (en) | Apparatus and method for updating ip geographic information | |
+US20160225043A1 (en) | Determining a cost of an application | |
+US9015718B1 (en) | Identifying task instances that interfere with processor performance | |
+US11481298B2 (en) | Computing CPU time usage of activities serviced by CPU | |
+US9858551B2 (en) | Ranking analysis results based on user perceived problems in a database system |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:HAGMANN, ROBERT;ZHANG, XIAO;TUNE, ERIC S.;AND OTHERS;SIGNING DATES FROM 20110712 TO 20110713;REEL/FRAME:026674/0730 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044566/0657Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 4 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |

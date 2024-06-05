@@ -1,0 +1,370 @@
+US9021421B1 - Read and write barriers for flexible and efficient garbage collection - Google Patents
+Read and write barriers for flexible and efficient garbage collection Download PDFInfo
+- Publication number
+- US9021421B1 US9021421B1 US13/465,980 US201213465980A US9021421B1 US 9021421 B1 US9021421 B1 US 9021421B1 US 201213465980 A US201213465980 A US 201213465980A US 9021421 B1 US9021421 B1 US 9021421B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- page
+- flags
+- barrier
+- read
+- code generator
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Fee Related, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F12/00—Accessing, addressing or allocating within memory systems or architectures
+- G06F12/02—Addressing or allocation; Relocation
+- G06F12/0223—User address space allocation, e.g. contiguous or non contiguous base addressing
+- G06F12/023—Free address space management
+- G06F12/0253—Garbage collection, i.e. reclamation of unreferenced memory
+Definitions
+- a program in execution needs memory to store the data manipulated by the program.
+- Memory is allocated in various ways. In the earliest form of memory allocation, called static allocation, a variable was bound to a chunk of memory at compile time and did not change throughout the program execution. In the case of stack allocation, the binding was created during the invocation of the function that has the variable in its scope and lasts for the lifetime of the function. In heap allocation, the binding was created explicitly by executing a statement that allocates a chunk of memory and explicitly binds an access expression to the chunk of memory.
+- An object is a collection of data in memory that is stored at consecutive addresses. Unless the object is extremely small, objects are located at more than one address and in some systems can move.
+- a pointer is an instance of a programming language data type whose value refers directly to (or ‘points to’) an object stored elsewhere in the memory using its address. Conventionally, the address of the start of the object is used. This is the address of the piece of data belonging to the object that has the lowest numerical value.
+- the parts of which an object is comprised can be called fields, elements, properties, members or slots.
+- An access expression is a generalization of a variable and denotes an object. Access expressions can be part of objects. One of the ways in which the binding between an access expression and an object can be undone is by disposing of the activation record that contains the access expression. Then, the access expression ceases to have any meaning.
+- the other way is to execute an assignment statement that will bind the access expression to a different object or no object at all.
+- the chunk of memory containing an object may be unreachable. Since an object may contain access expressions, this may lead to other chunks of memory becoming unreachable. An issue is the reclamation of such unreachable memory.
+- the reclaimed memory can be subsequently allocated to different objects whose addresses are bound to different access expression.
+- garbage an unreachable memory chunk is called garbage, and a tool that detects and collects garbage is called a garbage collector.
+- the executing program whose memory requirements are being serviced by the garbage collector is called the mutator.
+- a garbage collector is an advanced ‘memory manager’. The term memory manager is used herein to designate a more general concept than does garbage collector.
+- the mutator occasionally needs to adjust the data that the garbage collection subsystem maintains. This can happen when the mutator writes a value to memory, modifying that memory. Conversely, the garbage collector occasionally needs to adjust the data that the mutator is using. This can happen when the mutator reads a value from memory.
+- These adjustments are controlled by so-called ‘read barriers’ and ‘write barriers’, which determine which mutator operations require special processing and ensure that the special processing takes place. Barriers are single or multiple instructions inserted at the relevant points in the mutator code for this purpose.
+- garbage copying garbage collectors use short pauses, during which the garbage collectors perform garbage collection (often using independently collectable regions to make the collection incremental). In many applications, such as real time data streaming, the shorter the pause time the better.
+- a memory heap is split into pages. Each page is aligned to an address that is a multiple of a particular power of two.
+- code is generated to execute the write barrier or the read barrier.
+- the page alignment for each pointer is known; for example, if the page alignment is the same for all pointers in the system.
+- this page structure it is possible to find the page start by masking the address of any heap allocated object on the page with a mask based on the page alignment (bitwise-and operation). A plurality of flags are established on a page.
+- FIG. 1 displays a high-level block diagram of example system architecture in which the garbage collection techniques described herein can be employed.
+- FIG. 2 displays a high-level block diagram of example memory in which the garbage collection techniques described herein can be employed.
+- FIG. 3 displays an example of an arrangement of software code that employs the garbage collection techniques described herein.
+- FIG. 4 displays a block diagram of an example heap in which the garbage collection techniques described herein can be employed.
+- FIG. 5 displays a high-level block diagram of example memory manager in which the garbage collection techniques described herein can be employed.
+- FIG. 6 illustrates a schematic diagram illustrating a source-code compilation operation according to an example implementation of the garbage collection techniques described herein.
+- FIG. 7 illustrates a flow chart of an example process in which the garbage collection techniques described herein can be employed.
+- a memory heap is split into pages.
+- a page is a fixed-length contiguous block of virtual memory.
+- Virtual memory is a memory management technique that virtualizes a computer's various forms of data storage (such as random-access memory and disk storage), allowing a program to be designed as though there is only one kind of memory.
+- Each page is aligned to an address that is a multiple of a particular power of two.
+- software code is generated to execute the write barrier or the read barrier.
+- the memory manager knows what the page alignment is for each pointer; for example, if the page alignment is the same for all pointers.
+- a mask is data that is used for bitwise operations.
+- a bitwise operation operates on one or more bit patterns or binary numerals at the level of their individual bits.
+- a bitwise operation is a fast, primitive action directly supported by the processor used to manipulate values for comparisons and calculations.
+- a number of flags are established on a page.
+- a flag is one or more bits that are used to store a binary value or code that has an assigned meaning.
+- the filtering parts include one or more checks, where at least one check is based on more than one flag.
+- Checks consist of getting two flags, one flag from the page containing the holder and one from the page containing the value. These two flags are combined in some way, with one or more branch or call instructions that can divert control flow to the implementing part.
+- a branch is sequence of code in a computer program that is conditionally executed depending on whether the flow of control is altered or not (at the branching point).
+- a call starts a subroutine of the memory manager.
+- these two flags can be combined using a ‘logical and’ operation; that is, both flags have to be set in order for control flow to be diverted to the implementing part of the write barrier.
+- Other ways to read the flags or other per-page data, and to do the checks, can be utilized. Examples include basing control flow decisions on arithmetic operations (+ ⁇ * /), other bitwise and logical Boolean operations (and, or, xor) or comparing operations (less than, greater than, equals, etc.).
+- the memory manager would execute implementing code. Changing the write or read barrier was achieved either by patching the out-of-line code, or by modifying data on which the out-of-line code depends.
+- An out-of-line code sequence is a series of instructions that are invoked by a simplified calling mechanism in which almost no state-saving is required, called a stub.
+- the write barrier code was in a write barrier stub, which was subject to patching to change the write barrier. The throughput performance of this approach suffered because of the overhead of always calling out-of-line code, even when nothing needed to be done.
+- Flags refer to one or more bits used to store a binary value or code that has an assigned meaning. Flags are members of a defined data structure, such as a database record. The meaning of the value contained in a flag is generally defined in relation to the data structure of which the flag is part. One unrelated use of flags is to mark or designate data structures for future processing.
+- FIG. 1 displays a high-level block diagram of an example system architecture in which the garbage collection techniques described herein can be employed.
+- the computer system 100 can include, in addition to hardware, code stored in memory 104 .
+- a bus couples the memory 104 for storing information and instructions executable by processor 102 .
+- Special purpose logic circuitry can supplement or incorporate the processor 102 and the memory 104 .
+- the memory 104 includes a memory manager 104 A.
+- the instructions may be stored in the memory 104 and implemented in one or more computer program products.
+- Computer program products can be one or more modules of computer program instructions encoded on a computer readable medium for execution by, or to control the operation of, the computer system 100 .
+- Memory 104 may store temporary variable or other intermediate information during execution of instructions executable by the processor 102 .
+- the computer system 100 further includes a data storage device 106 coupled to bus 108 .
+- the data storage device 106 stores information and instructions.
+- An input/output module 110 may couple the computer system 100 to various devices. Examples of input/output modules 110 include data ports such as universal serial bus (USB) ports.
+- the input/output module 110 is configured to connect to a communications module 112 . Examples of communications modules 112 include networking interface cards, such as Ethernet cards and modems.
+- the input/output module 110 is configured to connect to a number of devices, such as an input device 114 and/or an output device 116 .
+- input devices 114 include a keyboard and a pointing device such as, for example, a mouse, by which a user can provide input to the computer system 100 .
+- output devices 116 include display devices such as, for example, a liquid crystal display (LCD) monitor for displaying information to the user.
+- LCD liquid crystal display
+- the techniques can be implemented using a computer system 100 in response to processor 102 executing one or more sequences of one or more instructions contained in memory 104 .
+- Another machine-readable medium such as data storage device 106 , may read such instructions into memory 104 . Execution of the sequences of instructions contained in memory 104 causes processor 102 to perform the process steps described herein.
+- FIG. 2 displays a high-level block diagram of example memory in which the garbage collection techniques described herein can be employed.
+- Memory 104 includes a global variables segment 203 , a stack 205 , and a heap 207 .
+- the global variables segment 203 holds global variables associated with the applications on the system.
+- Global variables are variables that are accessible in every scope (unless shadowed), as opposed to local variables with no shared memory.
+- the stack 205 and the heap 207 are used for data.
+- the stack 205 is used for automatic variables within functions. Data is stored in the stack 205 using the last-in-first-out (LIFO) method.
+- the stack 205 and its associated registers are used for temporary storage of information in which the most recently stored item is the first to be retrieved.
+- the heap 207 is used for dynamic memory allocation. Blocks of memory are allocated and freed in an arbitrary order. The pattern of allocation and size of blocks are not known until run time.
+- the heap 207 is used for many different purposes.
+- the stack 205 is much faster than the heap 207 , but the stack 205 also is smaller and more expensive.
+- the heap 207 is implemented using multiple pages of memory. Here two pages, 201 and 209 , have been shown. Pointers represented here by arrows show the references between different parts of the memory.
+- main( ) function Most object-oriented languages have some defined structure, and some come with the so-called main( ) function.
+- main( ) When a program begins running, the system calls the function main( ) which marks the entry point of the program.
+- main( ) For example, C, C++, or C# programs have one function named main( ). No other function in the program can be called main( ).
+- the memory allocated in the heap 207 is used and reused during program execution. Memory allocated in the heap 207 may contain garbage values left over from previous usage.
+- FIG. 3 two example pieces of software code 301 , 303 are seen. Each piece of code has an inlined filtering part 305 of the barrier 307 , 309 , where the flags are combined in the filter and the subroutine call optionally moves execution to the out-of-line barrier implementation 311 .
+- the two different barriers (barrier #1 and barrier #2) between which the system can choose in this example each have an implementing part.
+- the two out-of-line implementing parts are drawn in one box 317 .
+- At the top of the out-of-line barrier implementation 311 is an instruction that can be patched to either a no operation performed (NOP) or a branch to barrier #2. This shows the benefit of reusing out-of-line write barrier code in terms of space usage.
+- NOP no operation performed
+- the heap 207 includes page 201 and page 209 .
+- Page 201 includes flags 405 and a holder object 407 . Contained within holder object 407 is a slot 411 .
+- Page 209 includes flags 415 and value object 417 .
+- the pointer 421 from the slot 411 in the holder object 407 points to the value object 417 .
+- the holder object 407 and the value object 417 are on two different pages.
+- the flags 405 , 415 on each page are shown at the start of the page.
+- FIG. 5 displays a high-level block diagram of an example memory manager in which the garbage collection techniques described herein can be employed.
+- a heap paginator 501 a software code generator 503 , a bitwise operator 505 , and bit storage 507 are provided.
+- the heap paginator 501 is configured to split a memory heap into a plurality of pages. Each page of the memory heap is aligned to an address that is a multiple of a particular power of two.
+- the software code generator 503 is configured to execute a read or write barrier when read or write operations are performed, knowing the page alignment for each pointer.
+- the bitwise operator 505 is configured to mask the address of a heap allocated object on the page, based on the page alignment to find a page start.
+- Bit storage 507 is configured to establish a plurality of flags on a page.
+- the filtering parts include one or more checks. At least one check is based on more than one flag. The flags are combined in some way, with one or more conditional branch or call instructions that can divert control flow to the implementing part.
+- FIG. 6 illustrates a schematic diagram illustrating a source-code compilation operation according to an example implementation of the garbage collection techniques described herein.
+- a human applications programmer produces source code 603 written in a high-level language.
+- a compiler 606 typically converts that code into ‘class files’.
+- Class files include routines written in instructions for a ‘virtual machine’ that various processors can be configured to emulate. These routines are called ‘byte codes’ 607 .
+- FIG. 6 divides the sequence into a ‘compile-time environment’ 601 separate from a ‘run-time environment’ 611 in which the byte codes execute.
+- One example of a high-level language for which compilers are available to produce such virtual-machine instructions is the Java® programming language. Java® is a registered trademark of Oracle Corporation, Inc., 500 Oracle Parkway, Redwood Shores, Calif. 94065.
+- a processor under control of a virtual-machine process 613 executes the byte-code routines of the class files. That process emulates a virtual machine from whose instruction set the byte codes are drawn.
+- the virtual-machine process 613 may be specified by code stored on a local disk or some other machine-readable medium from which it is read into memory to configure the computer system to implement the garbage collector and otherwise act as a virtual machine.
+- the persistent storage of that code may instead be provided by a server system remote from the processor that implements the virtual machine, in which case the code would be transmitted electrically or optically to the virtual-machine-implementing processor.
+- FIG. 6 depicts the virtual machine as including an interpreter 615 for that purpose.
+- FIG. 6 depicts the virtual machine as additionally including a just-in-time compiler 617 .
+- garbage collection techniques described herein are applicable independently of whether a batch compiler, a just-in-time compiler, an interpreter or some hybrid is employed to process source code.
+- garbage collection techniques described herein also apply to byte codes, so the filtering part of the barrier could be in the byte codes and/or the interpreter rather than in the ‘compiled code’.
+- source-language constructs specify can be complicated, requiring many machine-language instructions for their implementation.
+- One quite-common example is a source-language instruction that calls for 64-bit arithmetic on a 32-bit machine.
+- More germane to the garbage collection techniques described herein is the operation of dynamically allocating space to a new object; this may require determining whether enough free memory space is available to contain the new object and, if not, reclaiming space.
+- the compiler may produce inline code to accomplish these operations. That is, object-code instructions for carrying out a given source-code-prescribed operation are repeated each time the source code calls for the operation. But inlining runs the risk that code bloat will result if the operation is invoked at many source-code locations.
+- the natural way of avoiding this result is instead to provide the operation's implementation as a procedure.
+- a single code sequence can be called from any location in the program.
+- compilers a collection of procedures for implementing many types of source-code-specified operations is called a runtime system for the language.
+- the run-time system is a software component designed to support the execution of computer programs written in some computer language.
+- the memory manager is largely implemented as a part of the run-time system.
+- FIG. 6 includes a block to show that the compiler's output makes calls to the runtime system 621 as well as to the operating system 623 , which consists of procedures that are similarly system resident but are not compiler-dependent.
+- FIG. 6 arrangement is popular, it is by no means universal, and many further arrangements can be expected. Proposals have even been made to implement the behavior of the virtual machine 613 in a hardware processor, in which case the hardware itself would provide some or all of the garbage collection function. In short, garbage collectors can be implemented in a wide range of combinations of hardware and/or software.
+- garbage collection By implementing garbage collection, a computer system greatly reduce the occurrence of memory leaks and other software deficiencies in which human programming frequently results. But garbage collection can also have significant adverse performance effects if not implemented carefully. From the garbage collector's point of view, what the mutator does is mutate the connectivity of active objects.
+- Some garbage collection approaches rely heavily on interleaving garbage collection steps among mutator steps.
+- the mutator operation of writing a reference is followed immediately by garbage collector steps used to maintain a reference count in the header of that object.
+- the code for subsequent new-object storage includes steps for finding space occupied by objects whose reference count has fallen to zero. Such an approach can slow mutator operation significantly.
+- garbage collector finds unreachable objects and reclaims their memory space for reuse.
+- the mutator allocates space within the heap by invoking the garbage collector, which at some level manages access to the heap.
+- the mutator asks the garbage collector for a pointer to a heap region where the garbage collector can safely place the data.
+- the garbage collector keeps track of the fact that the thus-allocated region is occupied.
+- the garbage collector refrains from allocating that region in response to any other request until the garbage collector determines that the mutator no longer needs the region allocated to that object.
+- Garbage collectors need to cooperate with not only the compiler that is used to produce the executable version of the mutator, but also the underlying operating system.
+- a garbage collector provides an interface between the operating system (or virtual machine) and the user program for allocation and deallocation of heap memory. Other interactions between the operating system and user programs remain unchanged.
+- a garbage collector seeks a large chunk of memory from the operating system and services all allocation requests by the mutator.
+- a runtime system (or virtual machine) for a programming language supports garbage collection, which reclaims memory when it is no longer in use by the program written in the programming language.
+- the memory managed by the garbage-collecting system is called the heap.
+- the system typically includes write barriers.
+- a write barrier is code executed after pointers have been written to the heap. Write barriers ensure that the garbage collection subsystem stays consistent.
+- the runtime system has several different garbage collection strategies between which the runtime system can switch, to minimize pause times, while maximizing application throughput.
+- Each strategy includes several states. For each strategy and state there is a different write barrier that needs to be active. It would be helpful to be able to switch quickly between different write barriers that are efficient for the garbage collection strategy and state that the write barriers' support.
+- the runtime system may also include read barriers.
+- a read barrier is code executed after a pointer is read from the heap. The read barrier ensures that the pointer is pointing correctly when data has been moved to a different place by the system. As with write barriers, it would be helpful to be able to switch quickly between different read barriers that are efficient for the garbage collection strategy and state that the read barriers support.
+- the runtime system has several different garbage collection strategies between which it can switch, to minimize pause times, while maximizing application throughput.
+- Each strategy includes several states. For each strategy and state, a different read barrier is active.
+- FIG. 7 a flow chart of an example process in which the garbage collection techniques described herein can be employed is seen.
+- the memory heap is split into pages 712 .
+- the pages 201 , 209 can be seen in FIG. 2 .
+- Each page 201 , 209 is aligned to an address that is a multiple of a particular power of two 714 .
+- the code generator 503 When the code generator 503 generates code to perform read and write operations, the code generator 503 generates code that executes the write barrier or read barrier 716 . At this point, the code generator 503 knows what the page alignment is for each pointer; for example, if the page alignment is the same for all pointers in the system. With this page structure it is possible to find the page start by masking the address of any heap allocated object on the page with a mask based on the page alignment (bitwise-and operation) 718 .
+- the bit storage 507 establishes a plurality of flags on a page 720 .
+- each page 201 , 209 has two flags; provided that in other implementations each page 201 209 could have more than two flags. These flags can be placed at fixed offsets from the start of the page 201 , 209 (in the header).
+- each page can have an index, which index is found in the header or obtained from its address by shifting the address to the right. This index can be used to access the flags in a separate page table.
+- the flags for each page 201 , 209 can include:
+- two more flags for each page 201 , 209 can include:
+- the filtering part is generated inline in the code stream.
+- the implementing part may be generated inline or out-of-line.
+- the filtering part consists of checks based on flags from at least two pages, with one or more conditional branch or call instructions that can divert control flow to the implementing part.
+- the flags for the page 201 containing the start of holder are checked to have the POINTERS_FROM_HERE_ARE_INTERESTING flag set, and the page 209 containing the start of value is checked to have the POINTERS_TO_HERE_ARE_INTERESTING flag set. If the flags are located in a page table (not in the page header), then the page containing slot can be used instead of the page containing holder.
+- the flags are combined in some fast way, for example, with a Boolean operation, on which the check can depend. If both flags are found to be set, execution jumps to the implementing part of the write barrier.
+- the filtering part is generated inline in the code stream.
+- the implementing part may be generated inline or out out-of-line.
+- the filtering part includes checks based on flags from at least two pages with one or more conditional branch or call instructions that can divert control flow to the implementing part.
+- the flags for the page 201 containing the start of holder are checked to have the POINTERS_READ_FROM_HERE_ARE_INTERESTING flag set, and the page 209 containing the start of value is checked to have the POINTERS_READ_TO_HERE_ARE_INTERESTING flag set. If the flags are located in a page table (not in the page header), then the page containing slot can be used instead of the page containing holder. If both flags are found to be set, execution jumps to the implementing part of the read barrier.
+- the implementing part of the write barrier or read barrier may optionally be present in many versions. Each version is specialized for the particular registers that contain the addresses of some or all of holder, slot, and value, so argument passing overhead is reduced.
+- the implementing parts of the write barrier or read barrier are implemented out-of-line, then the implementing parts are referred to as the write barrier stub and the read barrier stub.
+- the implementing parts may contain or reference code implementing possible write or read barriers used in the system (for example, incremental marking write barrier, incremental compaction write barrier, and generational write barrier).
+- Different parts of the implementing parts of the write barrier or read barrier can be enabled and disabled by patching, for example by patching unconditional jumps in the code to no operation performed (NOPs) and vice versa. This is advantageous if the implementing parts of the write and read barriers are generated out-of-line in stubs.
+- Write barrier stubs and read barrier stubs are registered with a runtime system.
+- Write barrier stubs and read barrier stubs can be patched quickly because their number is typically small compared to the number of generated code read or write operations that call the write and read barrier stubs.
+- other means for example, instructions with conditional behavior based on data
+- the runtime optionally iterates over and configures write barrier stubs appropriately by patching; iterates over pages that became important to track for writes or reads (or became unimportant to track for writes or reads); and switches write or read flags appropriately.
+- the techniques described herein are not inherently related to any particular hardware or other apparatus.
+- the techniques described herein may be implemented using hardware or a combination of software and hardware, either in a dedicated server, or integrated into another entity, or distributed across multiple entities.
+- the processor may be a general-purpose microprocessor, a microcontroller, a digital signal processor (DSP), an application specific integrated circuit (ASIC), a field programmable gate array (FPGA), a programmable logic device (PLD), a controller, a state machine, gated logic, discrete hardware components, or any other suitable entity that can perform calculations or other manipulations of information.
+- Code can constitute processor firmware, a protocol stack, a database management system, an operating system, or a combination of one or more of them stored in memory.
+- Memory can include random access memory (RAM), flash memory, read only memory (ROM), programmable read-only memory (PROM), erasable PROM (EPROM), registers, hard disks, removable disks, compact disks (CD) ROM, a digital-versatile disks (DVD), or any other suitable storage device.
+- the instructions may be stored in memory and implemented in one or more computer program products.
+- Examples of computer program products include one or more modules of computer program instructions encoded on a computer readable medium for execution by, or to control the operation of, the system, and according to any method known in the art.
+- the implementation described herein is not limited to any particular programming language.
+- Examples of such programming languages include data-oriented languages (for example, SQL, dBase), system languages (for example, C, Objective-C, C++, Assembly), architectural languages (for example, Java, .NET), and application languages (for example, PHP, Ruby, Perl, JavaScript, Python).
+- Instructions may also be implemented in computer languages such as array languages, aspect-oriented languages, assembly languages, authoring languages, command line interface languages, compiled languages, concurrent languages, curly-bracket languages, dataflow languages, data-structured languages, declarative languages, esoteric languages, extension languages, fourth-generation languages, functional languages, interactive mode languages, interpreted languages, iterative languages, list-based languages, little languages, logic-based languages, machine languages, macro languages, metaprogramming languages, multiparadigm languages, numerical analysis, non-English-based languages, object-oriented class-based languages, object-oriented prototype-based languages, off-side rule languages, procedural languages, reflective languages, rule-based languages, scripting languages, stack-based languages, synchronous languages, syntax handling languages, visual languages, Wirth languages, and xml-based languages.
+- computer languages such as array languages, aspect-oriented languages, assembly languages, authoring languages, command line interface languages, compiled languages, concurrent languages, curly-bracket languages, dataflow languages, data-structured languages, declarative languages,
+- a computer program as discussed herein does not necessarily correspond to a file in a file system.
+- a program can be stored in a portion of a file that holds other programs or data (for example, one or more scripts stored in a markup language document), in a single file dedicated to the program in question, or in multiple coordinated files (for example, files that store one or more modules, subprograms or portions of code).
+- a computer program can be deployed to be executed on one computer or on multiple computers that are located at one site or distributed across multiple sites and interconnected by a communication network.
+- the processes and logic flows described in this specification can be performed by one or more programmable processors executing one or more computer programs to perform functions by operating on input data and generating output.
+- a keyboard and a pointing device other kinds of input devices can be used to provide for interaction with a user as well, such as a tactile input device, visual input device, audio input device or brain-computer interface device.
+- feedback provided to the user can be any form of sensory feedback, for example, visual feedback, auditory feedback, or tactile feedback; and input from the user can be received in any form, including acoustic, speech, tactile or brain wave input.
+- hard-wired circuitry may be used in place of or in combination with software instructions to implement various aspects of the present disclosure.
+- aspects of the present disclosure are not limited to any specific combination of hardware circuitry and software.
+- a computing system that includes a back-end component, for example, as a data server; or that includes a middleware component, for example, an application server; or that includes a front-end component, for example, a client computer having a graphical user interface or a Web browser, or any combination of one or more such back-end, middleware, or front-end components.
+- a back-end component for example, as a data server
+- a middleware component for example, an application server
+- a front-end component for example, a client computer having a graphical user interface or a Web browser, or any combination of one or more such back-end, middleware, or front-end components.
+- the components of the system can be interconnected by any form or medium of digital data communication, for example, a communication network.
+- the communication network can include, for example, any one or more of a personal area network (PAN), a local area network (LAN), a campus area network (CAN), a metropolitan area network (MAN), a wide area network (WAN), a broadband network (BBN), the Internet, and the like.
+- PAN personal area network
+- LAN local area network
+- CAN campus area network
+- MAN metropolitan area network
+- WAN wide area network
+- BBN broadband network
+- the Internet and the like.
+- the communication network can include, but is not limited to, for example, any one or more of the following network topologies, including a bus network, a star network, a ring network, a mesh network, a star-bus network, tree or hierarchical network, or the like.
+- the communications modules can be, for example, modems or Ethernet cards.
+- machine-readable storage medium or ‘computer readable medium’ as used herein refers to any medium or media that participates in providing instructions to processor for execution. Such a medium may take many forms, including, but not limited to, non-volatile media, volatile media, and transmission media.
+- Non-volatile media include, for example, optical or magnetic disks.
+- Volatile media include dynamic memory.
+- Transmission media can include coaxial cables, copper wire, and fiber optics, including the wires that comprise a bus.
+- machine-readable media examples include floppy disks, flexible disks, hard disks, magnetic tape, any other magnetic medium, compact disks (CD), digital-versatile disks (DVD), any other optical medium, punch cards, paper tape, random-access memory (RAM), programmable-read-only memory (PROMs), erasable-programmable-read-only memory (EPROMs), any other memory chip or cartridge, or any other medium from which a computer can read.
+- the machine-readable storage medium can be a machine-readable storage device, a machine-readable storage substrate, a memory device, a composition of matter affecting a machine-readable propagated signal or a combination of one or more of them.
+Abstract
+Description
+Claims (42)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/465,980 US9021421B1 (en) | 2012-05-07 | 2012-05-07 | Read and write barriers for flexible and efficient garbage collection |
+Applications Claiming Priority (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/465,980 US9021421B1 (en) | 2012-05-07 | 2012-05-07 | Read and write barriers for flexible and efficient garbage collection |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US9021421B1 true US9021421B1 (en) | 2015-04-28 |
+Family
+ID=52987166
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/465,980 Expired - Fee Related US9021421B1 (en) | 2012-05-07 | 2012-05-07 | Read and write barriers for flexible and efficient garbage collection |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US9021421B1 (en) |
+Cited By (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150243359A1 (en) * | 2014-02-26 | 2015-08-27 | Infineon Technologies Ag | Method and device for processing an erase counter |
+CN106844046A (en) * | 2016-12-31 | 2017-06-13 | 昊宏广泰（北京）科技有限公司 | Bandwidth carrier memory management algorithm |
+US9926556B2 (en) | 2014-04-28 | 2018-03-27 | Ionis Pharmaceuticals, Inc. | Linkage modified oligomeric compounds |
+US10783073B2 (en) * | 2018-02-23 | 2020-09-22 | International Business Machines Corporation | Chronologically ordered out-of-place update key-value storage system |
+US11150981B2 (en) | 2018-02-23 | 2021-10-19 | International Business Machines Corporation | Fast recovery from failures in a chronologically ordered log-structured key-value storage system |
+US11163636B2 (en) | 2018-02-23 | 2021-11-02 | International Business Machines Corporation | Chronologically ordered log-structured key-value store from failures during garbage collection |
+US11372681B2 (en) * | 2019-01-31 | 2022-06-28 | EMC IP Holding Company LLC | Slab memory allocator with dynamic buffer resizing |
+Citations (10)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5088036A (en) * | 1989-01-17 | 1992-02-11 | Digital Equipment Corporation | Real time, concurrent garbage collection system and method |
+US5949972A (en) * | 1996-08-23 | 1999-09-07 | Compuware Corporation | System for memory error checking in an executable |
+US20030208500A1 (en) * | 2002-02-15 | 2003-11-06 | Daynes Laurent P. | Multi-level undo of main-memory and volatile resources |
+US20040187102A1 (en) * | 2003-03-21 | 2004-09-23 | Garthwaite Alexander T. | Combining write-barriers within an inner loop with fixed step |
+US20050165794A1 (en) * | 2003-12-30 | 2005-07-28 | Microsoft Corporation | Index key normalization |
+US20050198620A1 (en) * | 2004-03-05 | 2005-09-08 | Mathiske Bernd J. | Method and apparatus for determining frequency of execution for compiled methods within a virtual machine |
+US20060107251A1 (en) * | 2002-06-28 | 2006-05-18 | Microsoft Corporation | Managing code when communicating using heirarchically-structured data |
+US20110004869A1 (en) * | 2009-07-02 | 2011-01-06 | International Business Machines Corporation | Program, apparatus, and method of optimizing a java object |
+US20110264713A1 (en) | 2010-04-23 | 2011-10-27 | Tatu Ylonen Oy Ltd | Garbage collector with concurrent flipping without read barrier and without verifying copying |
+US20120117355A1 (en) * | 2010-11-10 | 2012-05-10 | International Business Machines Corporation | Memory Management for a Dynamic Binary Translator |
+-
+2012
+- 2012-05-07 US US13/465,980 patent/US9021421B1/en not_active Expired - Fee Related
+Patent Citations (10)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5088036A (en) * | 1989-01-17 | 1992-02-11 | Digital Equipment Corporation | Real time, concurrent garbage collection system and method |
+US5949972A (en) * | 1996-08-23 | 1999-09-07 | Compuware Corporation | System for memory error checking in an executable |
+US20030208500A1 (en) * | 2002-02-15 | 2003-11-06 | Daynes Laurent P. | Multi-level undo of main-memory and volatile resources |
+US20060107251A1 (en) * | 2002-06-28 | 2006-05-18 | Microsoft Corporation | Managing code when communicating using heirarchically-structured data |
+US20040187102A1 (en) * | 2003-03-21 | 2004-09-23 | Garthwaite Alexander T. | Combining write-barriers within an inner loop with fixed step |
+US20050165794A1 (en) * | 2003-12-30 | 2005-07-28 | Microsoft Corporation | Index key normalization |
+US20050198620A1 (en) * | 2004-03-05 | 2005-09-08 | Mathiske Bernd J. | Method and apparatus for determining frequency of execution for compiled methods within a virtual machine |
+US20110004869A1 (en) * | 2009-07-02 | 2011-01-06 | International Business Machines Corporation | Program, apparatus, and method of optimizing a java object |
+US20110264713A1 (en) | 2010-04-23 | 2011-10-27 | Tatu Ylonen Oy Ltd | Garbage collector with concurrent flipping without read barrier and without verifying copying |
+US20120117355A1 (en) * | 2010-11-10 | 2012-05-10 | International Business Machines Corporation | Memory Management for a Dynamic Binary Translator |
+Cited By (9)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20150243359A1 (en) * | 2014-02-26 | 2015-08-27 | Infineon Technologies Ag | Method and device for processing an erase counter |
+US9466377B2 (en) * | 2014-02-26 | 2016-10-11 | Infineon Technologies Ag | Method and device for processing an erase counter |
+US9926556B2 (en) | 2014-04-28 | 2018-03-27 | Ionis Pharmaceuticals, Inc. | Linkage modified oligomeric compounds |
+CN106844046A (en) * | 2016-12-31 | 2017-06-13 | 昊宏广泰（北京）科技有限公司 | Bandwidth carrier memory management algorithm |
+CN106844046B (en) * | 2016-12-31 | 2021-06-11 | 北京市腾河智慧能源科技有限公司 | Broadband carrier memory management method |
+US10783073B2 (en) * | 2018-02-23 | 2020-09-22 | International Business Machines Corporation | Chronologically ordered out-of-place update key-value storage system |
+US11150981B2 (en) | 2018-02-23 | 2021-10-19 | International Business Machines Corporation | Fast recovery from failures in a chronologically ordered log-structured key-value storage system |
+US11163636B2 (en) | 2018-02-23 | 2021-11-02 | International Business Machines Corporation | Chronologically ordered log-structured key-value store from failures during garbage collection |
+US11372681B2 (en) * | 2019-01-31 | 2022-06-28 | EMC IP Holding Company LLC | Slab memory allocator with dynamic buffer resizing |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US9021421B1 (en) | Read and write barriers for flexible and efficient garbage collection | |
+CN111770113B (en) | Method for executing intelligent contract, block chain node and node equipment | |
+US6381738B1 (en) | Method for optimizing creation and destruction of objects in computer programs | |
+US7089272B1 (en) | Specializing write-barriers for objects in a garbage collected heap | |
+US8181170B2 (en) | Unwind information for optimized programs | |
+US6820101B2 (en) | Methods and apparatus for optimizing garbage collection using separate heaps of memory for storing local objects and non-local objects | |
+US6757890B1 (en) | Methods and apparatus for enabling local Java object allocation and collection | |
+JP4562918B2 (en) | Compiling program generation for an interpretive runtime environment | |
+US20160098346A1 (en) | Assisted garbage collection in a virtual machine | |
+WO2012062081A1 (en) | Method for online updating java classes based on reconstruction of byte-code files | |
+US11579855B2 (en) | Reduced memory consumption of compiler-transformed asynchronous methods | |
+CN111815310B (en) | Method for executing intelligent contract, block chain node and storage medium | |
+CN102364433B (en) | Method for realizing Wine construction tool transplanting on ARM (Advanced RISC Machines) processor | |
+CN106598828A (en) | Method and device for determining invalid class in source code | |
+CN111768184A (en) | Method for executing intelligent contract and block link point | |
+CN115495086A (en) | Compiling method, compiler and Wasm virtual machine | |
+Aslam et al. | Optimized java binary and virtual machine for tiny motes | |
+US20190265956A1 (en) | Compiler-Generated Asynchronous Enumerable Object | |
+Reese | Understanding and using C pointers: Core techniques for memory management | |
+US6275985B1 (en) | Method and apparatus for developing an application that implements garbage collection efficiently by combining proxy objects with compiler support | |
+Stadler et al. | Lazy continuations for Java virtual machines | |
+Gregersen et al. | Towards a Dynamic-update-enabled JVM | |
+Orlov et al. | FINCH: A system for evolving Java (bytecode) | |
+KR100763199B1 (en) | Method for calling a method in virtual machine environment and system including a virtual machine processing the method | |
+WO2003036473A1 (en) | Native code isolation in a multi-tasking java virtual machine |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:CORRY, ERIK, MR.;EGOROV, VYACHESLAV, MR.;REEL/FRAME:028274/0476Effective date: 20120507 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044334/0466Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 4TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 4 |
+|
+FEPP | Fee payment procedure |
+Free format text: MAINTENANCE FEE REMINDER MAILED (ORIGINAL EVENT CODE: REM.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+LAPS | Lapse for failure to pay maintenance fees |
+Free format text: PATENT EXPIRED FOR FAILURE TO PAY MAINTENANCE FEES (ORIGINAL EVENT CODE: EXP.); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+STCH | Information on status: patent discontinuation |
+Free format text: PATENT EXPIRED DUE TO NONPAYMENT OF MAINTENANCE FEES UNDER 37 CFR 1.362 |
+|
+FP | Lapsed due to failure to pay maintenance fee |
+Effective date: 20230428 |

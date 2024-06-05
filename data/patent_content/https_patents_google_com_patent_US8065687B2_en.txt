@@ -1,0 +1,602 @@
+US8065687B2 - Bypass virtualization - Google Patents
+Bypass virtualization Download PDFInfo
+- Publication number
+- US8065687B2 US8065687B2 US11/970,500 US97050008A US8065687B2 US 8065687 B2 US8065687 B2 US 8065687B2 US 97050008 A US97050008 A US 97050008A US 8065687 B2 US8065687 B2 US 8065687B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- guest
+- host
+- operating system
+- virtual
+- memory
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active, expires
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/44—Arrangements for executing specific programs
+- G06F9/455—Emulation; Interpretation; Software simulation, e.g. virtualisation or emulation of application or operating system execution engines
+- G06F9/45533—Hypervisors; Virtual machine monitors
+- G06F9/45558—Hypervisor-specific management and integration aspects
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/44—Arrangements for executing specific programs
+- G06F9/455—Emulation; Interpretation; Software simulation, e.g. virtualisation or emulation of application or operating system execution engines
+- G06F9/45533—Hypervisors; Virtual machine monitors
+- G06F9/45558—Hypervisor-specific management and integration aspects
+- G06F2009/45583—Memory management, e.g. access or allocation
+Definitions
+- This invention generally relates to computer software, and more particularly to methods and systems for virtualization.
+- Machine virtualization nests a guest operating system (“OS”) within a host OS by running the guest OS on top of a virtual machine monitor (“VMM”), a.k.a. “hypervisor,” e.g., VMware® Player or Virtual PC.
+- VMM virtual machine monitor
+- hypervisor e.g., VMware® Player or Virtual PC.
+- the VMM provides resource emulation for the guest OS so that the guest OS can transparently utilize host OS resources—e.g., CPU, RAM, graphics or audio drivers and hardware, software or firmware interfaces to data stores or network interfaces, peripheral devices and their drivers—anything that the guest OS might need to run, outside of the VMM itself.
+- emulated graphics device lack high-performance features, e.g., 3D capabilities or video acceleration. Thus playing most modern 3D computer games is essentially impossible because such games depend on high-performance 3D acceleration. This limitation constrains potential use and deployment of virtual machines.
+- Embodiments of the present invention comprise methods and systems for augmenting machine virtualization by entirely bypassing resource emulation for performance-critical features, such as 3D graphics acceleration, through the use of high-performance interfaces between the guest OS and the host OS.
+- Embodiments of the present invention also comprise methods and systems for ameliorating the performance penalties and functionality restrictions of conventional resource emulation.
+- FIG. 1 illustrates a software stack for an operating system.
+- FIG. 2 illustrates an embodiment of bypass virtualization as applied to a software stack in a guest OS.
+- FIG. 3 illustrates an embodiment of a virtual block I/O (input/output).
+- FIG. 4 illustrates an embodiment wherein memory pages are shared between a guest OS and a host OS using the virtual block I/O of FIG. 3 .
+- FIG. 5 illustrates a flow of the steps in bypass virtualization.
+- FIG. 6 illustrates a flow of the steps in bypass virtualization.
+- FIG. 7 illustrates a guest sharing a buffer in the hosted virtualization context.
+- FIG. 8 illustrates a host sharing a buffer hosted virtualization context.
+- FIG. 9 illustrates sharing buffers in the hypervisor context.
+- FIG. 10 illustrates the Bypass Interface incorporating memory sharing.
+- Bypass virtualization avoids the performance penalties and functionality restrictions of conventional resource emulation by a VMM by bypassing the VMM—requests issued by a guest OS for a host OS resource are instead channeled through the Bypass Interface.
+- the Bypass Interface intercepts the requests, forwards them to the host OS, which passes the request on to the actual resource, and then the returns the response from the host OS resource to the guest OS. Since is unnecessary to implement the Bypass Interface for every OS resource, problematic or performance-insensitive resources can be handled with machine virtualization.
+- Good candidate resources for bypass virtualization have at least two qualities: (1) their behavior can be expressed within a small, well-defined interface; and (2) their state can be easily encapsulated and manipulated. These resources should not rely heavily on an implicit or global state.
+- 3D graphics adapters are an excellent candidate for bypass virtualization.
+- 3D graphics adapters typically have a small, well-defined interface consisting of a few standard user libraries. Furthermore, these libraries already adopt the notion of a rendering context that encapsulates a 3D rendering state to allow several 3D applications to share access to the 3D graphics adapter. Calls to Direct3D affect only a single rendering context at a time.
+- the Direct3D kernel interface can manage rendering contexts to insulate each one from others. Rendering contexts provide a logical view of the underlying 3D graphics adapter which substantially simplifies the task of bypass virtualization. In a sense, 3D graphics adapters are already virtualized by Direct3D. With bypass virtualization, sharing the 3D graphics adapter extends to 3D applications running within virtual machines, as well.
+- Direct3D surfaces are memory regions where data transactions take place. Images, geometry data, shader programs and command buffers can be transferred from the application to Direct3D using surfaces. Surfaces may reside in user process memory, video memory, or both. Surfaces tend to be large (e.g., on the order of megabytes), and may be frequently copied to the 3D hardware (e.g., procedurally generated geometry data such as shadow volumes). Much of Direct3D's design is dedicated to optimizing surface data transfer. Therefore, in the interests of achieving good performance, transferring surface data over the Bypass Interface should be efficient.
+- the frame buffer (e.g., a buffer storing pixels eventually destined to be displayed on a monitor) can be represented by a special Direct3D resource: the primary surface, which can represent the actual display device.
+- the primary surface presents special challenges to bypass virtualization that will be discussed below.
+- Direct3D (part of the DirectX Application Programming Interface (“API”)) is a 3D hardware resource that provides an interface for access to the advanced graphics capabilities of a 3D graphics adapter for high-performance rendering of 3D graphics.
+- API Application Programming Interface
+- FIG. 1 illustrates a software stack for an operating system.
+- FIG. 1 represents a typical implementation of Direct3D in Windows XP.
+- a Windows XP environment 100 includes a 3D application 110 which communicates with a Direct3D resource interface 120 .
+- Direct3D resource interface 120 communicates with a Direct3D resource kernel interface 140 through a thunk module 130 .
+- the thunk module 130 is a user-space library, e.g., D3D8THK.DLL, that translates normal requests into system calls to the Direct3D resource kernel interface 140 .
+- Direct3D resource interface 120 Different versions of the Direct3D resource interface 120 are implemented through different interface libraries. For example, Direct3D version 8 uses D3D8.DLL, while Direct3D version 9 uses D3D9.DLL.
+- the Direct3D resource interface 120 is a stable, well-documented interface targeted at software vendors, such as game developers. Microsoft implements each version of Direct3D as a distinct library with different interfaces. Newer versions expose new functionality (e.g., pixel shaders) and deprecate older, poorly supported features (e.g., fixed-function bump-mapping).
+- Direct3D resource interface 120 translates high-level requests made by the 3D application 110 into low-level requests handled by the Direct3D resource kernel interface 140 .
+- the Direct3D resource kernel interface 140 is a kernel module that communicates with the actual 3D graphics adapter.
+- Direct3D resource interface 120 There is no simple correspondence between Direct3D resource interface 120 and Direct3D resource kernel interface 140 .
+- the Direct3D resource interface 120 exposes many drawing functions to 3D application 110 and offers automatic resource management.
+- the Direct3D resource kernel interface 140 chiefly traffics in command buffers, which may include several drawing and resource commands batched together.
+- the Direct3D resource interface 120 implementation assembles command buffers from sequences of application requests and performs automatic resource management.
+- FIG. 2 illustrates an embodiment of bypass virtualization as applied to a software stack in a guest OS.
+- a guest OS 210 is nested within a host OS 200 .
+- 3D application 210 a passes requests to Direct3D resource interface 210 b .
+- Direct3D resource interface 210 b passes a request intended for Direct3D resource kernel interface 210 e that is intercepted by intercept module 210 c .
+- intercept module 210 c passes the calls to Bypass Interface client 210 d .
+- Bypass Interface client 210 d is the module in guest OS 210 that provides an efficient communication channel to host OS 200 .
+- the host counterpart of Bypass Interface client 210 d is Bypass Interface server 220 .
+- Bypass Interface client 210 d on guest OS 210 forwards the requests to Bypass Interface server 220 on host OS 200 ; the requests are then sent through interpretation module 230 in the host (typically implemented in place of the host thunk module, e.g., D3D8THK.DLL) and ultimately to Direct3D kernel interface 240 in the host.
+- interpretation module 230 in the host typically implemented in place of the host thunk module, e.g., D3D8THK.DLL
+- Direct3D kernel interface 240 in the host.
+- the intercept module may be implemented in place of the thunk module 130 shown in FIG. 1 .
+- the original thunk module e.g., D3D8THK.DLL
+- an intercept module 210 c comprising a proxy thunk module that exposes the same API as the original thunk module but provides a different implementation.
+- the intercept module 210 c and Bypass Interface client 210 d can be implemented in the same module (e.g., a dynamically link library (“DLL”)).
+- DLL dynamically link library
+- Direct3D resource interface 210 b may be simpler to comprehend and more thoroughly documented, the above approach reuses the sophisticated batching and resource management handled at the resource interface level by preserving the Direct3D resource interface at 210 b .
+- a single proxy thunk module implementation can be shared for several versions of Direct3D, because many versions of Direct3D differ only in the resource interface and actually use the same library implementation in the thunk module.
+- Another, more conventional, approach would be to build a guest device driver for a virtual 3D graphics adapter. However, there is little reason to implement the driver interface instead of a proxy thunk module. Their interfaces are actually very similar, and a proxy thunk module, which resides in the user space, avoids problematic kernel development.
+- Bypass Interface client 210 d is represented by a single module in FIG. 2 , the functionality within that module may be further broken down into smaller units (e.g., a forwarding module that handles the forwarding of intercepted requests and a response module that monitors the forwarded intercepted calls and sends the responses corresponding to the forwarded calls back to the application associated with those requests)
+- a forwarding module that handles the forwarding of intercepted requests
+- a response module that monitors the forwarded intercepted calls and sends the responses corresponding to the forwarded calls back to the application associated with those requests
+- Direct3D utilizes an API
+- other resources may use other types of interfaces.
+- the present invention is applicable to all types of interfaces (including APIs) for all types of resources.
+- the Bypass Interface is so named because it completely bypasses Direct3D resource kernel interface 210 e .
+- Direct3D resource kernel driver 210 e need not exist.
+- FIG. 5 and FIG. 6 illustrate a flow of the above-described steps in bypass virtualization.
+- the Bypass Interface is similar to a remote procedure call (RPC) interface between the guest OS and the host OS.
+- the Bypass Interface is used to pass requests from the guest to the host, and correspondingly pass return values from the host to the guest.
+- the guest is the RPC client
+- the host is the RPC server.
+- Customarily the RPC client and server reside on two physically separate machines, but the Bypass Interface adds a slight twist.
+- the client and server are on the same physical machine, but the client is running in a virtual machine.
+- the Bypass Interface for a resource comprises three major components.
+- the first major component is a communication mechanism between the virtual domains.
+- the communication mechanism can be used for implementing the Bypass Interface, the memory sharing service, or other services.
+- the communication mechanism is a generic component that is not tied to any specific type of resource.
+- the second major component is a memory sharing service that enables the mapping of buffers between different virtual domains.
+- the memory sharing service is also a generic component that is not tied to any specific type of resource.
+- the third major component is an resource-specific proxy module that converts a normal request into a RPC (e.g., proxy D3D8THK.DLL), to be sent via the communication mechanism.
+- a RPC e.g., proxy D3D8THK.DLL
+- Implementing the proxy thunk module requires detailed knowledge of the semantics of the API. For example, it is no longer possible to pass arguments by pointer because the client and server may reside in separate memory spaces.
+- the RPC between the guest OS and the host OS can be implemented using message passing components.
+- One approach is to make use of the VMM-emulated network between the guest OS and the host OS.
+- a TCP/IP socket can connect the guest OS with the host OS.
+- VMware Player a more efficient variation uses a virtual serial port in the guest.
+- the virtual serial port is implemented as a named pipe in the host. Using a pipe instead of a socket avoids network protocol overhead.
+- Sockets and pipes are essentially message passing interfaces that have intrinsic overhead. Even when both endpoints are located on the same machine, a message passing implementation often requires the creation of one or more copies of the communicated data.
+- the OS copies the data from the sender into an internal buffer, then copies the data from the internal buffer to the receiver.
+- the copying overhead can be substantial.
+- a shared memory implementation does not require copies of data. If multiple processes can access the same physical memory, then changes made in one process will be visible to all processes.
+- a message passing implementation can only pass arguments by value (i.e., a copy), but a shared memory implementation may also pass arguments by reference (i.e., the address). For large data buffers, such as Direct3D surfaces, passing arguments by reference rather than value can be substantially more efficient.
+- VM Virtual memory
+- a VM system automatically manages a number of details for individual processes, such as memory protection, process isolation, and swapping memory to disk.
+- Sharing memory between the guest and the host consists of the following tasks: (1) locking the guest's shared pages in the guest OS for the duration of the communication; and (2) mapping shared buffers that occupy a set of contiguous pages in the guest's virtual address space to a set of contiguous pages in the host's virtual address space and vice versa.
+- the guest For the guest to share its pages with the host, the guest must lock the set of shared pages for the duration of the communication. The guest can unlock the set of shared pages after the communication is completed.
+- An approach to robustly prevent such memory corruption is to use a guest kernel interface that manages the locked set of shared pages on behalf of the guest process.
+- the guest kernel interface waits until communication with the host is done before unlocking the set of shared pages.
+- Efficiently implementing an accelerated service across virtual domains can require sharing contiguous virtual address space between separate virtual domains (e.g., where the host OS is running a VMM such as VMware Workstation, and a Linux guest OS is running on top of the VMM). This requirement arises because a buffer that was being passed to a user-mode resource interface in one domain will be passed to another user-mode resource interface in another domain, and both resource interfaces require contiguous buffers.
+- Providing a memory sharing service either as an extension for a VMM (i.e. the detailed methods described above), as part of a hypervisor, or as part of a VMM can support the efficient implementation of higher-level paravirtual services (e.g. GDI, Direct3D, printer, sockets).
+- Contiguous virtual address space includes buffers in kernel mode, buffers in user mode, and buffers in memory behind busses in the computer system. Buffers that are smaller than the processor page size and are properly aligned are intrinsically contiguous even in physical address space. Buffers larger than a page are regularly used as resource parameters.
+- FIG. 7 illustrates a guest sharing a buffer in the hosted virtualization context.
+- Buffer 712 e.g., a texture used to render a 3D scene
+- an application e.g., Half-Life 2, a video game
+- This buffer occupies four physical processor pages of memory. Buffer 711 shows that these pages can be scattered (not contiguous) in physical address space.
+- Software running inside a virtual domain can control the mapping of virtual address space to physical address space.
+- a hypervisor or VMM e.g., VMware Player, Xen
+- the memory sharing service can provide a mechanism for software running in a virtual domain to assign a name to one or more buffers in the address space of that virtual domain.
+- the service can provide a mechanism for another virtual domain to map one or more named buffers into the address space of this second virtual domain.
+- a named buffer can be shared with one or more additional virtual domains. These virtual domains can be located in the same physical machine.
+- a memory sharing service can allow a virtual domain to specify restrictions on which other virtual domains have the permission to access one or more named buffers.
+- a memory service can allow virtual domains to specify what types of access (e.g., read-write, read-only) are allowed to one or more named regions.
+- the service can allow a virtual domain to reassign the name for a particular buffer so that it represents the virtual address space defined by a second named buffer.
+- a memory service can allow one or more virtual domain to issue memory barriers for one or more named buffers. Memory barriers can be used to allow unshareable regions of memory (e.g., a buffer in GPU memory which is not mapped by the VMM into physical address space of the guest virtual domain) to be transferred between virtual domains as infrequently as possible.
+- a hypervisor can provide the capability for software to be run in separate virtual domains.
+- the hypervisor provides memory management services suitable for managing shadow mappings for memory assigned to different virtual domains.
+- FIG. 9 illustrates sharing buffers in the hypervisor context.
+- buffer 921 shows an embodiment where the hypervisor owns real physical address.
+- the memory sharing service is used to implement a bypass service.
+- Physical address space of the service provider virtual domain (as shown in buffer 901 ) can contain a subset of the pages in the real physical address space.
+- Physical address space of the service client virtual domain (as shown in buffer 911 ) can contain a subset of the physical pages in the real physical address space.
+- Software in the bypass client virtual domain can request the memory sharing service to name a buffer 912 in virtual address space to be shared with other virtual domains.
+- Software in the bypass provider virtual domain can request the memory sharing service to map the buffer into the address space of the bypass provider virtual domain resulting in buffer 902 .
+- Software in the bypass provider virtual domain can likewise request the memory sharing service to name a buffer 903 in virtual address space to be shared with other virtual domains.
+- Software in the client virtual domain can request the memory sharing service to map the buffer into the address space of the bypass client virtual domain resulting in buffer 913 .
+- a hosted VMM (e.g. VMware Workstation) can provide the capability to execute software in separate virtual domains (e.g., guest virtual domain).
+- buffer 711 shows the physical address space the VMM can provide to the guest virtual domain.
+- the VMM runs inside the host virtual domain so all the resources exposed to the guest virtual domain can be accessible in the host virtual domain.
+- the memory sharing service can map the guest virtual domain physical address space into virtual address space of the host virtual domain (as shown in buffer 702 ).
+- guest physical memory can be contained in an anonymous file mapping object created with the Win32 CreateFileMapping call which is later mapped into virtual address space of the host domain with the Win32 MapViewOfFile call. This virtual address space in the host domain can map to the physical address space of the host domain (as shown in buffer 701 ).
+- Software in the guest virtual domain can request the memory sharing service to name a buffer 712 in virtual address space to be shared with other virtual domains.
+- Software in the host virtual domain can request the memory sharing service to map the buffer into the address space of the host virtual domain resulting in buffer 703 .
+- Buffers 702 and 703 refer to different regions of the same virtual address space of the host virtual domain.
+- Some interfaces return newly allocated buffers to the resource client (e.g., a texture located in GPU memory can be mapped into virtual address space of the host virtual domain by a call to the NtGdiDdLock; the pointer to the buffer is part of the response).
+- Performing bypass virtualization on these APIs can require a buffer created in the virtual address space host virtual domain to be passed to the guest.
+- FIG. 8 illustrates a host sharing a buffer hosted virtualization context. The pages containing the buffer are not accessible in the physical address space of the guest virtual domain and the host virtual domain can request the memory sharing service to name the buffer 803 .
+- the guest (client) virtual domain can allocate a backing in guest virtual address space (as shown in buffer 822 ).
+- the memory sharing service can map the guest virtual domain physical address space into virtual address space of the host virtual domain (as shown in buffer 802 ).
+- the physical address space of the host virtual domain can contain the buffers allocated in both the guest and host virtual domains (as shown in buffer 801 ).
+- Software in the host virtual domains can request that a named buffer allocated in one virtual domain (e.g., the guest or the host) can be rebound to a named buffer allocated in another virtual domain (e.g., the host or the guest).
+- a named buffer allocated in one virtual domain e.g., the guest or the host
+- another virtual domain e.g., the host or the guest.
+- Software in the host or guest virtual domains can request the memory mapping service to issue a read or write memory barrier. Issuing a memory barrier can trigger a copy of the region covered by the barrier, potentially a subset of the buffer.
+- a read memory barrier can trigger a copy from the virtual domain owning the buffer to the virtual domain accessing the buffer.
+- a write memory barrier can trigger a copy from the virtual domain accessing the buffer to the virtual domain owning the buffer.
+- Software in host virtual domain can perform the transfers on behalf of the guest domain because it can gain access to the complete address space of both the guest and host virtual domains.
+- FIG. 10 illustrates the Bypass Interface incorporating memory sharing.
+- FIG. 10 is representative of the prototypical components of a bypass service implementation.
+- An application 1020 in the bypass client virtual domain can allocate buffers in guest virtual address space.
+- the application 1020 can access a resource interface 1021 and pass buffers to the resource interface 1021 .
+- An intercept module 1022 can receive this and make a bypass request using the bypass functionality client 1023 .
+- the Bypass Interface client 1023 can parse the structures and state for the request to determine which memory regions need to be shared.
+- the Bypass Interface client 1023 can use high-level API knowledge to determine when to issue memory barriers by invoking the memory sharing service 1000 (e.g., a buffer passed to an API call as an input only requires one write memory barrier to be issued in the guest virtual domain). Additionally, the Bypass Interface client 1023 can use cached state information and OS interfaces (e.g., Win32 call GetWriteWatch) for memory monitoring to reduce the number of required memory barriers.
+- the Bypass Interface client 1023 can request the memory sharing service 1000 to name the buffers required for making the request to the Bypass Interface server 1010 . After sharing the appropriate buffers and issuing the appropriate memory barriers the Bypass Interface client 1023 can make a request (e.g., RPC, shared memory pipe) to the Bypass Interface server 1010 .
+- the Bypass Interface client 1023 can embedded the names of the pertinent buffers in the request to the Bypass Interface server 1010 .
+- the Bypass Interface server 1010 can request the memory sharing service 1000 to map the buffers used for the request into the virtual address space of the bypass provider virtual domain.
+- the memory sharing service 1000 can also be invoked by the Bypass Interface server 1010 to perform memory barrier operation.
+- the Bypass Interface server 1010 can invoke the interpretation module 1011 .
+- the Bypass Interface server 1010 can modify the pointers inside the data structures for the request so that they correspond to the shared regions mapped into the provider virtual domain's address space by the memory sharing server 1000 . These address corrected data structures can eventually be passed to the underlying resource kernel interface 1012 .
+- the interpretation module 1011 can buffer requests and can cache state information. It can emulate an unavailable resource kernel interface 1013 and can systematically modify requests based on cached state information. The interpretation module 1011 can serialize the state required to resume the execution of a Bypass Interface client virtual domain on a different physical machine if it were to have its execution paused. Finally, the interpretation module can invoke the resource kernel interface 1012 in the provider virtual domain to service the request made via the bypass interface.
+- the Bypass Interface server 1010 can invoke the memory sharing service 1000 to share provider-owned response buffers and data structures with the bypass client virtual domain.
+- the memory service 1000 can also be invoked to issue any appropriate memory barriers.
+- the Bypass Interface server 1023 can rewrite the pointers it previously modified to their original values to prevent unexpected alterations to bypass client domain behavior (i.e., bugs from modified pointers being reused by code executing in the guest virtual domain).
+- the Bypass Interface server 1010 can provide the corrected response (e.g., via RPC or shared memory pipe) to the bypass functionality client 1023 .
+- the Bypass Interface client 1023 can invoke the memory sharing service 1000 to attach a backing store to any named buffers returned as part of the response from the Bypass Interface server 1010 .
+- the memory sharing service 1000 can be invoked to issue memory barriers the Bypass Interface client 1023 deems necessary considering high-level API knowledge and cached state information.
+- the intercept module 1022 can inject or send the reply to the application 1020 for the original request to resource interface 1021 in the guest virtual domain.
+- One embodiment of a memory sharing service on a hosted VMM can take advantage of the DMA primitives provided by the VMM to translate virtual addresses from guest virtual domain address space to host virtual domain address space.
+- DMA direct memory access
+- high-performance block I/O devices read and write data between the device and physical memory pages without CPU interaction.
+- DMA is efficient because the CPU is freed from the task of transferring data and may accomplish other tasks during a DMA transaction.
+- DMA transactions between a process and a block device are copied through a dedicated set of physical pages managed by the OS. This copy is necessary because the I/O may require access to arbitrary ranges (e.g., addresses 10000 through 20000) of virtual addresses that may only partially overlap with physical pages.
+- the OS simply translates the virtual page addresses into physical page addresses and uses the physical addresses for the DMA transaction with the block device.
+- the OS should also prevent the memory pages from being remapped for the duration of the transaction. As a result, the data is copied directly to (or from) process virtual memory.
+- FIG. 3 illustrates an embodiment of a virtual block I/O (input/output).
+- FIG. 3 represents a schematic of the various modules in which translation takes place during such a transaction.
+- Guest OS 310 is nested within host OS 300 .
+- Application 310 a initiates a DMA transaction to access certain virtual page addresses on guest 310 .
+- the guest virtual page addresses are passed through an I/O call in kernel interface 310 b , where the addresses are translated to physical addresses located in the guest kernel, and then passed to VM block I/O driver 310 c .
+- VM block I/O driver 310 c communicates directly with VMM 320 running on host OS 300 , which translates the guest physical address into a host virtual address in the memory space of VMM 320 .
+- VMM 320 performs a real DMA transaction (through kernel interface 330 and block I/O driver 340 on the host OS) on behalf of application 310 a on the guest OS.
+- FIG. 4 illustrates an embodiment wherein memory pages are shared between a guest OS and a host OS using the virtual block I/O of FIG. 3 .
+- FIG. 4 is a schematic representation of an implementation of a Bypass Interface between host OS 400 and guest OS 410 using shared memory pages.
+- Application 410 a on the guest sends a request to Bypass Interface client 410 b .
+- Bypass Interface client 410 b manages communication on guest OS 410
+- Bypass Interface server 440 manages communication on host OS 400 .
+- bypass Interface server 440 is in a separate process.
+- Bypass Interface client 410 b issues specially formed I/O requests (e.g., a write operation through WriteFileGather) to dummy VM block I/O driver 410 d via guest kernel interface 410 c using virtual page addresses.
+- I/O requests e.g., a write operation through WriteFileGather
+- the dummy I/O requests do not trigger DMA transactions; only the page address translation mechanism in guest kernel interface 410 c is used.
+- the dummy request is forwarded to VMM 420 which attempts to service the I/O request using kernel interface 450 on the host.
+- calls to kernel interface 450 are intercepted by proxy kernel interface 430 that shunts the dummy I/O requests to Bypass Interface server 440 , which takes care of the ultimate DMA transaction with block I/O driver 460 .
+- the Bypass Interface server stores the mapping from guest to host virtual page addresses. To write data to a guest virtual address page in the future, the Bypass Interface server simply writes to the corresponding host virtual address page. Reading data is accomplished in like fashion.
+- a host kernel interface is used to remap physical address space of the guest virtual domain into virtual address space of the host virtual domain.
+- This driver can alter process page tables.
+- Such a kernel interface can create a second, logical view in the Bypass Interface server process for each of the array and data structure parameters. Normally, the original guest pages can be randomly scattered in the Bypass Interface server's virtual address space.
+- the kernel interface can create a new set of page table entries for the Bypass Interface server that preserves the contiguity and ordering of the request parameters in new, contiguous virtual address ranges.
+- the Bypass Interface server can linearly address array and data structure parameters using these virtual address ranges.
+- page table remapping preserves call-by-reference semantics because it creates new views, rather than copies, of the parameters.
+- One implementation of a communication mechanism can use a pool of shared pages.
+- the pool of shared pages can be used as a circular queue. Passing a request comprises writing the function ID and arguments into the next available set of pages. Page address translation need not be performed every call because the correspondence between guest and host page addresses is already known for these pages.
+- function calls can be deferred (e.g. non-blocking calls, most Direct3D client API calls), then many function calls can be batched into the queue.
+- the Bypass Interface client fills the queue or requires a return value, it sends a flush command to the Bypass Interface server using the notification mechanism.
+- the Bypass Interface server responds to the flush notification after it has serviced all queued requests. By queuing requests, the address translation occurs once per flush notification rather than once per call.
+- the Bypass Interface server can actually begin servicing function call requests ahead of flush notifications.
+- the server periodically polls the circular queue and services new requests, substantially decreasing the latency of function calls. If the Bypass Interface server runs in a different thread from the Bypass Interface client, function calls can be serviced concurrently with the rest of the virtual machine processing, increasing performance on multithreaded machines.
+- This polling mechanism is analogous to spin locks on multithreaded machines. As in spin locks, a process should only poll for a limited time before resorting to the slower notification mechanism. This limit is application- and load-specific. Heuristics may be used to adaptively define the spin count.
+- All the pointers and data structure offsets that the guest shares with the host need to be modified so that they point to the corresponding addresses in the host's virtual address space. Upon return, these pointers and offsets need to be reverted back to point to the guest's address spaces. Similarly, all the pointers the host wants to share with the guest need also be modified upon the return of the procedure call. Knowledge of data structures passed to the specific calls being invoked is used so as to identify all the pointers and offsets shared. In some implementations, the Bypass Interface server relocates the pointers.
+- blit bit-block transfer
+- Most blits, such as texture blits, volume blits, and surface blits occur when processing a command buffer.
+- the less common approach is the memory mapping interface (NtGdiDdLock, NtGdiDdUnlock, NtGdiDdLockD3D, NtGdiDdUnlockD3D).
+- blits are usually faster, but also requires that the source data be in a linear address range. To preserve linear addresses for large memory regions (i.e., larger than a page) during blits in the Bypass Interface requires use of the backing store in the Bypass Interface server.
+- the host acquires an address to the destination surface using a call to NtGdiDdLock or NtGdiDdLockD3D. Instead of copying surfaces from guest memory to the backing store, the host places the copies directly at the mapped destination surface pointer. When the copy is complete, the host releases the surface pointer using the corresponding call to NtGdiDdLock or NtGdiDdLockD3D.
+- the command buffer may reference surfaces located in guest user memory. For example, on graphics adapters that lack vertex processing acceleration (such as Intel embedded graphics adapters), vertex data is located in user memory.
+- the host should scan the command buffer for guest user memory surfaces when servicing NtGdiD3DDrawPrimitives2.
+- the guest user memory surfaces are cloned into host memory surfaces stored in the backing store, and references to the guest surfaces are updated to the corresponding host memory surfaces.
+- the command buffer usually has information about which ranges of the vertex data will actually be used, and only these ranges need to be transferred.
+- Some user memory surfaces rarely change their contents. For example, vertex data for a static model may never change after it is loaded once. In this case, the page tracking mechanism greatly helps.
+- the primary surface is a special surface that represents the actual display device (i.e., the pixels displayed on the screen).
+- the primary surface requires special consideration because the guest display device is emulated by the virtual machine monitor.
+- the host When a guest process requests a primary surface, the host creates one on behalf of the guest. However, the host creates a primary surface based on the actual display device rather than the emulated one in the guest. Operations on the virtualized primary surface must be performed as if the primary surface had the properties of the guest device.
+- the window surface is blitted to the primary surface using NtGdiDdBlt.
+- the host should add an offset to compensate for the position of the guest window within the host desktop.
+- NtGdiDdBlt calls should also clip the extents of the transfer when the extents of the guest display device exceed the bounds of the host primary surface.
+- Direct3D generates several blits to prevent Direct3D windows from drawing over occluded windows.
+- the client API in the guest is unaware of host window sizes and locations, and will inadvertently draw over them. To prevent this, blits that intersect host windows are subdivided to prevent host windows that occlude the virtual machine window from being drawn over. This is accomplished by injecting proxy windows in the guest to suppress rendering and blitting to inappropriate locations.
+- the host should prevent information about the host frame buffer from leaking into the guest. Parts of the primary surface that do not belong to guest should not be revealed.
+- the returned image should not contain pixels outside the virtual machine window. The contents of occluding host windows should be censored by blacking them out in the returned image.
+- Direct3D applications may request exclusive access to the primary surface and perform full screen rendering.
+- exclusive mode Direct3D does not need to use blits to present surfaces.
+- requests for exclusive access should not be automatically granted to the guest, and the guest should not be able to arbitrarily modify the display mode. Instead, Direct3D exclusive access and display mode changes should only be granted when the virtual machine has already been granted full-screen mode by the user.
+- the guest video driver handles clipping rendered imagery to the visible window, preventing the 3D graphics from overwriting windows stacked on top.
+- Bypass virtualization of 3D graphics bypasses the guest kernel and hence the guest video driver.
+- some additional information must be passed between the guest and host.
+- the host doesn't need to do anything special because the guest application is responsible for drawing only to areas it is allowed.
+- the Direct3D low-level API indicates that application attempts to blit to the front buffer can be rejected if there are any windows occluding the area being updated.
+- Direct3D application-level DLL e.g., D3D8.DLL
+- D3D8.DLL Direct3D application-level DLL
+- the intercept module When doing bypass virtualization, the intercept module must replicate part of this function for the guest, as the system bypasses the guest's rejection code and only using the host's rejection code. To replicate the guest rejection code, the intercept module asks the guest windowing system for the regions that are visible (e.g., using GetWindowRgn in Win32 API) and rejects an application's request to draw to non-visible areas. Then, the guest application will update its view of the windows on the screen and send updated drawing requests which will succeed. Those skilled in the art will recognize that this function can be placed in a separate module too.
+- the API does not allow us to reject blits and shifts the challenge to the application.
+- the host will be passed a description of the geometry of the guest visible region. The host must intersect the guest visible region of the window with the host visible region (i.e. take into account the occlusion of host windows) to come up with the final visible region on the host screen.
+- the guest could be responsible for this task since Direct3D requires the client application to ensure it doesn't draw on other windows.
+- the host could send a description of shapes and position of the visible windows to the guest.
+- the guest could then only update the appropriate regions of the screen.
+- the Bypass Interface server could make the Direct3D call that tries to blit fail if it would occlude any host window.
+- the guest would know that there are host windows occluding it.
+- the intercept module would fetch the occluding shapes from the host and make fake windows in the guest operating system which occlude the application window in the guest operating system. These would have shapes that matched the host windows.
+- the Direct3D code that queries the visible region would then generate the blits for just the portions that were visible on the host.
+- window occlusion Another approach for window occlusion would be to have the guest generate a few extra commands that cause the graphics card to write an alpha mask or color key to the rendered image in the non-visible portions.
+- the host also could convert its window geometry into similar bundle commands that it would silently execute on the video buffer before swapping. All requests to swap/flip the buffer could be converted to alpha aware or color-keyed blits so the guest window shapes would not need to be explicitly passed.
+- An efficient implementation of the above techniques will avoid sending the pixel contents of the rendered images/surfaces between video and host memory and can instead send information on what parts of the image should be rendered.
+- the full rendered image that will be presented on the screen is left in video memory to avoid the costly transfer across the local bus (video memory can be more than an order of magnitude faster than other system busses/memory).
+- video memory can be more than an order of magnitude faster than other system busses/memory.
+- the shapes of the windows should be passed back and forth as a compact representation (geometric description) of what parts of that image need to be presented on the screen when consider the possible occlusion by other windows.
+- a naive implementation that required the host CPU to take an action for every pixel could encode mask information for each pixel and then the host CPU could transfer only the appropriate pixels.
+- Mouse cursor rendering by the guest must be changed. Because the final image is placed on the screen by the host, guest-level mouse cursor rendering must be disabled (e.g., using ShowCursor in the Win32 API). If it is not, then the square around the cursor which would have been transparent will be filled by the guest with the desktop background from inside the guest.
+- guest-level mouse cursor rendering must be disabled (e.g., using ShowCursor in the Win32 API). If it is not, then the square around the cursor which would have been transparent will be filled by the guest with the desktop background from inside the guest.
+- a good 3D driver interface will provide a mechanism for user APIs to batch commands destined for the graphics device into a command stream. Segments of the command stream, called command buffers, are sent to the graphics card with a single call that transitions across the user/kernel boundary in the OS.
+- the Windows XP kernel call NtGdiD3dDrawPrimitives2 issues a batch of rendering operations to a graphics device for processing. Special flags designate whether a response to the command data is required and whether the command data can be processed asynchronously. These flags provide cues for how to efficiently communicate the commands from guest to host: the commands can be copied to an auxiliary buffer with a successful response being faked so that processing can continue in the guest.
+- the command buffers also control the transfer of surface data (textures, vertex buffers, etc) from user mode process memory to video memory.
+- the guest intercept module e.g., proxy interface
+- Vertex buffers are often kept in user memory, especially when they are dynamically generated by a Direct3D application.
+- the guest proxy tracks the ranges of vertex data that are referenced by commands that issue primitives to the graphics device.
+- a typical graphics drawing command will specify (1) a starting vertex in a buffer and (2) the number of primitives to draw using the vertices that follow the starting vertex.
+- a simple range calculation is made for each drawing command and only the corresponding memory regions that are required to process the command buffer are updated, rather than updating the entire buffer.
+- the vertices are referenced through an index buffer, which essentially consists of offsets into a vertex data array. Ranges are computed by scanning the index list, and the same technique is applied to reduce wasteful transfers.
+- Direct3D has a notion of vertex streams; each stream can be bound to a different surface, or a different section of the same surface. These bindings, along with texture bindings, persist between calls to NtGdiDrawPrimitives2. They are tracked to ensure that the correct surfaces are updated in the host when a guest application attempts to draw objects.
+- Command buffer tracking identifies the output surface so that they are updated in guest memory. If a buffer's backing store copy has been freed, the host should reallocate a new copy for the buffer before issuing the commands.
+- Bypass virtualization may be used to virtualize other devices, and to provide the guest with new capabilities.
+- the key is to find the appropriate place to build a proxy API using the Bypass Interface.
+- New graphics adapters support high-definition video acceleration, but emulated graphics adapters force video to use a slower, lower-quality software implementation.
+- DXVA DirectX Video Acceleration
+- DXVA uses a dataflow model to build a processing pipeline (a “filter graph,” in DirectShow parlance) that handles all of the steps for decoding a video, from interpreting a bitstream to rendering it on a content-protected device.
+- the filter graph is configured through a software interface. Essentially, an application negotiates with DXVA to build a sequence of processing stages, providing a convenient method to virtualize the DXVA pipeline. The negotiation process actually occurs across the Bypass Interface, and the DXVA pipeline is configured on a host service. The guest sees a proxy pipeline whose sole function is to pass the bitstream from the guest to the host pipeline.
+- D3D8THK.DLL Another, potentially simpler, virtualization approach is available.
+- the Direct3D thunk module, D3D8THK.DLL also exposes an interface for video acceleration. Specifically, the thunk targets the most intensive parts of video decoding, including motion compensation and de-interlacing.
+- implementing the video interface of D3D8THK.DLL may enable hardware video acceleration to the guest.
+- VMware Player emulates basic DirectSound for high-performance, low-latency audio playback, but does not support advanced audio effects such as positional audio, Doppler shifting, occlusion, and ambience effects.
+- Direct3D there are several options for virtualizing 3D audio. Again, it makes sense to use the bypass approach to virtualize a class of devices at the API level.
+- choices include Microsoft's DirectSound, the cross-platform OpenAL, and Creative Labs' EAX.
+- Each of these APIs presents a straightforward implementation opportunity for the Bypass Interface.
+- audio waveforms are handled through buffers in a manner analogous to Direct3D surfaces.
+- Windows XP renders 2-D through the graphics device interface (GDI) core service implemented in the user module GDI32.DLL.
+- GDI graphics device interface
+- GDI avoids providing direct access to graphics resources and exposes only a procedural interface. This allows GDI to provide important features, such as resolution-independent WYSIWYG rendering. For example, GDI-rendered text looks the same on a screen or on a printer despite the radical difference in device resolution.
+- the procedural interface makes GDI32.DLL an ideal candidate for bypass virtualization.
+- GDI is also used for printing
+- applying the bypass virtualization technique to GDI can also make host printers accessible to the guest. This is an important usability feature absent in virtual machines today.
+- Windows Vista implements GDI using Direct3D version 9, so a virtualized Direct3D version 9 interface is sufficient for providing complete 2-D and some 3D acceleration for Vista guests.
+- a Direct3D version 10 implementation is still necessary to accelerate Direct3D version 10 applications.
+- Windows XP handles window management through the core service implemented in the user module USER32.DLL. By virtualizing the guest window manager, guest windows can be serviced by the host window manager, making virtual guest windows available seamlessly within the host.
+- USER32.DLL handles color schemes, so virtual guest windows can be drawn with distinctive styles to indicate a sandboxed interface. For example, some OS virtualization products (such as Green Borders) add a colored border around virtualized applications.
+- OS virtualization products such as Green Borders
+- Windows Vista implements a new desktop window manager in the process DWM.EXE.
+- Desktop compositing allows for a variety of high-quality visual effects (such as window transparency, window thumbnails, window animations), that have become the hallmarks of the rich Windows Vista user experience.
+- the desktop window manager creates another challenge to achieving seamless virtual windows. While DWM.EXE is running, all graphics rendering operations (both GDI and Direct3D) to top-level windows are redirected to off-screen surfaces. DWM.EXE, then composites these off-screen surfaces onto the desktop, enabling visual effects such as blurred alpha transparency.
+- DWM.EXE If DWM.EXE is running on the host, then it is straightforward to redirect graphics rendering operations to off-screen rendering buffers on the host, and to allow the host DWM.EXE to composite the guest windows among the host windows.
+- DWM.EXE For guests using Aero (Vista guests running DWM.EXE), there is already a mechanism to redirect rendering operations to guest off-screen surfaces, and the virtualized Direct3D interface can be used to map these to host off-screen surfaces. Otherwise, the virtualized GDI32.DLL and USER32.DLL interfaces can perform this redirection.
+- DWM.EXE is absent from the host, then a different approach is necessary. In general, it would be difficult to implement DWM.EXE on Windows XP because DWM.EXE depends on some key architectural features of the Vista graphics driver model (WDDM). Nevertheless, it is possible to implement a limited form of desktop compositing even lacking a native DWM.EXE implementation.
+- WDDM Vista graphics driver model
+- DWM.EXE depends on the ability to share Direct3D surfaces between processes so that it can composite surfaces created in other processes.
+- the virtualized Direct3D device maps all guest surfaces into the same process as the bypass interface server.
+- the shim can composite the guest surfaces to the host desktop using calls to UpdateLayeredWindows. Certain effects (such as blurring) will not be available, but it is possible to achieve correct transparency and provide window thumbnails.
+- the new print architecture is a processing pipeline that manipulates a document format called XML paper specification (XPS).
+- XPS XML paper specification
+- an approach is to virtualize the XPS pipeline.
+- a proxy pipeline on the guest forwards XPS documents to the host XPS pipeline, which provides all of the real functionality.
+- Status notification for the XPS pipeline is asynchronous.
+- the notification mechanism may be implemented through a polling mechanism on the guest, or by using the “reverse” RPC guest service approach.
+- the next most common I/O is produced by the network.
+- the actual network adapter is emulated. This is overkill for most user processes, which may never directly interact with the adapter. Furthermore, the emulated network adapter may not expose desirable features such as TCP offload or advanced hardware DMA engines.
+- Winsock2 provides a convenient extension mechanism called layered service providers (LSP).
+- LSP layered service providers
+- a layered service provider is implemented by a user module that implements the service provider interface (SPI).
+- SPI is similar to a standard BSD socket interface, and is straightforward to implement using the Bypass Interface.
+- the invention is not limited to the exemplary embodiments, nor is the invention limited to 3D graphics interfaces nor graphics interfaces generally.
+- the invention also is not limited to the implementation shown in the example within the context of Microsoft® Windows XP or even Microsoft® Windows generally.
+- the invention can be implemented in any computer system or computer landscape that supports virtualization, for any interface.
+- a resource module does not necessarily correspond to a file.
+- a resource module may be stored in a portion of a file that holds other libraries, in a single file dedicated to the module in question, or in multiple coordinated files.
+- the invention can be implemented in digital electronic circuitry, or in computer hardware, firmware, software, or in combinations of them.
+- Apparatus of the invention can be implemented in a computer program product tangibly embodied in an information carrier, e.g., in a machine readable storage device or in a propagated signal, for execution by a programmable processor; and method steps of the invention can be performed by a programmable processor executing a program of instructions to perform functions of the invention by operating on input data and generating output.
+- the invention can be implemented advantageously in one or more computer programs that are executable on a programmable system including at least one programmable processor coupled to receive data and instructions from, and to transmit data and instructions to, a data storage system, at least one input device, and at least one output device.
+- a computer program is a set of instructions that can be used, directly or indirectly, in a computer to perform a certain activity or bring about a certain result.
+- a computer program can be written in any form of programming language, including compiled or interpreted languages, and it can be deployed in any form, including as a stand alone program or as a module, component, subroutine, or other unit suitable for use in a computing environment.
+- a computer program may exist as software, firmware, or in other contexts.
+- a computer program may be referred to as an application in certain contexts.
+- Suitable processors for the execution of a program of instructions include, by way of example, both general and special purpose microprocessors, and the sole processor or one of multiple processors of any kind of computer.
+- a processor will receive instructions and data from a read only memory or a random access memory or both.
+- the essential elements of a computer are a processor for executing instructions and one or more memories for storing instructions and data.
+- a computer will also include, or be operatively coupled to communicate with, one or more mass storage devices for storing data files; such devices include magnetic disks, such as internal hard disks and removable disks; magneto optical disks; and optical disks.
+- Storage devices suitable for tangibly embodying computer program instructions and data include all forms of non volatile memory, including by way of example semiconductor memory devices, such as EPROM, EEPROM, and flash memory devices; magnetic disks such as internal hard disks and removable disks; magneto optical disks; and CD ROM and DVD-ROM disks.
+- semiconductor memory devices such as EPROM, EEPROM, and flash memory devices
+- magnetic disks such as internal hard disks and removable disks
+- magneto optical disks and CD ROM and DVD-ROM disks.
+- the processor and the memory can be supplemented by, or incorporated in, ASICs (application specific integrated circuits). Both processors and memory may be physically located in many different locations within the computer or within a computer system.
+- ASICs application specific integrated circuits
+- the invention can be implemented on a computer having a display device such as a CRT (cathode ray tube) or LCD (liquid crystal display) monitor for displaying information to the user and a keyboard and a pointing device such as a mouse or a trackball by which the user can provide input to the computer.
+- a display device such as a CRT (cathode ray tube) or LCD (liquid crystal display) monitor for displaying information to the user and a keyboard and a pointing device such as a mouse or a trackball by which the user can provide input to the computer.
+- the invention can be implemented in a computer system that includes a back end component, such as a data server, or that includes a middleware component, such as an application server or an Internet server, or that includes a front end component, such as a client computer having a graphical user interface or an Internet browser, or any combination of them.
+- a back end component such as a data server
+- a middleware component such as an application server or an Internet server
+- a front end component such as a client computer having a graphical user interface or an Internet browser, or any combination of them.
+- the components of the system can be connected by any form or medium of digital data communication such as a communication network. Examples of communication networks include, e.g., a local area network (“LAN”), a wide area network (“WAN”), and the Internet.
+- LAN local area network
+- WAN wide area network
+- the Internet the global information network
+- the computer system can include clients and servers.
+- a client and server are generally remote from each other and typically interact through a network, such as the described one.
+- the relationship of client and server arises by virtue of computer programs running on the respective computers and having a client-server relationship to each other.
+Abstract
+Description
+Claims (14)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/970,500 US8065687B2 (en) | 2007-01-05 | 2008-01-07 | Bypass virtualization |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US88374207P | 2007-01-05 | 2007-01-05 | |
+US11/970,500 US8065687B2 (en) | 2007-01-05 | 2008-01-07 | Bypass virtualization |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20080168479A1 US20080168479A1 (en) | 2008-07-10 |
+US8065687B2 true US8065687B2 (en) | 2011-11-22 |
+Family
+ID=39595398
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US11/970,500 Active 2030-09-23 US8065687B2 (en) | 2007-01-05 | 2008-01-07 | Bypass virtualization |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US8065687B2 (en) |
+Cited By (4)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20090153561A1 (en) * | 2007-12-17 | 2009-06-18 | Beijing Lenovo Software Ltd. | Method and apparatus for capturing screen based on wddm |
+US9836402B1 (en) * | 2016-07-22 | 2017-12-05 | Red Hat, Inc. | Guest ordering of host file system writes |
+US10157146B2 (en) | 2015-02-12 | 2018-12-18 | Red Hat Israel, Ltd. | Local access DMA with shared memory pool |
+US11164280B2 (en) | 2017-07-07 | 2021-11-02 | Banma Zhixing Network (Hongkong) Co., Limited | Graphics layer processing in a multiple operating systems framework |
+Families Citing this family (55)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8375326B2 (en) * | 2006-05-30 | 2013-02-12 | Dell Products Lp. | Contextual-based and overlaid user interface elements |
+US8584126B2 (en) * | 2007-03-23 | 2013-11-12 | Vmware, Inc. | Systems and methods for enabling threads to lock a stage prior to processing data |
+US9424315B2 (en) * | 2007-08-27 | 2016-08-23 | Teradata Us, Inc. | Methods and systems for run-time scheduling database operations that are executed in hardware |
+WO2009039376A2 (en) * | 2007-09-20 | 2009-03-26 | C & S Operations, Inc. | Computer system with tunneling |
+US8239486B2 (en) * | 2008-03-19 | 2012-08-07 | Oracle International Corporation | Direct network file system |
+US8086822B2 (en) * | 2008-05-30 | 2011-12-27 | Vmware, Inc. | In-place shadow tables for virtualization |
+US8019966B2 (en) * | 2008-06-09 | 2011-09-13 | International Business Machines Corporation | Data sharing utilizing virtual memory having a shared paging space |
+US8041877B2 (en) * | 2008-06-09 | 2011-10-18 | International Business Machines Corporation | Distributed computing utilizing virtual memory having a shared paging space |
+US11287939B2 (en) | 2008-10-09 | 2022-03-29 | Aristocrat Technologies Australia Pty Limited | Gaming system and gaming system processor module |
+AU2009222627B2 (en) | 2008-10-09 | 2011-07-21 | Aristocrat Technologies Australia Pty Limited | Gaming system and gaming system processor module |
+US11385758B2 (en) | 2008-10-09 | 2022-07-12 | Aristocrat Technologies Australia Pty Limited | Gaming system and gaming system processor module |
+US20100100718A1 (en) * | 2008-10-20 | 2010-04-22 | Novell, Inc. | In-the-flow security services for guested virtual machines |
+US8654134B2 (en) | 2008-12-08 | 2014-02-18 | Microsoft Corporation | Command remoting |
+US20110063309A1 (en) * | 2009-09-16 | 2011-03-17 | Nvidia Corporation | User interface for co-processing techniques on heterogeneous graphics processing units |
+US9830889B2 (en) | 2009-12-31 | 2017-11-28 | Nvidia Corporation | Methods and system for artifically and dynamically limiting the display resolution of an application |
+GB2478583B (en) * | 2010-03-11 | 2012-05-09 | Displaylink Uk Ltd | Improvements relating to operating systems |
+US9258271B1 (en) | 2011-01-13 | 2016-02-09 | Google Inc. | Network address translation for virtual machines |
+US20120222051A1 (en) * | 2011-02-25 | 2012-08-30 | Microsoft Corporation | Shared resource access verification |
+US8839275B1 (en) * | 2011-06-06 | 2014-09-16 | Proximal Data, Inc. | Method for intercepting input/output requests and responses |
+US10013731B2 (en) * | 2011-06-30 | 2018-07-03 | Intel Corporation | Maximizing parallel processing in graphics processors |
+US9342450B2 (en) * | 2011-11-29 | 2016-05-17 | Red Hat Israel, Ltd. | On-demand hypervisor memory mapping |
+US8941671B2 (en) | 2012-01-13 | 2015-01-27 | Microsoft Corporation | Para-virtualized domain, hull, and geometry shaders |
+US8941670B2 (en) | 2012-01-17 | 2015-01-27 | Microsoft Corporation | Para-virtualized high-performance computing and GDI acceleration |
+US9672052B1 (en) * | 2012-02-16 | 2017-06-06 | Google Inc. | Secure inter-process communication |
+US9613390B2 (en) * | 2012-05-02 | 2017-04-04 | Nvidia Corporation | Host context techniques for server based graphics processing |
+US9805439B2 (en) | 2012-05-02 | 2017-10-31 | Nvidia Corporation | Memory space mapping techniques for server based graphics processing |
+US9311169B2 (en) | 2012-05-02 | 2016-04-12 | Nvidia Corporation | Server based graphics processing techniques |
+US9542715B2 (en) | 2012-05-02 | 2017-01-10 | Nvidia Corporation | Memory space mapping techniques for server based graphics processing |
+US20150193904A1 (en) * | 2012-10-24 | 2015-07-09 | OpenMobile World Wide, Inc. | Graphics acceleration for applications executing on mobile devices with multi-operating system environment |
+WO2014100279A1 (en) * | 2012-12-18 | 2014-06-26 | Dynavisor, Inc. | Dynamic device virtualization |
+US10452580B2 (en) * | 2013-03-26 | 2019-10-22 | Vmware, Inc. | Method and system for providing remote direct memory access to virtual machines |
+US8949486B1 (en) * | 2013-07-17 | 2015-02-03 | Mellanox Technologies Ltd. | Direct memory access to storage devices |
+US10127062B2 (en) * | 2013-10-22 | 2018-11-13 | Citrix Systems, Inc. | Displaying graphics for local virtual machine by allocating textual buffer |
+US20150145876A1 (en) * | 2013-11-28 | 2015-05-28 | Huawei Technologies Co., Ltd. | Graphics Data Processing Method, Apparatus, and System |
+CN104679486B (en) * | 2013-11-28 | 2019-05-28 | 华为技术有限公司 | A kind of processing method of graph data, apparatus and system |
+EP3111296B1 (en) | 2014-02-27 | 2022-07-27 | Aptiv Technologies Limited | In-process trapping for service substitution in hosted applications executing on mobile devices with multi operating system environment |
+CN105122204A (en) * | 2014-03-13 | 2015-12-02 | 华为技术有限公司 | Graphic processing method, guest operating system (os) and guest os system |
+US9696942B2 (en) | 2014-03-17 | 2017-07-04 | Mellanox Technologies, Ltd. | Accessing remote storage devices using a local bus protocol |
+US9727503B2 (en) | 2014-03-17 | 2017-08-08 | Mellanox Technologies, Ltd. | Storage system and server |
+US9563488B2 (en) | 2014-05-29 | 2017-02-07 | Apple Inc. | Sharing extension points to allow an application to share content via a sharing extension |
+CN107111498B (en) * | 2014-11-12 | 2020-12-29 | 英特尔公司 | Live migration of virtual machines from/to a host computer using graphical virtualization |
+WO2016101172A1 (en) * | 2014-12-24 | 2016-06-30 | Intel Corporation | Hybrid on-demand graphics translation table shadowing |
+US10082941B2 (en) * | 2015-05-20 | 2018-09-25 | Vmware, Inc. | Optimizing window move actions for remoted applications |
+US10564829B2 (en) | 2016-03-25 | 2020-02-18 | Vmware, Inc. | Optimizing window resize actions for remoted applications |
+WO2017171744A1 (en) * | 2016-03-30 | 2017-10-05 | Ale Usa Inc. | Method and system for treating interrupts in an embedded system |
+WO2018103022A1 (en) * | 2016-12-07 | 2018-06-14 | 深圳前海达闼云端智能科技有限公司 | Method and apparatus for achieving frame buffering, electronic device and computer program product |
+EP3561680B8 (en) * | 2016-12-22 | 2022-10-26 | Nippon Telegraph and Telephone Corporation | Rpc conversion processing system and rpc conversion method |
+JP6689412B2 (en) * | 2016-12-22 | 2020-04-28 | 日本電信電話株式会社 | Data processing system and method |
+WO2018119709A1 (en) * | 2016-12-27 | 2018-07-05 | 深圳前海达闼云端智能科技有限公司 | Memory access method, device, and electronic apparatus for multi-os system |
+WO2018119713A1 (en) * | 2016-12-27 | 2018-07-05 | 深圳前海达闼云端智能科技有限公司 | Display method, device, and electronic apparatus for multi-os system |
+US10437760B2 (en) * | 2017-03-13 | 2019-10-08 | Vmware, Inc. | Virtual universal serial bus peripheral controller |
+CN109240800B (en) * | 2018-09-11 | 2021-07-23 | 武汉光庭信息技术股份有限公司 | Hypervisor-based multi-system shared memory management method |
+US11934658B2 (en) | 2021-03-25 | 2024-03-19 | Mellanox Technologies, Ltd. | Enhanced storage protocol emulation in a peripheral device |
+US11934333B2 (en) | 2021-03-25 | 2024-03-19 | Mellanox Technologies, Ltd. | Storage protocol emulation in a peripheral device |
+US11726666B2 (en) | 2021-07-11 | 2023-08-15 | Mellanox Technologies, Ltd. | Network adapter with efficient storage-protocol emulation |
+Citations (13)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5961582A (en) * | 1994-10-25 | 1999-10-05 | Acorn Technologies, Inc. | Distributed and portable execution environment |
+JP2006072591A (en) | 2004-09-01 | 2006-03-16 | Hitachi Ltd | Virtual computer control method |
+WO2006036277A2 (en) | 2004-09-23 | 2006-04-06 | Transcontinental Events, Llc | System and method for on-demand cloning of virtual machines |
+US20060101189A1 (en) | 2004-11-09 | 2006-05-11 | Dell Products L.P. | System and method for hot cloning in a distributed network |
+US20060277542A1 (en) | 2005-05-19 | 2006-12-07 | Novell, Inc. | System and method for creating a customized installation on demand |
+US20070006205A1 (en) | 2005-05-18 | 2007-01-04 | Michael Kennedy | System for virtual image migration |
+US20070089111A1 (en) | 2004-12-17 | 2007-04-19 | Robinson Scott H | Virtual environment manager |
+US20070162521A1 (en) | 2006-01-09 | 2007-07-12 | International Business Machines Corporation | Method and system for sharing files among different virtual machine images |
+US20070198713A1 (en) | 2002-08-06 | 2007-08-23 | Tsao Sheng T | Display multi-layers list item in web-browser with supporting of concurrent multi-users |
+WO2007149671A2 (en) | 2006-06-23 | 2007-12-27 | Sentillion, Inc. | Remote network access via virtual machine |
+US20080104588A1 (en) | 2006-10-27 | 2008-05-01 | Barber Michael J | Creation of temporary virtual machine clones of multiple operating systems |
+US7793279B1 (en) * | 2002-07-17 | 2010-09-07 | Vmware, Inc | Dynamic driver substitution |
+US7877747B2 (en) * | 2004-02-20 | 2011-01-25 | Hewlett-Packard Development Company, L.P. | Flexible operating system operable as either native or as virtualized |
+Family Cites Families (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US162521A (en) * | 1875-04-27 | Improvement in price-tag needles | ||
+US89111A (en) * | 1869-04-20 | Jasper a | ||
+US277542A (en) * | 1883-05-15 | Door-hanger | ||
+US198713A (en) * | 1877-12-25 | Improvement in padlocks | ||
+US101189A (en) * | 1870-03-22 | Improvement in horse hay-rakes | ||
+US6205A (en) * | 1849-03-20 | Oliver tiffany | ||
+US104588A (en) * | 1870-06-21 | Improvement in cooling and producing ice |
+-
+2008
+- 2008-01-07 US US11/970,500 patent/US8065687B2/en active Active
+Patent Citations (13)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5961582A (en) * | 1994-10-25 | 1999-10-05 | Acorn Technologies, Inc. | Distributed and portable execution environment |
+US7793279B1 (en) * | 2002-07-17 | 2010-09-07 | Vmware, Inc | Dynamic driver substitution |
+US20070198713A1 (en) | 2002-08-06 | 2007-08-23 | Tsao Sheng T | Display multi-layers list item in web-browser with supporting of concurrent multi-users |
+US7877747B2 (en) * | 2004-02-20 | 2011-01-25 | Hewlett-Packard Development Company, L.P. | Flexible operating system operable as either native or as virtualized |
+JP2006072591A (en) | 2004-09-01 | 2006-03-16 | Hitachi Ltd | Virtual computer control method |
+WO2006036277A2 (en) | 2004-09-23 | 2006-04-06 | Transcontinental Events, Llc | System and method for on-demand cloning of virtual machines |
+US20060101189A1 (en) | 2004-11-09 | 2006-05-11 | Dell Products L.P. | System and method for hot cloning in a distributed network |
+US20070089111A1 (en) | 2004-12-17 | 2007-04-19 | Robinson Scott H | Virtual environment manager |
+US20070006205A1 (en) | 2005-05-18 | 2007-01-04 | Michael Kennedy | System for virtual image migration |
+US20060277542A1 (en) | 2005-05-19 | 2006-12-07 | Novell, Inc. | System and method for creating a customized installation on demand |
+US20070162521A1 (en) | 2006-01-09 | 2007-07-12 | International Business Machines Corporation | Method and system for sharing files among different virtual machine images |
+WO2007149671A2 (en) | 2006-06-23 | 2007-12-27 | Sentillion, Inc. | Remote network access via virtual machine |
+US20080104588A1 (en) | 2006-10-27 | 2008-05-01 | Barber Michael J | Creation of temporary virtual machine clones of multiple operating systems |
+Cited By (5)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US20090153561A1 (en) * | 2007-12-17 | 2009-06-18 | Beijing Lenovo Software Ltd. | Method and apparatus for capturing screen based on wddm |
+US10157146B2 (en) | 2015-02-12 | 2018-12-18 | Red Hat Israel, Ltd. | Local access DMA with shared memory pool |
+US9836402B1 (en) * | 2016-07-22 | 2017-12-05 | Red Hat, Inc. | Guest ordering of host file system writes |
+US10423532B2 (en) | 2016-07-22 | 2019-09-24 | Red Hat, Inc. | Guest ordering of host file system writes |
+US11164280B2 (en) | 2017-07-07 | 2021-11-02 | Banma Zhixing Network (Hongkong) Co., Limited | Graphics layer processing in a multiple operating systems framework |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20080168479A1 (en) | 2008-07-10 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US8065687B2 (en) | Bypass virtualization | |
+CN108776949B (en) | Apparatus and method for memory management in a graphics processing environment | |
+US5801717A (en) | Method and system in display device interface for managing surface memory | |
+US10074206B1 (en) | Network-optimized graphics library for virtualized graphics processing | |
+US10127628B2 (en) | Method and system to virtualize graphic processing services | |
+US8073990B1 (en) | System and method for transferring updates from virtual frame buffers | |
+US8463980B2 (en) | Shared memory between child and parent partitions | |
+US7065630B1 (en) | Dynamically creating or removing a physical-to-virtual address mapping in a memory of a peripheral device | |
+US6078942A (en) | Resource management for multimedia devices in a computer | |
+US8274518B2 (en) | Systems and methods for virtualizing graphics subsystems | |
+US8441494B2 (en) | Method and system for copying a framebuffer for transmission to a remote display | |
+US20070008324A1 (en) | Resource management for virtualization of graphics adapters | |
+US10983821B2 (en) | Apparatus and method for a hybrid layer of address mapping for a virtualized input/output (I/O) implementation | |
+US10002403B2 (en) | Command remoting | |
+CN109643277B (en) | Apparatus and method for mediating and sharing memory page merging | |
+US7170526B1 (en) | Method and apparatus for redirecting the output of direct rendering graphics calls | |
+CN109949201B (en) | Image rendering acceleration method for Linux container | |
+US20150193904A1 (en) | Graphics acceleration for applications executing on mobile devices with multi-operating system environment | |
+US5982399A (en) | Immediate mode drawing interface for the construction of graphics software | |
+CN114741044A (en) | Cross-operating environment display output sharing method based on heterogeneous rendering | |
+Hansen | Blink: Advanced display multiplexing for virtualized applications | |
+Lee | VAR: Vulkan API Remoting for GPU-accelerated Rendering and Computation in Virtual Machines | |
+Marchesin | Linux Graphics Drivers: an Introduction | |
+Martin et al. | Roadmap to a GL-based composited desktop for Linux | |
+WO2008060276A1 (en) | Resource management for virtualization of graphics adapters |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: MOKA5, INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:PURTELL II, THOMAS JOSEPH;CHUN, WON;CARBIN, MICHAEL;REEL/FRAME:020674/0431;SIGNING DATES FROM 20080228 TO 20080313Owner name: MOKA5, INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:PURTELL II, THOMAS JOSEPH;CHUN, WON;CARBIN, MICHAEL;SIGNING DATES FROM 20080228 TO 20080313;REEL/FRAME:020674/0431 |
+|
+AS | Assignment |
+Owner name: MOKA5, INC.,CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:PURTELL, THOMAS JOSEPH, II;CHUN, WON;CARBIN, MICHAEL;SIGNING DATES FROM 20090831 TO 20091120;REEL/FRAME:023986/0882Owner name: MOKA5, INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNORS:PURTELL, THOMAS JOSEPH, II;CHUN, WON;CARBIN, MICHAEL;SIGNING DATES FROM 20090831 TO 20091120;REEL/FRAME:023986/0882 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAYOR NUMBER ASSIGNED (ORIGINAL EVENT CODE: ASPN); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: OPEN INVENTION NETWORK, LLC, NORTH CAROLINAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:MOKA5, INC.;REEL/FRAME:036529/0800Effective date: 20150908 |
+|
+FEPP | Fee payment procedure |
+Free format text: PAT HOLDER NO LONGER CLAIMS SMALL ENTITY STATUS, ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: STOL); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:OPEN INVENTION NETWORK LLC;REEL/FRAME:063503/0468Effective date: 20221026 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 12TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1553); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 12 |

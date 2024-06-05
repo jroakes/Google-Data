@@ -1,0 +1,823 @@
+US6192514B1 - Multicomputer system - Google Patents
+Multicomputer system Download PDFInfo
+- Publication number
+- US6192514B1 US6192514B1 US09/024,869 US2486998A US6192514B1 US 6192514 B1 US6192514 B1 US 6192514B1 US 2486998 A US2486998 A US 2486998A US 6192514 B1 US6192514 B1 US 6192514B1
+- Authority
+- US
+- United States
+- Prior art keywords
+- site
+- port
+- processes
+- sites
+- directory
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Expired - Lifetime
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F9/00—Arrangements for program control, e.g. control units
+- G06F9/06—Arrangements for program control, e.g. control units using stored programs, i.e. using an internal store of processing equipment to receive or retain programs
+- G06F9/46—Multiprogramming arrangements
+- G06F9/48—Program initiating; Program switching, e.g. by interrupt
+- G06F9/4806—Task transfer initiation or dispatching
+- G06F9/4812—Task transfer initiation or dispatching by interrupt, e.g. masked
+Definitions
+- the present invention relates generally to multicomputer systems, and more particularly, to multicomputer system employing a microkernel-based serverized distributed operating system.
+- Microkernel-based operating system architectures have been employed to distribute operating system services among loosely-coupled processing units in a multicomputer system, a set of modular computer software-based “serverized” operating system, a set of modular computer software-based system servers sit on top of a minimal computer software microkernel which provides the system server with fundamental services such as processor scheduling and memory management.
+- the microkernel may also provide an inter-process communication facility that allows the system servers to call each other and to exchange data regardless of where the servers are located in the system.
+- the system servers manage the other physical and logical resources of the system, such as devices, files and high level communication resources, for example. Often, it is desirable for a microkernel to be interoperable with a number of different conventional operating systems.
+- computer software-based system servers may be employed to provide an application programming interface to a conventional operating system.
+- FIG. 1 shows an illustrative multicomputer system.
+- multicomputer as used herein shall refer to a distributed non-shared memory multiprocessor machine comprising multiple sites.
+- a site is a single processor and its supporting environment or a set of tightly coupled processors and their supporting environment.
+- the sites in a multicomputer may be connected to each other via an internal network (e.g., Intel MESHTM interconnect), and the multicomputer may be connected to other machines via an external network (e.g., Ethernet network).
+- Each site is independent in that it has its own private memory, interrupt control, etc. Sites use messages to communicate with each other.
+- a microkernel-based “serverized” operating system is well suited to provide operating system services among the multiple independent non-shared memory sites in a multicomputer system.
+- An important objective in certain multicomputer systems is to achieve a single-system image (SSI) across all sites of the system.
+- SSI single-system image
+- Some of the benefits of a SSI include, simplified installation and administration, ease-of-use, open system solutions (i.e., fewer compatibility issues), exploitation of multisite architecture while preserving conventional APIs and ease of scalability.
+- There are several possible beneficial features of an SSI such as, a global naming process, global file access, distributed boot facilities and global STREAMS facilities, for example.
+- a SSI which employs a process directory (or name space) which is distributed across multiple sites. Each site maintains a fragment of the process directory. The distribution of the process directory across multiple sites ensures that no single site is unduly burdened by the volume of message traffic accessing the directory.
+- a global atomic operation (GAO) describes a category of functions which are applied to each process in a set of processes identified in the SSI.
+- GAOs typically are applied to a set of processes from what is often referred to as, a “consistent snapshot” of the system process directory state.
+- the processes that are operated upon by a GAO are often referred to as target processes.
+- a consistent snapshot generally refers to a view of the directory which identifies the processes in the entire SSI at a discrete point in time.
+- process creation and process deletion events occur frequently, a process directory is a dynamic or “living” object whose contents change frequently. Therefore, the consistent snapshot rule generally is relaxed somewhat such that a consistent snapshot may contain all processes which exist both before and after the snapshot is taken.
+- An example of a GAO is what is referred to as sending a signal, which is a mechanism by which a process may be notified of, or affected by, an event occurring in the system.
+- Some application program interfaces (API's) which are provided to the programmer as part of a UNIX specification, for instance, deliver a signal to a set of processes as a group; such an API, for example, mandates that all processes that match the group criteria receive the signal.
+- the delivery of a signal to a set of processes as a group is an example of a GAO.
+- the processes in the group are examples of target processes.
+- GAOs which must be applied to multiple target processes, may have to traverse process directory fragments on multiple sites in the system. This traversal of directory fragments on different sites in search of processes targeted by an operation can be complicated by the migration of processes between sites while the GAO still is in progress. In other words, a global atomic operation and process migration may progress simultaneously.
+- the proper application of a global atomic operation is to apply it at least once, but only once, to each target process. As processes migrate from site to site during the occurrence of a GAO, however, there arises a need to ensure that a migrating process is neither missed by a GAO nor has the GAO applied to it more than once.
+- the problem of a GAO potentially missing a migrating process will be further explained through an example involving the global getdents (get directory entries) operation.
+- the getdents operation is used to obtain a “consistent snapshot” of the system process directory.
+- the getdents operation is a global atomic operation.
+- the timing diagram of FIG. 2 illustrates the example.
+- process manager server “A” (PM A) on site A initiates a migration of a process from PM A on site A to the process manager server “B” (PM B) on site B (dashed lines).
+- This process migration involves the removal of the process identification (PID) for the migrating process from the process directory fragment on site A and the insertion of the PID for the migrating process into the process directory fragment on site B.
+- PID process identification
+- an object manager server has broadcast a getdents request to both PM A and PM B.
+- PM B receives and processes the getdents request and returns the response to the OM.
+- This response by PM B does not include a process identification (PID) for the migrating process which has not yet arrived at PM B.
+- PID process identification
+- PM B receives the migration request from PM A.
+- PM B adds the PID for the migrating process to the directory fragment on site B and returns to PM A a response indicating the completion of the process migration.
+- PM A removes the PID for the migrating process from the site A directory fragment.
+- PM A receives and processes the getdents request and returns the response to the OM.
+- An example of a prior solution to the problem of near simultaneous occurrence of process migrations and global atomic operations involves the use of a “global ticket” (a token) to serialize global operations at the system level and migrations at the site level. More specifically, a computer software-based global operation server issues a global ticket to a site which requests a global operation.
+- a number associated with the global ticket monotonically increases every time a new ticket is issued so that different global atomic operations in the system are uniquely identified and can proceed one after the other.
+- each PID has associated with it the global ticket value of the GAO which most recently considered the PID.
+- this illustrative prior solution involves a multicast message carrying the global ticket to process managers (PMs) on each site.
+- PMs process managers
+- Each process manager acquires the lock to the process directory fragment of its own site.
+- the applicability of the global atomic operation is considered for each PID entered in the process directory fragment on the site.
+- the global operation may be performed on a respective process corresponding to a respective PID in a respective directory fragment entry only if a global ticket number marked on the entry is lower than the current iteration global ticket number.
+- a global ticket number marked on a process directory fragment PID entry is carried over from a site the process migrates from (origin site) to a site the process migrates to (destination site). It represents the last global operation ticket such process has seen before the migration.
+- a process being migrated acquires a process directory fragment lock on its origin site first. It then marks its corresponding process directory entry as being in the process of migration.
+- the migration procedure stamps the process' process directory entry with the present global operation ticket number, locks the process directory on the migration destination site and transmits the process directory entry contents to the destination site.
+- the global operation ticket number on the destination site is then copied back in the reply message to the migration origin site.
+- the migration procedure on the origin site is responsible for comparing the returned global ticket number from the target site and its own. If the global ticket number of the origin site is greater than the number from the destination site, then the global operation already has been performed on the migrating process, although the operation has not yet reached the destination site.
+- the migration is permitted to proceed, but the process directory fragment slot for the migrating process on the destination site is marked with the higher global ticket number. As a result, the global process will skip the migrated process on the destination site and not apply the global operation twice to that process. If the global ticket number of the origin site is less than the number from the destination site, then a global operation has been performed on the destination site and has yet to be performed on the origin site and will miss the process currently being migrated. The migration will be denied and retried later.
+- the present invention provides a method for responding to a computer system call requesting creation of such new process in a multicomputer system which employs a distributed process directory which is distributed across multiple sites such that different site memories include different fragments of the process directory.
+- a new process is created on a respective individual computer site in the multicomputer system.
+- a site is selected from the designation of sites.
+- the new process is referenced in a slot in a respective process directory fragment on the selected site.
+- the novel method described above advantageously permits independent disposition of processes and corresponding process directory fragments referencing such processes in the multicomputer system. That is, a process and a process directory structure fragment referencing the process can be disposed on the same or on different sites. This feature makes possible migration of the process from one site to another site in the multicomputer system while the process directory fragment referencing such migrating process remains unchanged.
+- the use of such fixed process directory fragment references to migratable processes makes it easier to keep track of migrating processes during their migrations. As a result, there can be improved application of global atomic operations to migrating processes.
+- a global atomic operation targeted at a process during process migration are less likely to miss the migrating process since a process directory fragment provides a fixed reference to such a migrating process. Moreover, since the process directory fragment referencing such a targeted does not change, there may be no need to lock the process directory fragment in order to ensure that migrating processes are subject to such global atomic operation. As a consequence, global atomic operations may have less of an impact on overall system performance.
+- a process directory structure is distributed across multiple sites such that different site memories include different fragments of the process directory structure.
+- Each process directory structure fragment includes a multiplicity of slots.
+- Processes operative on respective sites in the system are referenced in respective slots in the process directory structure.
+- Group information may be associated in respective site memories with respective processes operative on respective sites. This group information indicates group membership, if any, of the associated processes.
+- a group may comprise the processes in a session.
+- a global atomic operation request is issued to a first process manager operative on a first site. The request is directed to a group of processes.
+- a global atomic operation message directed to the group of processes is transferred by the first process manager to process managers operative on other sites.
+- Each process manager that receives such global atomic operation message transfers a respective message to each respective process referenced in a respective process directory structure fragment disposed on the same respective site as such receiving process manager.
+- the transferred messages request performance of the atomic operation.
+- the atomic operation is performed by respective processes that are members of the group. Therefore, during a global atomic operation, fixed process directory fragments are used to locate migratable target processes
+- a process directory structure is distributed across multiple sites such that different site memories include different fragments of the process directory structure.
+- Processes operative on respective sites in the system are referenced in respective slots in the process directory structure.
+- Process structures are provided. These process structures correspond to respective processes and are disposed on the respective sites on which their respective corresponding processes are operative. Furthermore, these process structures provide references to sites which include slots that reference the processes corresponding these process structures. Whenever a failed site is identified, a reconstruction host site is selected. Process structures on non-failed sites are accessed to identify processes, if any, operative on sites that have an operative process referenced in a process directory fragment of the failed site.
+- the process directory of the failed site is reconstructed on the reconstruction host site such that respective references to respective processes identified in the accessing step are provided in the reconstructed process directory fragment. Also, an attempt is made to contact each process corresponding to a process referenced in any process directory fragment. References to processes that are not successfully contacted are removed from process directory fragments of non-failed sites.
+- FIG. 1 is an illustrative block diagram of the hardware components of a representative conventional multicomputer system
+- FIG. 2 is an illustrative timing diagram which demonstrates that a global atomic operation can miss a target process that migrates during performance of the operation;
+- FIG. 3 is an illustrative block diagram that demonstrates the interaction of software based system server modules in a microkernel-based serverized operating system of a type employed by a presently preferred embodiment of the invention
+- FIG. 4 is a generalized representation of certain global resources that are available in the operating system of FIG. 3;
+- FIG. 5 is a generalized block diagram of three representative sites in a multicomputer system and the exemplary process directory fragments and processes operative on those sites in accordance with a presently preferred embodiment of the invention
+- FIG. 6 is an illustrative drawing showing exemplary session and process group relationships among the processes depicted in FIG. 5;
+- FIGS. 7A-7D are generalized block diagrams of two representative sites in a multicomputer system and the exemplary process directory fragments and processes operative on those sites used to illustrate process creation (FIGS. 7A-7C) and process migration (FIGS. 7A and 7D) in accordance with the presently preferred embodiment of the invention;
+- FIG. 8 is an illustrative diagram of a double linked list of bookkeeping data structures maintained on a site in which each respective data structure corresponds to a respective process active on the site that maintains the list in accordance with a presently preferred embodiment of the invention
+- FIGS. 9A-9B are generalized block diagrams of two representative sites in a multicomputer system and the exemplary process directory fragments and processes operative on those sites used to illustrate global atomic operations in accordance with a presently preferred embodiment of the invention
+- FIG. 10 illustrates exemplary session and process group relationships among the processes in FIGS. 9A-9B.
+- FIGS. 11A-11B are generalized block diagrams of two representative sites in a multicomputer system and the exemplary process directory fragments and processes operative on those sites used to illustrate site failure recovery in accordance with a presently preferred embodiment of the invention.
+- FIG. 12 is an illustrative generalized drawing of the Software interfaces to the port localization server (PLS) and the port status investigator (PSI) in accordance with a presently preferred embodiment of the invention.
+- PLS port localization server
+- PSI port status investigator
+- FIG. 13 is an illustrative drawing of an exemplary message protocol during port migration in a presently preferred embodiment of the invention.
+- FIG. 14 is an illustrative drawing of the message protocol between the PLS and the PSI of FIG. 12 .
+- the present invention comprises a novel method and apparatus for process management in a multicomputer system employing distributed operating system services.
+- the following description is presented to enable any person skilled in the art to make and use the invention, and is provided in the context of a particular application and its requirements.
+- Various modifications to the preferred embodiment will be readily apparent to those skilled in the art, and the generic principles defined herein may be applied to other embodiments and applications without departing from the spirit and scope of the invention.
+- the present invention is not intended to be limited to the embodiment shown, but is to be accorded the widest scope consistent with the principles and features disclosed herein.
+- a presently preferred embodiment of the invention employs an operating system kernel known as CHORUS/MiXTM which provides a small kernel or nucleus onto which a distributed version of the UNIX operating system may be built as sets of distributed, cooperating servers. See, Benedicte Herrmann and Laurent Philippe, “CHORUS/MiX, a Distributed UNIX, on Multicomputers,” Proceedings of Transputer ′92, Arc et Senans, France, May 20-22, 1992. For instance, a UNIX SVR4 compatible operating system has been built using the CHORUSTM microkernel.
+- test suites provided in a set of specifications.
+- a recent set of specifications is identified as: CAE Specification, January 1997, System Interfaces and Headers, Issue 5, The Open Group (ISBN 1-85912-186-1) (formerly X/Open).
+- Test suites are written in compliance with the CAE specifications; there are many, but for UNIX branding, an implementation preferably should conform to the above-referenced specification as well as several others, such as Base Definitions, Commands and Utilities, Networking and Curses.
+- FIG. 3 shows an example of a multicomputer system which employs a distributed operating system and in which three sites are interconnected by a communication network.
+- a distributed operating system of the presently preferred embodiment is comprised of a nucleus and a UNIX subsystem.
+- Each site includes in memory a nucleus (or microkernel) which performs low level activities such as, allocation of local resources, management of local memory, managing external events and which supports certain global services through basic abstractions referred to as, actors, threads, ports and messages described briefly below.
+- Each site also includes in memory one or more UNIX subsystem (SSU) servers.
+- SSU server manages a different type of system resource (e.g., process, file, devices, etc.).
+- STREAM files such as pipes, network access and tty's, are managed by STMs.
+- a user application (user process) in memory on given site interacts with the local Process Manager (PM) active on that given site.
+- the local PMs provide a consistent UNIX SVR4 application program interface on each site and thereby provide a uniform application interface across the entire multicomputer system.
+- a PM on a given site handles all system calls issued by a process.
+- the PM dispatches such requests to the appropriate servers. It implements services for process management such as the creation and destruction of processes or the sending of signals.
+- the PM also manages the system context for each process that runs on its site. When the PM is not able to serve a UNIX system call by itself, it calls other servers, as appropriate, using the microkernel IPC.
+- the PM upon receipt of a read(2) request, the PM generates a message to the FM which handles the request. Due to the transparency of the IPC employed by the microkernel system, the FM may be located on a remote site. Vadim Abrossimov, et al., “A Distributed System Server for the CHORUS System,” Proceedings of SDMS III, Symposeum on Experiences with Distributed and Multiprocessor Systems, Newport Beach, Calif., Mar. 26-27, 1992, explains interactions between certain servers operating with a CHORUS microkernel.
+- a traditional monolithic implementation of UNIX has been partitioned into a set of cooperating server processes.
+- the PM, FM, STM and IPCM are server processes (or servers), for example. Servers communicate with one another via messages using IPC facilities. This partitioning of the operating system into servers that communicate via messages shall be referred to as “serverization” of the operating system.
+- serverization In a distributed serverized operating system, such as that in the present embodiment, servers on different nodes/sites communicate via messaging.
+- FIG. 4 display several types of resources employed in the microkernel which provide certain global services used in processes operative in a current embodiment of the present invention.
+- These resources include what is termed an “actor” which is a collection of resources within a microkernel site.
+- An actor may include memory regions, ports, and threads. When created, an actor contains only its default port.
+- a “message” is an untyped sequence of bytes which represents information that can be sent from one port to another via the microkernel's IPC.
+- the “inter-process communication” (IPC) is a facility that allows threads to exchange information in the form of collections of bytes called “messages.” Messages are addressed to ports.
+- the IPC mechanism is location transparent.
+- Threads executing within actors residing on different sites may use the IPC to exchange messages transparently.
+- a “thread” is a flow of control within an actor in the system. Each thread is associated with an actor and defines a unique execution state. An actor may contain multiple threads. The threads share the resources of the actor, such as memory regions and ports and are scheduled independently.
+- a “port” is an IPC entity. Threads send and receive messages on ports.
+- Ports are globally named message queues. Ports are named by unique identifiers (UIs). In fact, any resource within a distributed operating system can be designated with a UI.
+- UIs unique identifiers
+- a “port group” is a collection of ports that are addressed as a group to perform some communication operation. Port groups can be used to send messages to one of a set of ports or to multicast messages to several ports simultaneously. A port can be a member of several port groups.
+- FIG. 5 provides generalized drawings of three sites (site 301 , site 303 and site 305 ) in an exemplary multicomputer system in accordance with a presently preferred embodiment of the invention. It will be appreciated that an actual multicomputer system may employ far more than three sites, and that each site may comprise a single processor or multiple processors. For the sake of simplicity, in explaining the preferred embodiment of the invention, however, the exemplary multicomputer system is shown with only three sites.
+- the three sites share a distributed system process directory, a data structure which contains an array of slots. Each slot is an element of the data structure which can describe the name (i.e. process id) of a process.
+- the process directory data structure is distributed among the memories of the sites in the multicomputer as a collection of process directory fragments.
+- each site (or node) has a value referred to as NPROC (number of processes) associated with it.
+- NPROC number of processes
+- NPROC is a configurable variable which describes the maximum number of processes that can exist on a single site.
+- the NPROC value takes into account factors such as, the amount of memory, speed of processor and typical system workload, for example.
+- the number of slots in each directory fragment is NPROC. Concatenating all of the process directory fragments, that are distributed across the multiple sites, results in the (Complete) process directory.
+- the illustrative distributed process directory in FIG. 5 is divided into three process directory fragments (PDFs) which are distributed across three sites.
+- PDF 307 resides on site 301 .
+- PDF 309 resides on site 303 .
+- PDF 311 resides on site 305 .
+- each site is associated with a different fragment of the distributed system process directory.
+- Multiple user application processes run concurrently on the different sites.
+- a “process” is a computer software-based entity that occupies a portion of a computer system's electronic memory and that involves a scheduleable event. Each slot can be associated with a different process running on the system. Processes are individually identified by process identifications (PIDs). As illustrated in FIG.
+- process identifications 1 , 9 , 12 , 15 , 17 , 29 , 30 and 63 run on site 301 .
+- Processes identified by PIDs 2 , 5 , 40 and 62 run on site 303 .
+- Processes identified by PIDs 3 , 41 , 42 , 61 and 64 run on site 302 .
+- the individual PIDs o f processes operative on the system are associated with individual slots of the distributed system process directory.
+- PDF 307 which resides on site 301 stores PIDs 1 , 2 , 3 , 5 , 9 , 12 , 15 , 17 , 30 and 29 .
+- PDF 309 which resides on site 303 stores PIDs 40 , 41 and 42 .
+- PDF 311 which resides on site 305 stores PIDs 61 , 62 , 63 and 64 .
+- FIG. 6 shows an example of one possible set of relationships among some of the processes in FIG. 5 .
+- the system hosts a session with multiple process groups operative on different system sites; the session's process groups themselves include multiple processes operative on different system sites.
+- PID 17 corresponds to a command process which creates a session which includes multiple process groups.
+- a first process group in the session is identified by the process corresponding to PID 17 .
+- a second process group in the session is identified by the process corresponding to PID 29 .
+- a third process group in the session is identified by the process corresponding to PID 61 .
+- the first process group corresponding to PID 17 includes only a single process identified by PID 17 .
+- the second process group corresponding to PID 29 includes three processes identified by, PID 29 , PID 30 and PID 41 .
+- the third process group corresponding to PID 61 includes only a single process, PID 61 .
+- the illustrative session might be further specified by the following exemplary program instructions.
+- ksh is the command interpreter which reads commands from the controlling terminal, parses them and executes the appropriate commands. It executes the subsequent pipeline and cscope commands.
+- pg, represents a pipeline which lists (long format, reclusively (-lR)) all subdirectories and pipes the output to the tee command which will make a copy into the file /tmp/ ⁇ , and pipe it to the paginator command pg which simply pauses every screenful of text for the user to read.
+- the cscope-d- ⁇ rdbms command starts the C language visual browser program.
+- Session 17 is divided between site 301 and site 305 .
+- Session 17 includes three process groups, 17 , 29 and 61 .
+- Process group 17 with its single process corresponding to PID 17 , resides entirely on site 301 .
+- Process group 29 is divided between site 301 and site 305 : the processes corresponding to PID 29 and PID 30 reside on site 301 ; and the process corresponding to PID 41 resides on site 305 .
+- Process group 61 with its single process corresponding to PID 61 , resides entirely on site 305 .
+- FIG. 7A there is shown a generalized representation of an exemplary multicomputer system 400 in accordance with a presently preferred embodiment of the invention.
+- Site 401 includes a PDF 403
+- site 402 includes a PDF 404 .
+- There are five active user application processes on site 401 They are identified by PIDs, 1 , 2 , 3 , 4 and 5 . Each of these five processes was created locally on site 401 and has not migrated.
+- There are also three active user application processes on site 402 They are identified by PIDs, 101 , 102 and 103 . Each of these three processes was created locally on site 402 and has not migrated.
+- a process directory port group provides a designation of the sites that have at least one unallocated slot, and therefore, are available to store a reference to a port UI for a new process.
+- a process directory port group (PDPG) 405 designates process directory fragments (PDFs) 403 and 404 .
+- the PDPG 405 includes the PM ports of sites that contain PDFs with empty slots. The presence of an empty slot in a given PDF indicates that that PDF is able to accept another PID.
+- the PDF 403 that resides on site 401 includes empty slots 406
+- the PDF 404 that resides on site 402 includes empty slots 407 .
+- both the PM port 409 for site 401 and the PM port 410 for site 402 are included in the PDPG 405 .
+- PDPG 405 is a port “group.” As such, there may be a Unique Identifier (UI) which names the group.
+- the group itself consists of zero or more respective ports, each of which is identified by its own respective UI.
+- ports and port groups are managed by the microkernel in a distributed fashion across all nodes of the multicomputer.
+- An interface is provided which allows a server, such as a PM which manages a process directory fragment, to insert a port into or remove a port from the PDPG.
+- a PM for example, uses its own request port to manage insertions to and deletions from the PDPG.
+- the PDPG is involved in process creation and destruction, but is not involved in process migration. If process creation uses the last available slots in a given PDF to hold the PID for a newly created process, then the port for the site containing that PDF is removed from the PDPG. Conversely, if process destruction frees up one or more slots in a PDF that previously had all of its slots occupied with PIDs, then the port for the site containing that newly freed up PDF is added to the PDPG.
+- process PID 3 on site 401 issues a fork() operation to create a child process PID 6 .
+- the PM (not shown) on site 401 fields the fork() system call.
+- the PM on site 401 sends an “allocate slot request” message to the PDPG 405 using the CHORUS microkernel associative functional mode and provides its own port (PM port 409 ) as a “CoTarget.”
+- the associative functional mode is a standard CHORUS facility group in which a message designates one port in a port group as the CoTarget for the message. That is, the message is sent to one member of the PDPG.
+- a member port of the PDPG is collocated with the CoTarget port (i.e., they are on the same site), then that member port will be used as the destination for the message. If there is no member port in the PDPG which is collocated with the CoTarget, then another member of the PDPG will be chosen by the microkernel as the destination of the message.
+- the PM on site 401 receives its own “allocate slot request” message.
+- PID number “ 6 ” is assigned to the new (child) process.
+- the site 401 PM assigns a slot to the new process PID 6 and returns a successful reply.
+- the PM on site 401 receives the reply; stores the slot index and the site 401 PM port's unique identifier (UI) in the process data structure for the new child process PID 6 on site 401 .
+- the fork( ) operation completes normally with child process PID 6 having been created on site 401 .
+- process PID 8 is complicated by the fact that the PDF 403 on site 401 has no vacant slots at the time of the creation of this new process PID 8 .
+- the PDF 403 is filled with PIDs 1 , 2 , 3 , 4 , 5 , 6 and 7 .
+- process PID 3 on site 401 issues a fork( ) operation to create a child process PID 8 .
+- the PM (not shown) on site 401 fields the fork( ) system call.
+- the PM on site 401 sends an “allocate slot request” message to one of the member ports of the PDPG 405 using Chorus associative functional mode and providing its own port (PM port 409 ) as the CoTarget. Since, in FIG. 7C, all of the slots on site 401 are filled, the PM port 409 is not a part of the PDPG 405 .
+- the microkernel therefore, chooses another one of the member ports of the PDPG 405 in accordance with criteria that will be understood by those skilled in the art and that form no part of the present invention.
+- the PM (not shown) on site 402 receives the request.
+- the site 402 PM assigns a slot; stores the new child process PID 8 ; and returns a successful reply.
+- the PM on site 401 receives the reply; stores the slot index and the site 402 PM port's Unique Identifier (UI) in the process data structure for the new child process PID 8 on site 402 .
+- the fork( operation completes normally with the child process PID 8 having been created on site 402 .
+- the PID for a process created on a given site remains in the PDF of that creation site even if the process subsequently migrates to another site.
+- each site also maintains, in memory, a “bookkeeping” process data structure for each process currently active on the site.
+- Each such active process data structure includes information regarding the session membership and the process group membership of such process as well as the PM UI for the site that contains the process' PID and the actual PDF slot number that contains the process' PID.
+- a process data structure corresponds to a process that is a session leader or a process group leader, then such data structure indicates whether or not the entire membership of the session cr process group is resident on the site with the corresponding process.
+- the active process data structures are maintained in a doubled linked list structure.
+- the active process list is used, for example, at process creation time when the bookkeeping data structure for the process is added to the site, at migration time when the bookkeeping data structure for the migrating process is copied to the new site, and at process destruction when the bookkeeping data structure is removed from the site on which it resides.
+- the active process list also is used at failure recovery time when there is a need to determine which processes that were active on a site had their PIDs stored in a PDF on a failed site; so the failed site's PDF can be (at least partially) recreated elsewhere.
+- each of the three respective processes 101 , 102 and 103 are each associated with respective bookkeeping information.
+- FIG. 8 illustrates the bookkeeping data structures for the three processes linked in a conventional double-linked list data structure headed by the label “ActiveProcessList”.
+- the boxes in FIG. 8 represent the bookkeeping information for each process (e.g. process id, name, memory information, PDF site and slot number, etc.); the arrows show the direction of the forward and backward links.
+- the PM variable ActiveProcessList contains a pointer to the process structure for process 101 ; process 101 contains a forward pointer to process 102 and a backward pointer to the list head (ActiveProcessList). Likewise, process 102 has a forward link to process 103 and a backward link to process 101 , and so forth for process 103 . Process 103 will have a NULL forward link indicating that it is the last process in the list.
+- a pointer in this case would be the memory address of the bookkeeping data structure (known as the tProc structure), which also contains the forward and backward link pointers.
+- the illustrative drawing of FIG. 8 provides a generalized representation of a double linked list structure maintained on a given site which comprises a plurality of process data structures that correspond to the processes currently active on the given site.
+- Each respective site maintains its own double linked list structure for the processes currently active on such respective site.
+- corresponding active process data structures corresponding to such migrating processes are added to or depart from the double linked list structure maintained by that given site.
+- the PID for any given process is always associated with the same slot on the site that created the given process. In this sense, the slot and PDF assignment for a given process PID is immutable.
+- the use of PIDs rather than memory addresses in the PDF slots advantageously facilitates accessing a process through its PID which corresponds to the microkernel unique identifier (UI) for the port associated with the process.
+- UI microkernel unique identifier
+- the PDF slot need not be updated as a process identified by a particular PID in the slot migrates from site to site. Rather, a microkernel facility automatically keeps track of the actual location of a process when it migrates between sites within the multicomputer system.
+- slots are accessed through a dynamic set of resource managers (the PMs), which in turn are accessed through a process group managed by the microkernel (the PDPG).
+- the PMs dynamic set of resource managers
+- the PDPG microkernel
+- Process migration from site to site within a multicomputer system in accordance with a current embodiment of the invention shall be explained with reference to the illustrative drawings of FIGS. 7A and 7D.
+- process PID 4 migrates from site 401 to site 402 .
+- a migration request is received by the PM on site 401 to migrate the process PID 4 to site 402 .
+- the migration request might be issued by a system administrator, a load balancer process or a user application, for example.
+- the process PID 4 receives the request and marshals the migrating process' state into a message and sends it to the site 402 PM request port 410 .
+- the state information includes all information used to operate the process.
+- the PM on site 402 also creates the appropriate global services entities (e.g., thread, actor, address space) to create process PID 4 on site 402 .
+- the PM on site 402 constructs the process data structures and inserts them into a linked list structure like that shown in FIG. 8 .
+- the PM on site 402 requests that the microkernel migrate the process port UI for process PID 4 to site 402 .
+- the migration of the port UI of the migrating process ensures that the process can be tracked despite the separation of the process in site 402 from its PID stored in the PDF 403 on site 401 .
+- the PM on site 402 sends a message to the site 401 PM indicating success or failure of the migration request. If the migration has been successful, then the PM on site 401 destroys the old copy of the migrated process. The PM on site 402 starts the new copy of the process PID 4 .
+- the source site When the source site is cleaning up after a successful migration, it will mark the session structure for the session leader to indicate that the session is no longer local. It does this by sending a message to the session leader.
+- the (bookkeeping) process data structure created on the destination site includes the PM UI for the site that contains the process' PID and the actual PDF slot number that contains the process' PID.
+- the process data structure can be employed to ascertain the location of the PDF containing the PID for the migrated process, for example.
+- the microkernel can keep track of the actual location of the migrated process in the multicomputer system since it tracks the location of the port UI of the migrated process. This is a standard microkernel function in the presently preferred embodiment of the invention. Thus, during the execution of a GAO, for example, the microkernel directs messages to the migrated process based on the process' PID entry in the PDF.
+- FIGS. 9A and 9B and FIG. 10 The performance of global atomic operations (GAO) according to a present implementation of the invention shall be explained with reference to the illustrative drawings of FIGS. 9A and 9B and FIG. 10 .
+- An advantage of the process employed to implement global atomic operations in accordance with the present invention is the ability to perform multiple simultaneous GAOs with simultaneous migration events without loss of a “consistent snapshot.” Moreover, there is little if any throughput degradation due to serialization of global events.
+- the multicomputer system 400 of FIGS. 9A and 9B is the same as those discussed above with reference to FIG. 7 A. However, FIGS. 9A and 9B illustrate exemplary relationships among the user application processes operative on sites 401 and 402 .
+- FIG. 10 further illustrates the relationships among the various exemplary processes running on sites 401 and 402 .
+- session number 1 includes process groups identified by process group identities (PGIDs) 1 , 2 and 3 .
+- Process group PGID 1 includes the process with PID 1 .
+- Process group PGID 2 includes processes with PIDs 2 , 3 , 4 and 5 .
+- Process group PGID 101 includes the processes with PIDs 101 , 102 and 103 .
+- the process PID 1 is a command processor (ksh) which serves as the session leader.
+- the session includes two pipelines, each of which becomes a process group within the session. Exemplary UNIX instructions used to produce the session are set forth below for each of the three process groups.
+- Process group PGID 1 consists of a single process group, whose leader is the ksh command. Process group PGID 1 also serves as the session leader.
+- ksh is the Korn shell command which is a standard UNIX system command interpreter.
+- Process group PGID 2 consists of a single process group, whose leader is the cat command.
+- cat is the catenate command. It will read the contents of file “etc/terminfo” and write the contents to the standard output (which in this example is a pipe as indicated by the vertical bar “
+- sort is the sort command. It will read the data from the pipe, sort it, and then write the sorted data to its output (another pipe).
+- uniq is the unique command. It will read data from the input pipe, remove any duplicate adjacent lines (which sort would have sorted into adjacent lines) and write the remaining lines to its output (yet another pipe).
+- wc is the count command.
+- the -l option requests that wc produce a count of lines read from its input pipe. This count will be written to its output, which will be the controlling terminal.
+- Process group PGID 3 consists of a single process group, whose leader is the ls command.
+- ls is the list files command.
+- -lR signifies long format, recursive.
+- tee is a command to make two copies of an input, one to a file, the other to output.
+- pg is an output pager command which displays input to output one page at a time.
+- $ kill is a nonstandard UNIX command. $ kill-TERM- 2 will send the TERM signal to all members of process group 2 . Although currently there is no command to send a signal to all members of a session, there is a programmatic API for it.
+- the site 401 PM receives the $ kill signal request via its system call interface. This receiving PM determines that the target is the group of processes in process group 2 in session 1 , and if appropriate as explained below, multicasts a message to all PMs instructing them to deliver SIGTERM (a software termination signal) to all members of process group 2 . Each PM, upon receiving the SIGTERM request, will iterate through its PDF slots. For each PID, it sends a SIGTERM request to the corresponding process instructing it to deliver SIGTERM if the process is a member of process group 2 in session 1 .
+- each PID serves as the UI for an associated process.
+- Such associated process may reside on the same site as the PDF that stores the PID for such process or may reside on a different site. In either case, a microkernel location mechanism “knows” where such associated process currently resides.
+- the microkernel ensures that the request is delivered to the appropriate processes based upon their process PIDs.
+- Each such process checks its bookkeeping process data structure to determine whether or not it is a member of process group 2 in session 1 . If it is a member of the targeted process group, it will perform the action that the process has associated with the SIGTERM signal. The default action is to terminate the process (although a process can override this if it desires). If it is not a member of the target process group, it will do nothing.
+- the site 401 PM the original PM caller, collects responses from the processes that received the SIGTERM request and prepares a return to the caller of the SIGTERM call.
+- process group id is the same as the PID of the process PID group leader.
+- a session id for a session will be the PID of the session leader.
+- a global atomic operation against a session or a process group that is entirely local does not require a multicast.
+- the signal request will be sent (inter alia) to the group leader (process or session) which will check its (bookkeeping) process data structure. If that structure indicates that all members are local, the local PM will handle the signal locally without resort to a multicast message. Otherwise, as in the situation described above, a multicast message is sent.
+- a GAO against session 1 would require a multicast, since session 1 consists of multiple process groups on different sites. However, a GAO against either of the process groups would not require a multicast since each of the process groups is local to a single site.
+- the (bookkeeping) process data structure for the session leader ksh will contain an indication as to whether or not the entire membership of the session and the process group PGID 1 for which ksh is the leader is contained on site 401 .
+- the indication would note that the process group (which consists solely of ksh itself) is in fact local to site 401 .
+- the process group PGID 101 is on site 402 , there would be an indication that the session is not local to site 401 . Consequently, a globally atomic operation directed to session 1 requires multicast, but a globally atomic operation directed only to process group PGID 1 would not require multicast.
+- respective process data structures for process groups PGIDs 2 and 101 would respectively indicate that all of the member processes of process group PGID 2 are local to site 401 , and that all of the process members of process group PGID 101 are local to site 402 . Consequently, globally atomic operations directed against either of process groups PGIDs 2 or 101 would not require multicast. In that case, the signal is sent to the local PM which handles it, as described above, as if it were multicast to that single site.
+- An advantage of this approach is that this all occurs on a single site, and no additional resources (message bandwidth, processor utilization, memory space) on other sites will be used.
+- FIG. 9B shows the same session and process groups of FIG. 9A after various members have migrated.
+- the user application processes corresponding to PIDs 4 and 5 have migrated to site 402
+- the user application processes identified by PIDs 102 and 103 have migrated to site 401 .
+- Global atomic operations to members of either process group PGID 2 or process group PGID 101 require multicast operations because the members of process groups PGIDs 2 and 101 are divided among sites 401 and 402 .
+- Global atomic operations to process group PGID 1 can be handled locally by the site 401 PM since the sole process in PGID 1 is on site 401 .
+- a PM that receives the global atomic SIGTERM operation described in the above example uses PIDs to identify processes to be operated upon without the SIGTERM request knowing the site on which the corresponding process actually runs.
+- the microkernel keeps track of the actual location of a process even when the process migrates from one site to another, and, therefore, there is no need for the PID of a migrating process to migrate with the process itself. Since PIDs remain in the same slots regardless of process migration, there is less risk that a global atomic operation will miss migrating target processes or will operate twice on migrating target processes. Thus, it is not necessary to serialize globally atomic operations in view of the possibility of process migration. These global operations may occur in parallel which ensures a limited impact on overall system performance even if many such operations occur simultaneously.
+- Site 420 includes PDF 426 which stores PIDs 1 , 2 , 3 , 4 and 5 .
+- the user processes that correspond to PIDs 1 , 5 , 102 and 204 run on site 420 .
+- Site 422 includes a PDF 428 which stores PIDs 201 , 202 , 203 and 204 .
+- the user application processes that correspond to PIDs 3 , 4 , 104 and 202 run on site 422 .
+- Site 424 includes PDF 430 which stores PIDs 101 , 102 , 103 and 104 .
+- the user application processes that correspond to PIDs 2 , 101 , 103 , 201 and 203 run on site 424 .
+- the current embodiment of the invention provides processes and associated structures in electronic memory to facilitate recovery of processes in the event that a site in the multicomputer system 418 fails. Assume, for example, that site 422 experiences a failure and is no longer operative. The failure of site 422 will be detected by a computer program referred to as a siteview manager, which runs on hardware external to the system. All components may register interest in site failure notification. The PM, FM and STM may all register with the siteview manager (via the microkernel) such that they will be notified upon site failure.
+- the PMs on each of the surviving sites, site 420 and site 424 check the respective (bookkeeping) process data structures for each process running on such surviving sites to identify those surviving processes that correspond to a PID that was managed by a slot in the PDF 428 of failed site 422 .
+- a list of these identified processes is sent to a PM on a site chosen to manage the PDF for the failed site 422 .
+- site 424 has been chosen (at random) to host the reconstruction of the fragment of the process directory lost when site 422 failed. Referring to the illustrative drawing of FIG. 11B, there is shown the multicomputer system 418 with only surviving sites, site 420 and site 424 .
+- the chosen PM will attempt to reconstruct the PDF 428 of the failed site 422 and will manage it as if it was part of the failed site 422 . It will be appreciated that from the perspective of getdents, or other GAO, it appears as if the PDF for the failed site is still present, and the processes that were managed by that PDF and were not executing on the failed site, are still active and part of the consistent snapshot. However, since the processes that had been running on site 422 have been lost, only deallocation requests are processed for the reconstructed PDF 428 ′.
+- the respective PMs on the surviving sites, site 420 and site 424 attempt to contact each process identified by a PID in the respective PDFs, PDF 426 , PDF 430 and reconstructed PDF 428 ′, that they manage. For instance, each respective PM may send aping message to each process identified by a PID in its respective PDF. Any process that fails to respond is assumed to have been active on the failed site; since generally, there is no other reason a process would fail to respond (absent an operating system bug or hardware failure—both of which may result in site failure).
+- the PIDs of processes that were active on a failed site are removed from the respective PDFs that stored them.
+- the PM on site 420 cannot contact processes corresponding to PID 3 and PID 4 since they had been running on the failed site 422 . So, the PIDs for these processes are removed from PDF 426 .
+- the PM on site 424 cannot contact the processes identified by PID 104 , and the PID for this process is removed from PDF 430 .
+- the PM on site 424 cannot contact the process identified by PID 202 , and the PID for that process is removed from the reconstructed PDF 428 ′.
+- the micro-kernel includes process location services which are computer programs and related data structures used to locate migratable processes. The following sections describe these services.
+- This section describes a port name server which is used to localize (i.e., determine the location of) a migrated port.
+- the basic interprocess communication mechanism in the present embodiment involves messages. Messages are sent between ports during interprocess communication. A message sender must know the name of the destination port to send a message. This name is a unique name in space and time. When an actor sends a message to a port, the micro-kernel needs to know on which node (site) is located the destination port. Since most ports do not migrate, an optimization has been implemented, storing the creation site of the port within the port UI itself.
+- a port UI is an “opaque” data structure—meaning that the contents of the data structure are only relevant to the micro-kernel, not the clients of the micro-kernel.
+- the micro-kernel stores as part of the UI the site number on which the port was created, e.g., UI:
+- UI head and UI tail are opaque fields used by the micro-kernel to ensure that all UIs created will be unique.
+- ports did not migrate, then using a port name to find a port location would be enough. But ports do migrate. When a port migrates, the site number embedded within the port UI loses much of its usefulness. The port is no longer on its creation site and the micro-kernel cannot use the creation site to localize the port. However, of course, ports can migrate. When processes migrate, the port which is used to address the process must also migrate with the process.
+- a UI can be used to describe either a single port or a port group. Localization of a port group is a somewhat different proposition than localization of a port, however, since a port group really does not have a location, per se, being a collection of ports which can be located almost anywhere in the system.
+- a port group UI can be considered to be a “meta” port which is decomposed into an appropriate single port UI or multiple port UIs, depending on the mode or the nature of a request. For instance, a broadcast request may result in selection of all ports in a port group.
+- the PLS is responsible for maintaining port localization information.
+- the PLS includes a naming service which maintains a port localization cache which is a set of tuples (site, UI) for all ports with which it has successfully communicated.
+- the cache is of finite size, and entries will be reused on an LRU (least recently used) basis. Since, in the current embodiment, the PLS is a centralized service, only one instance of this server runs in the SSI. Specifically, PLS runs on the essential services site ⁇ em essential node ⁇ , a designated site where centralized services are located and which is supposed to be alive at all times.
+- the PLS provides two interfaces. One for the interprocess communication (IPC) services and one for a the Port Status Investigator (PSI) service.
+- FIG. 12 provides an illustrative drawing of the general interfaces to the PLS.
+- the PLS and PSI are disposed on the essential services site.
+- the PLS communicates with the PSI.
+- the PLS also communicates via IPC protocols with other processes disposed on the essential site and with processes disposed on other sites, such as site n shown in FIG. 12 .
+- the PSI on the essential site also communicates with PSIs on other sites, such as site n.
+- the IPC interface is used by the IPC protocol to add, remove, or localize a port into the PLS port UI database. This interface also is used by the IPC to migrate a port. IPC requests typically use the localization cache or PLS services, since generally it is not known a priori whether or not a port has migrated from its creation site.
+- the PLS During migration of a port, the PLS must provide consistent information about migrated ports and about ports that are in the process of being migrated. The PLS, therefore, has access to the current state of all the ports that are in the process of being migrated.
+- a port migration coordinator uses the PLS to register the migrated port once it is migrated.
+- the PLS also implements an interface with the Port Status Investigator (PSI).
+- PSI Port Status Investigator
+- the PSI needs to get the list of the ports which have been migrated to the failed site, and the list of the ports which have been created on the failed site and migrated out.
+- the PLS provides those two lists through its interface with the PSI.
+- the PLS is used by the IPC to localize ports which have been migrated.
+- the objective is to store into the PLS's port localization cache all the migrated ports' UIs and the site numbers where they are located.
+- the IPC port localization protocol is basically as follows. This IPC port localization protocol runs locally on every site. If a destination port UI of an IPC message is not in a local cache of UIs or, if it is and the port is no longer on the site listed in the local localization cache, then the PLS protocol will be run.
+- a local protocol described as follows:
+- step 2 If the destination port is not local, check whether the UI is registered in the local cache of UIs. If the destination port is in the cache, send the message to the site where the port is supposed to be. If the port is really on this site, return. Otherwise, go to step 4 . If there is no entry in the cache, go to step 3 .
+- the PLS interface is based on RPCs.
+- the PLS handles those requests with a message handler, allowing it to serve several requests at the same time.
+- the PLS is involved in the port migration process, since it acts as a port migration coordinator.
+- the port migration coordinator is used when the source and destination site of the migration are not the same.
+- the micro-kernel permits migration of a port between actors. It will be appreciated that there can be port migrations between source and destination actors operative on the same site or between source and destination actors on different sites. Basically, the migration coordinator keeps track of the state of the port migration at any time. If a site failure occurs, the coordinator knows if it affects the port migration.
+- FIG. 13 shows an exemplary messaging protocol that involves a port migration.
+- An actor which calls a “port Migrate” service to request that a port be migrated shall be referred to herein as an “initiator.”
+- an initiiator An actor which calls a “port Migrate” service to request that a port be migrated shall be referred to herein as an “initiator.”
+- the PLS drives the port migration, as follows.
+- the initiator sends a port migration request to the PLS.
+- the PLS forwards this request to the site location of the destination actor (named, ⁇ em destination site ⁇ ), which allocates the local resources needed to receive the migrating port and then
+- the destination actor forwards the request to the site location of the source actor (named, ⁇ em source site ⁇ ).
+- the source site builds a reply message with all the information related to the migrating port, such as the list of the groups where the port has been inserted.
+- the port is deleted.
+- the destination site inserts the port into all the groups the port belongs to, and replies to the PLS. It will be appreciated that a port may be a member of multiple port groups. The port is reinserted into the port groups after the migration. Once the PLS gets this reply, it indicates in the localization cache that the port is located on the destination site.
+- the PLS forgets the port as soon as the port has been migrated. That is, the PLS drops the port from the PLS localization cache (since the creation site stored in the UI is now useful again). This is an optimization, because a port which has been migrated away from its creation site, and later migrated back to this site, can be considered to be just like any other ports to which it never has been migrated.
+- the PLS can be implemented to handle the situation in which a localization request is received concerning a migrating port before the migration is complete.
+- Two alternative procedures for handling this situation have been developed.
+- the PLS can block the request (does not answer) until the port migration is completed. This mechanism is very simple because the source of the localization request does not have to know that a port migration is in progress, but some resources, such as the PLS message handler thread and the message structure, are held on the PLS site until the port migration completes. Since the PLS runs on the essential services site, where all the centralized services run, it may not be good practice to hold information that long.
+- the PLS can return an error message to the caller (busy message), forcing the caller to wait and try again later on. This solution is the preferred solution. Eventually, when the port migration is completed, the PLS will answer the request.
+- the port is flagged as registered in the PLS.
+- the IPC makes sure that the PLS is notified of the deletion, allowing the PLS to remove the port UI from its table.
+- a process and its corresponding port are deleted, for example, when the process exits or is killed.
+- the sight view manager which runs on the essential services site (ESS) pings each site at prescribed time intervals, e.g. every ten seconds. If a site does not reply, the SVM assumes the site has failed. The SVM notifies the PLS of the site failure, and the PLS goes through its VI deletion (or cleanup) routine.
+- the process described above is sufficient when a site failure does not happen at the same time as a port migration from a source site to the failing site, but a special recovery mechanism is needed when the source site or the destination site of a port migration fails during the migration.
+- the PSI uses the PLS to obtain a complete list of ports migrated into the failed site (this list is named ⁇ migTo ⁇ ), the PLS must keep a coherent state of migrating ports all the time. Since the PSI has a specific interface to the PLS to get those lists, and since the PSI needs to get those lists before it actually triggers a site view change monitors, the PLS needs to take special care about site failure happening while a port is migrating.
+- the four sites are: source, destination, PLS (Essential), and the site which is attempting to determine the location of the port (e.g., to send a message to it).
+- SVM notes a site view change, it will invoke a callback in the PLS to remove from the local localization cache any ports which were localized to the failed site.
+- the PLS does not know if the port has already been migrated by the time of the failure. For instance, if the target fails after the source has sent the port information and deleted the port, the migrating port does not exist any more. But, if the source fails before sending the migration request to the source, the port is still alive on the source site. Since failure notification is not synchronized among the sites, and since it is possible to receive late messages from a failed site, it is difficult to develop an algorithm where the state of the migration is known at all times, where the source site or the target site can fail. Instead, in a presently preferred embodiment of the invention, the PLS, in essence, takes a guess at the state of the migration. If the guess is incorrect, the PLS forces the state of the port migration on all the surviving sites to match its own state.
+- the port When the source or the destination fails during a port migration, depending on when the port migration happened, the port likely is either (i) dead, because it was on the failed site, or (ii) still alive, because it was on the surviving site by the time of the site failure.
+- the PLS makes the assumption that the worst has happened.
+- the port is considered by the PLS as dead. Referring to FIG. 13, the previous assumption means that from the moment that the message 1 is received by the PLS until the moment that the message 5 is received, if the source or the destination fails, then the port will be considered dead.
+- the PSI asks for the migTo and migFrom lists as soon as a site failure is detected on the ESS. (From now on, this operation will be referred to as ⁇ PSI query ⁇ .)
+- the PSI query can happen before or after all the messages sent by the failed site have arrived at their destinations. No assumption is made about the ordering of those events.
+- Source failure presents a different situation from destination failure.
+- the source site fails after the message 2 is sent and after, the message 3 is sent. If the source site fails before it had a chance to send the reply 4 , the destination site will eventually get a response that the source is unknown. The destination site returns an error to the PLS, and the PLS returns an error to the initiator. The port migration is considered as failed.
+- the first possibility is that the destination site finds out about the failure of the source site before the message 4 is delivered. In that case, a response is returned indicating that the source is unknown. This case is the same as the previous case, and an error is returned to the PLS. The port migration is considered as failed.
+- the second possibility is that the destinations site gets the reply 4 before it detects that the source site has failed.
+- a new port is created and a successful migration is reported to the PLS.
+- the PSI query has been registered on the PLS, so when the PLS gets the reply 5 , it can detect the incoherence between the content of the message 5 and its own state. Since the port has already been considered as failed, the PLS sends a message to the destination site to destroy the migrated port. This cleanup is necessary because, otherwise, the failed port would be living and accessible on the destination site, which would be incorrect.
+- the port migration is considered as failed, and an error reply 6 is sent to the initiator.
+- the port migration is considered as successful.
+- the first possibility is that the PSI query happened before the PLS gets a destination unknown error from the message 2 .
+- the port is considered as dead. Since the PLS has no possibility to know if the destination site has failed before or after sending the message 3 , the PLS sends a clean-up message to the source site to destroy the port, if it is still there. If the message 3 has been sent and received, the port already has been deleted. None has to be done.
+- the port is destroyed. If the message 3 has not been sent, the port is destroyed. If the message 3 has been sent, but not received yet, the PLS can detect the destination's failure and send the clean-up message to the source site before message 3 is delivered to the source. In that case, as mentioned, the port is destroyed, but, later, the message 3 arrives. Since the message 3 is a request to migrate a non-existing port (non-existing because destroyed), an error is returned. (No one is going to receive this reply.)
+- the PLS returns a success to the initiator.
+- the port migration is considered as successful.
+- the process successfully migrated from source to destination, and the destination subsequently failed. Of course, any subsequent attempt to contact the process will fail because the site is unknown.
+- the second possibility is that the PSI query happens after the PLS received a destination site unknown error from the message.
+- the PLS registers the port as being on the destination site, sends the clean-up message to the source site, and returns a successful migration response to the initiator.
+- the port migration is considered as successful, and the port is considered as alive, until the PSI query happens.
+- the source and initiator will consider the migration to have been successful since the process did successfully migrate off the source site.
+- the PSI needs to get the ⁇ migTo ⁇ and ⁇ migFrom ⁇ lists. Since it is not possible to predict the number of ports those lists can contain, the interface between the PLS and the PSI must be able to fragment those lists into smaller packets. Referring to FIG. 14, the interface, in accordance with a present embodiment, uses the IPC.
+- the PSI sends a request to the PLS including the site number of the failed site and the UI of the port where a message handler has been attached, ready to handle the message from the PLS containing the ⁇ migFrom ⁇ and ⁇ migTo ⁇ ports.
+- the PSI creates a port and attaches a handler to the port to respond to messages delivered to the port.
+- This port is created by the PSI to receive messages from the PLS containing the variable sized migFrom/migTo lists. It will be deleted when no longer necessary.
+- the PLS When the PLS gets any PSI requests, it first checks if the failed site is either the source or the destination of any of the port migrations in progress. If it is, the state of the port migration in progress is changed (the migrating port is marked as dead, as described in the previous section), and the migrating port is included into the ⁇ migTo ⁇ port if the failed site was the destination site. Then the PLS scans its table to find all ports created on the failed site and migrated away ( ⁇ migFrom ⁇ ), and all the ports migrated to the failed site ( ⁇ migTo ⁇ ). This list of ports is built into a message. If the list exceeds the size of a message, the list is sent using several messages.
+- parts of the operating system may use a process referred to as, portDeclare/uiBuild to construct a UI, bypassing the code which stores the creation site in the UI; thus, this “hint” cannot be used to determine the port destination.
+- a micro-kernel system call ⁇ portDeclare( ) ⁇ which forms no part of the present invention, allows the user to create a port with a user-defined UI.
+- This UI is built using ⁇ uiBuild( ) ⁇ which allows the user to set the creation site part of the UI to any value. That means that port can be created in such a way that the IPC cannot retrieve the real creation site number.
+- Such ports need to be localized even if they did not migrate. They need to be registered in the PLS at the time of creation. Since performing this operation creates an overhead, and since most of the port created with ⁇ portDeclare( ) ⁇ has a correct creation site number embedded within the port UI, a good optimization is to register only the ports which do not have a correct creation site number. Since the PLS needs to know what was the site of creation of all the registered ports, and since the PLS cannot rely on the creation site number embedded within the UI, the creation site number needs to be explicitly stored with the port UI and the present location site.
+Abstract
+Description
+/* | ||
+*Session (17) process group (17) | ||
+*/ |
+ksh/* (PID17) */ |
+/*process group (29)*/ |
+ls - lR | tee/tmp/f| pg /*( |
+/*process group (61)*/ |
+cscope -d -f rdbms /*(PID 61)*/ | ||
+ksh is the Korn shell command which is a standard UNIX system command interpreter. | ||
+ls is the list files command. | ||
+tee is a command to make two copies of an input, one to a file, the other to output. | ||
+pg is an output pager command which displays input to output one page at a time. | ||
+cscope -d -f rdbms is a C language visual cross reference tool. |
+/*PGID 1:*/ |
+$ ksh /* (PID 1)*/ |
+/*PGID 2:*/ |
+$ cat/etc/terminfo | sort | uniq | wc - l & /*( |
+and 5) */ |
+/*PGID 101:*/ |
+$ ls-lRr| tee| pg & /*( |
+||
+$ kill -TERM -2 | /* |
+||
+Claims (10)
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US09/024,869 US6192514B1 (en) | 1997-02-19 | 1998-02-17 | Multicomputer system |
+Applications Claiming Priority (2)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US3843497P | 1997-02-19 | 1997-02-19 | |
+US09/024,869 US6192514B1 (en) | 1997-02-19 | 1998-02-17 | Multicomputer system |
+Publications (1)
+Publication Number | Publication Date |
+---|---|
+US6192514B1 true US6192514B1 (en) | 2001-02-20 |
+Family
+ID=26698962
+Family Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US09/024,869 Expired - Lifetime US6192514B1 (en) | 1997-02-19 | 1998-02-17 | Multicomputer system |
+Country Status (1)
+Country | Link |
+---|---|
+US (1) | US6192514B1 (en) |
+Cited By (69)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6374285B1 (en) * | 1998-05-15 | 2002-04-16 | Compaq Computer Corporation | Method for mutual exclusion of locks in a remote-write globally ordered network of processors |
+US6393459B1 (en) * | 1998-05-12 | 2002-05-21 | Unisys Corporation | Multicomputer with distributed directory and operating system |
+US6442663B1 (en) * | 1998-06-19 | 2002-08-27 | Board Of Supervisors Of Louisiana University And Agricultural And Mechanical College | Data collection and restoration for homogeneous or heterogeneous process migration |
+US20020138637A1 (en) * | 2001-03-22 | 2002-09-26 | Masakazu Suzuoki | Computer architecture and software cells for broadband networks |
+US20020156993A1 (en) * | 2001-03-22 | 2002-10-24 | Masakazu Suzuoki | Processing modules for computer architecture for broadband networks |
+US6496871B1 (en) * | 1998-06-30 | 2002-12-17 | Nec Research Institute, Inc. | Distributed agent software system and method having enhanced process mobility and communication in a computer network |
+US20030069939A1 (en) * | 2001-10-04 | 2003-04-10 | Russell Lance W. | Packet processing in shared memory multi-computer systems |
+US20030069938A1 (en) * | 2001-10-04 | 2003-04-10 | Russell Lance W. | Shared memory coupling of network infrastructure devices |
+US20030069949A1 (en) * | 2001-10-04 | 2003-04-10 | Chan Michele W. | Managing distributed network infrastructure services |
+US20030105886A1 (en) * | 2001-12-03 | 2003-06-05 | Yoram Tsarfati | Generic framework for embedded software development |
+US20030187915A1 (en) * | 2002-03-29 | 2003-10-02 | Xian-He Sun | Communication and process migration protocols for distributed heterogenous computing |
+US20030229765A1 (en) * | 2001-03-22 | 2003-12-11 | Sony Computer Entertainment Inc. | Memory protection system and method for computer architecture for broadband networks |
+US20050120187A1 (en) * | 2001-03-22 | 2005-06-02 | Sony Computer Entertainment Inc. | External data interface in a computer architecture for broadband networks |
+US20050120254A1 (en) * | 2001-03-22 | 2005-06-02 | Sony Computer Entertainment Inc. | Power management for processing modules |
+US20050122897A1 (en) * | 2003-12-05 | 2005-06-09 | Gonda Rumi S. | Supporting SDH/SONET APS bridge selector functionality for ethernet |
+US20050184994A1 (en) * | 2000-02-11 | 2005-08-25 | Sony Computer Entertainment Inc. | Multiprocessor computer system |
+US20050193278A1 (en) * | 2003-12-29 | 2005-09-01 | Intel Corporation | Decoupling the number of logical threads from the number of simultaneous physical threads in a processor |
+US20050229189A1 (en) * | 2001-10-22 | 2005-10-13 | Mcmanus Eamonn | Inter-process communication using different programming languages |
+US20050240737A1 (en) * | 2004-04-23 | 2005-10-27 | Waratek (Australia) Pty Limited | Modified computer architecture |
+US20050257219A1 (en) * | 2004-04-23 | 2005-11-17 | Holt John M | Multiple computer architecture with replicated memory fields |
+US20050262313A1 (en) * | 2004-04-23 | 2005-11-24 | Waratek Pty Limited | Modified computer architecture with coordinated objects |
+US20050262513A1 (en) * | 2004-04-23 | 2005-11-24 | Waratek Pty Limited | Modified computer architecture with initialization of objects |
+US20060020913A1 (en) * | 2004-04-23 | 2006-01-26 | Waratek Pty Limited | Multiple computer architecture with synchronization |
+US20060095483A1 (en) * | 2004-04-23 | 2006-05-04 | Waratek Pty Limited | Modified computer architecture with finalization of objects |
+US20060101472A1 (en) * | 2003-07-11 | 2006-05-11 | Computer Associates Think, Inc. | Software development kit for client server applications |
+US20060106771A1 (en) * | 2004-11-15 | 2006-05-18 | International Business Machines Corporation | Dynamic optimization of communication of data structures |
+US20060242464A1 (en) * | 2004-04-23 | 2006-10-26 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing and coordinated memory and asset handling |
+US7140015B1 (en) * | 1999-09-29 | 2006-11-21 | Network Appliance, Inc. | Microkernel for real time applications |
+US20070011661A1 (en) * | 2005-07-07 | 2007-01-11 | Hiroshi Itoh | Process control system and control method therefor |
+US20070043569A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for inheritance of advertised functionality in a user interactive system |
+US20070044023A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for administering pluggable user interactive system applications |
+US20070044026A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for sharing access to service provider controls and subscriber profile data across multiple applications in a user interactive system |
+US20070101057A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with advanced synchronization |
+US20070100918A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Multiple computer system with enhanced memory clean up |
+US20070101080A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Multiple machine architecture with overhead reduction |
+US20070100954A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with partial memory updating |
+US20070100828A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with machine redundancy |
+US20070126750A1 (en) * | 2005-10-25 | 2007-06-07 | Holt John M | Replication of object graphs |
+US20070174734A1 (en) * | 2005-10-25 | 2007-07-26 | Holt John M | Failure resistant multiple computer system and method |
+US20080114853A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Network protocol for network communications |
+US20080114896A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Asynchronous data transmission |
+US20080114944A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Contention detection |
+US20080114943A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Adding one or more computers to a multiple computer system |
+US20080120477A1 (en) * | 2006-10-05 | 2008-05-22 | Holt John M | Contention detection with modified message format |
+US20080120478A1 (en) * | 2006-10-05 | 2008-05-22 | Holt John M | Advanced synchronization and contention resolution |
+US20080126322A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Synchronization with partial memory replication |
+US20080126721A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Contention detection and resolution |
+US20080123642A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Switch protocol for network communications |
+US20080126503A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Contention resolution with echo cancellation |
+US20080126505A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Multiple computer system with redundancy architecture |
+US20080126516A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Advanced contention detection |
+US20080126703A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Cyclic redundant multiple computer architecture |
+US20080134189A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Job scheduling amongst multiple computers |
+US20080130652A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Multiple communication networks for multiple computers |
+US20080133869A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Redundant multiple computer architecture |
+US20080133861A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Silent memory reclamation |
+US20080133859A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Advanced synchronization and contention resolution |
+US20080133870A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Hybrid replicated shared memory |
+US20080140805A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple network connections for multiple computers |
+US20080140975A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Contention detection with data consolidation |
+US20080140801A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple computer system with dual mode redundancy architecture |
+US20080155127A1 (en) * | 2006-10-05 | 2008-06-26 | Holt John M | Multi-path switching networks |
+US20080250213A1 (en) * | 2007-04-06 | 2008-10-09 | Holt John M | Computer Architecture And Method Of Operation for Multi-Computer Distributed Processing Having Redundant Array Of Independent Systems With Replicated Memory And Code Striping |
+US20080288644A1 (en) * | 2007-05-16 | 2008-11-20 | Gilfix Michael A | System and Method for Creating Global Sessions Across Converged Protocol Applications |
+US20100121935A1 (en) * | 2006-10-05 | 2010-05-13 | Holt John M | Hybrid replicated shared memory |
+US20110041132A1 (en) * | 2009-08-11 | 2011-02-17 | Internationl Business Machines Corporation | Elastic and data parallel operators for stream processing |
+US8751212B2 (en) | 2004-03-29 | 2014-06-10 | Sony Computer Entertainment Inc. | Methods and apparatus for achieving thermal management using processing task scheduling |
+US9106391B2 (en) | 2013-05-28 | 2015-08-11 | International Business Machines Corporation | Elastic auto-parallelization for stream processing applications based on a measured throughput and congestion |
+US11265266B2 (en) * | 2017-01-16 | 2022-03-01 | Fujitsu Limited | Computer-readable recording medium recording port switching program and port switching method |
+Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5276867A (en) * | 1989-12-19 | 1994-01-04 | Epoch Systems, Inc. | Digital data storage system with improved data migration |
+US5367698A (en) * | 1991-10-31 | 1994-11-22 | Epoch Systems, Inc. | Network file migration system |
+US5581724A (en) * | 1992-10-19 | 1996-12-03 | Storage Technology Corporation | Dynamically mapped data storage subsystem having multiple open destage cylinders and method of managing that subsystem |
+US5729682A (en) * | 1995-06-07 | 1998-03-17 | International Business Machines Corporation | System for prompting parameters required by a network application and using data structure to establish connections between local computer, application and resources required by application |
+US5832522A (en) * | 1994-02-25 | 1998-11-03 | Kodak Limited | Data storage management for network interconnected processors |
+US5873103A (en) * | 1994-02-25 | 1999-02-16 | Kodak Limited | Data storage management for network interconnected processors using transferrable placeholders |
+US5909540A (en) * | 1996-11-22 | 1999-06-01 | Mangosoft Corporation | System and method for providing highly available data storage using globally addressable memory |
+-
+1998
+- 1998-02-17 US US09/024,869 patent/US6192514B1/en not_active Expired - Lifetime
+Patent Citations (7)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5276867A (en) * | 1989-12-19 | 1994-01-04 | Epoch Systems, Inc. | Digital data storage system with improved data migration |
+US5367698A (en) * | 1991-10-31 | 1994-11-22 | Epoch Systems, Inc. | Network file migration system |
+US5581724A (en) * | 1992-10-19 | 1996-12-03 | Storage Technology Corporation | Dynamically mapped data storage subsystem having multiple open destage cylinders and method of managing that subsystem |
+US5832522A (en) * | 1994-02-25 | 1998-11-03 | Kodak Limited | Data storage management for network interconnected processors |
+US5873103A (en) * | 1994-02-25 | 1999-02-16 | Kodak Limited | Data storage management for network interconnected processors using transferrable placeholders |
+US5729682A (en) * | 1995-06-07 | 1998-03-17 | International Business Machines Corporation | System for prompting parameters required by a network application and using data structure to establish connections between local computer, application and resources required by application |
+US5909540A (en) * | 1996-11-22 | 1999-06-01 | Mangosoft Corporation | System and method for providing highly available data storage using globally addressable memory |
+Non-Patent Citations (4)
+Title |
+---|
+Benedicte Herrmann, et al., CHORUS/MiX, a Distributed UNIX, on Multicomputers, May 1992, p. 1-16. |
+Lawrence Albinson, et al., UNIX on a Loosely Coupled Architecture: The CHORUS/MiX Approach, paper presented at the EIT Workshop on Parallel and Distributed Workstation Systems, Sep. 26-27, 1991, Florence, Italy, document dated Jun. 4, 1994, p. 1-19. |
+Nariman Batlivala, et al., Experience with SVR4 Over CHORUS, Apr. 1992, entire document. |
+Vadim Abrossimov, et al., A Distributed Consistency Server for the CHORUS System, Mar. 1992, p. 1-19. |
+Cited By (164)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US6393459B1 (en) * | 1998-05-12 | 2002-05-21 | Unisys Corporation | Multicomputer with distributed directory and operating system |
+US6374285B1 (en) * | 1998-05-15 | 2002-04-16 | Compaq Computer Corporation | Method for mutual exclusion of locks in a remote-write globally ordered network of processors |
+US6442663B1 (en) * | 1998-06-19 | 2002-08-27 | Board Of Supervisors Of Louisiana University And Agricultural And Mechanical College | Data collection and restoration for homogeneous or heterogeneous process migration |
+US6496871B1 (en) * | 1998-06-30 | 2002-12-17 | Nec Research Institute, Inc. | Distributed agent software system and method having enhanced process mobility and communication in a computer network |
+US7140015B1 (en) * | 1999-09-29 | 2006-11-21 | Network Appliance, Inc. | Microkernel for real time applications |
+US20050184994A1 (en) * | 2000-02-11 | 2005-08-25 | Sony Computer Entertainment Inc. | Multiprocessor computer system |
+US8434091B2 (en) | 2001-03-22 | 2013-04-30 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US7516334B2 (en) | 2001-03-22 | 2009-04-07 | Sony Computer Entertainment Inc. | Power management for processing modules |
+US20020138637A1 (en) * | 2001-03-22 | 2002-09-26 | Masakazu Suzuoki | Computer architecture and software cells for broadband networks |
+US20020156993A1 (en) * | 2001-03-22 | 2002-10-24 | Masakazu Suzuoki | Processing modules for computer architecture for broadband networks |
+US7139882B2 (en) | 2001-03-22 | 2006-11-21 | Sony Computer Entertainment Inc. | Memory protection system and method for computer architecture for broadband networks |
+US20030229765A1 (en) * | 2001-03-22 | 2003-12-11 | Sony Computer Entertainment Inc. | Memory protection system and method for computer architecture for broadband networks |
+US20050081209A1 (en) * | 2001-03-22 | 2005-04-14 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US20050078117A1 (en) * | 2001-03-22 | 2005-04-14 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US20050081213A1 (en) * | 2001-03-22 | 2005-04-14 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US20050097302A1 (en) * | 2001-03-22 | 2005-05-05 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US20050120187A1 (en) * | 2001-03-22 | 2005-06-02 | Sony Computer Entertainment Inc. | External data interface in a computer architecture for broadband networks |
+US20050120254A1 (en) * | 2001-03-22 | 2005-06-02 | Sony Computer Entertainment Inc. | Power management for processing modules |
+US7999813B2 (en) | 2001-03-22 | 2011-08-16 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US7720982B2 (en) | 2001-03-22 | 2010-05-18 | Sony Computer Entertainment Inc. | Computer architecture and software cells for broadband networks |
+US7231500B2 (en) | 2001-03-22 | 2007-06-12 | Sony Computer Entertainment Inc. | External data interface in a computer architecture for broadband networks |
+US7233998B2 (en) * | 2001-03-22 | 2007-06-19 | Sony Computer Entertainment Inc. | Computer architecture and software cells for broadband networks |
+US8028288B2 (en) | 2001-03-22 | 2011-09-27 | Sony Computer Entertainment Inc. | System and method for data synchronization for a computer architecture for broadband networks |
+US7457939B2 (en) | 2001-03-22 | 2008-11-25 | Sony Computer Entertainment Inc. | Processing system with dedicated local memories and busy identification |
+US20030069938A1 (en) * | 2001-10-04 | 2003-04-10 | Russell Lance W. | Shared memory coupling of network infrastructure devices |
+US20030069949A1 (en) * | 2001-10-04 | 2003-04-10 | Chan Michele W. | Managing distributed network infrastructure services |
+US20030069939A1 (en) * | 2001-10-04 | 2003-04-10 | Russell Lance W. | Packet processing in shared memory multi-computer systems |
+US6999998B2 (en) | 2001-10-04 | 2006-02-14 | Hewlett-Packard Development Company, L.P. | Shared memory coupling of network infrastructure devices |
+US6920485B2 (en) | 2001-10-04 | 2005-07-19 | Hewlett-Packard Development Company, L.P. | Packet processing in shared memory multi-computer systems |
+US20050229189A1 (en) * | 2001-10-22 | 2005-10-13 | Mcmanus Eamonn | Inter-process communication using different programming languages |
+US7444619B2 (en) * | 2001-10-22 | 2008-10-28 | Sun Microsystems, Inc. | Inter-process communication using different programming languages |
+US7069546B2 (en) * | 2001-12-03 | 2006-06-27 | Corrigent Systems Ltd. | Generic framework for embedded software development |
+US20030105886A1 (en) * | 2001-12-03 | 2003-06-05 | Yoram Tsarfati | Generic framework for embedded software development |
+US20030187915A1 (en) * | 2002-03-29 | 2003-10-02 | Xian-He Sun | Communication and process migration protocols for distributed heterogenous computing |
+US7065549B2 (en) | 2002-03-29 | 2006-06-20 | Illinois Institute Of Technology | Communication and process migration protocols for distributed heterogeneous computing |
+WO2005008431A3 (en) * | 2003-07-11 | 2006-11-02 | Computer Ass Think Inc | Software development kit for client server applications |
+US20060101472A1 (en) * | 2003-07-11 | 2006-05-11 | Computer Associates Think, Inc. | Software development kit for client server applications |
+US7102995B2 (en) * | 2003-12-05 | 2006-09-05 | Rumi Sheryar Gonda | Supporting SDH/SONET APS bridge selector functionality for ethernet |
+US20050122897A1 (en) * | 2003-12-05 | 2005-06-09 | Gonda Rumi S. | Supporting SDH/SONET APS bridge selector functionality for ethernet |
+WO2005060470A3 (en) * | 2003-12-05 | 2005-10-20 | Rumi Sheryar Gonda | Supporting sdh/sonet aps bridge selector functionality for ethernet |
+US7797683B2 (en) * | 2003-12-29 | 2010-09-14 | Intel Corporation | Decoupling the number of logical threads from the number of simultaneous physical threads in a processor |
+US20050193278A1 (en) * | 2003-12-29 | 2005-09-01 | Intel Corporation | Decoupling the number of logical threads from the number of simultaneous physical threads in a processor |
+US9183051B2 (en) | 2004-03-29 | 2015-11-10 | Sony Computer Entertainment Inc. | Methods and apparatus for achieving thermal management using processing task scheduling |
+US8751212B2 (en) | 2004-03-29 | 2014-06-10 | Sony Computer Entertainment Inc. | Methods and apparatus for achieving thermal management using processing task scheduling |
+US20090198776A1 (en) * | 2004-04-23 | 2009-08-06 | Waratek Pty Ltd. | Computer architecture and method of operation for multi-computer distributed processing with initialization of objects |
+US20060095483A1 (en) * | 2004-04-23 | 2006-05-04 | Waratek Pty Limited | Modified computer architecture with finalization of objects |
+US7860829B2 (en) | 2004-04-23 | 2010-12-28 | Waratek Pty Ltd. | Computer architecture and method of operation for multi-computer distributed processing with replicated memory |
+US7849452B2 (en) | 2004-04-23 | 2010-12-07 | Waratek Pty Ltd. | Modification of computer applications at load time for distributed execution |
+US7844665B2 (en) | 2004-04-23 | 2010-11-30 | Waratek Pty Ltd. | Modified computer architecture having coordinated deletion of corresponding replicated memory locations among plural computers |
+US20090235033A1 (en) * | 2004-04-23 | 2009-09-17 | Waratek Pty Ltd. | Computer architecture and method of operation for multi-computer distributed processing with replicated memory |
+US7788314B2 (en) | 2004-04-23 | 2010-08-31 | Waratek Pty Ltd. | Multi-computer distributed processing with replicated local memory exclusive read and write and network value update propagation |
+US20060242464A1 (en) * | 2004-04-23 | 2006-10-26 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing and coordinated memory and asset handling |
+US7707179B2 (en) | 2004-04-23 | 2010-04-27 | Waratek Pty Limited | Multiple computer architecture with synchronization |
+US20050240737A1 (en) * | 2004-04-23 | 2005-10-27 | Waratek (Australia) Pty Limited | Modified computer architecture |
+US20060020913A1 (en) * | 2004-04-23 | 2006-01-26 | Waratek Pty Limited | Multiple computer architecture with synchronization |
+US20050262513A1 (en) * | 2004-04-23 | 2005-11-24 | Waratek Pty Limited | Modified computer architecture with initialization of objects |
+US20050262313A1 (en) * | 2004-04-23 | 2005-11-24 | Waratek Pty Limited | Modified computer architecture with coordinated objects |
+US20050257219A1 (en) * | 2004-04-23 | 2005-11-17 | Holt John M | Multiple computer architecture with replicated memory fields |
+US20060106771A1 (en) * | 2004-11-15 | 2006-05-18 | International Business Machines Corporation | Dynamic optimization of communication of data structures |
+US20060265705A1 (en) * | 2005-04-21 | 2006-11-23 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing with finalization of objects |
+US20090055603A1 (en) * | 2005-04-21 | 2009-02-26 | Holt John M | Modified computer architecture for a computer to operate in a multiple computer system |
+US20060253844A1 (en) * | 2005-04-21 | 2006-11-09 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing with initialization of objects |
+US20060265704A1 (en) * | 2005-04-21 | 2006-11-23 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing with synchronization |
+US20090235034A1 (en) * | 2005-04-21 | 2009-09-17 | John Matthew Holt | Computer architecture and method of operation for multi-computer distributed processing with synchronization |
+US20060265703A1 (en) * | 2005-04-21 | 2006-11-23 | Holt John M | Computer architecture and method of operation for multi-computer distributed processing with replicated memory |
+US7818296B2 (en) | 2005-04-21 | 2010-10-19 | Waratek Pty Ltd. | Computer architecture and method of operation for multi-computer distributed processing with synchronization |
+US8028299B2 (en) | 2005-04-21 | 2011-09-27 | Waratek Pty, Ltd. | Computer architecture and method of operation for multi-computer distributed processing with finalization of objects |
+US20070011661A1 (en) * | 2005-07-07 | 2007-01-11 | Hiroshi Itoh | Process control system and control method therefor |
+US7917905B2 (en) * | 2005-07-07 | 2011-03-29 | Lenovo (Singapore) Pte. Ltd. | Process control system and control method therefor |
+US20070044026A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for sharing access to service provider controls and subscriber profile data across multiple applications in a user interactive system |
+US20070044023A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for administering pluggable user interactive system applications |
+US9471293B1 (en) | 2005-08-19 | 2016-10-18 | Intervoice Limited Partnership | System and method for administering pluggable user interactive system applications |
+US20070043569A1 (en) * | 2005-08-19 | 2007-02-22 | Intervoice Limited Partnership | System and method for inheritance of advertised functionality in a user interactive system |
+US8683334B2 (en) | 2005-08-19 | 2014-03-25 | Intervoice Limited Partnership | System and method for sharing access to service provider controls and subscriber profile data across multiple applications in a user interactive system |
+US7797636B2 (en) | 2005-08-19 | 2010-09-14 | Joseph Carter | System and method for administering pluggable user interactive system applications |
+US7761670B2 (en) | 2005-10-25 | 2010-07-20 | Waratek Pty Limited | Modified machine architecture with advanced synchronization |
+US20070100828A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with machine redundancy |
+US7849369B2 (en) | 2005-10-25 | 2010-12-07 | Waratek Pty Ltd. | Failure resistant multiple computer system and method |
+US20080189385A1 (en) * | 2005-10-25 | 2008-08-07 | Holt John M | Multiple machine architecture with overhead reduction |
+US20070101057A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with advanced synchronization |
+US8209393B2 (en) | 2005-10-25 | 2012-06-26 | Waratek Pty Ltd. | Multiple machine architecture with overhead reduction |
+US20070100918A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Multiple computer system with enhanced memory clean up |
+US7958322B2 (en) | 2005-10-25 | 2011-06-07 | Waratek Pty Ltd | Multiple machine architecture with overhead reduction |
+US20070101080A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Multiple machine architecture with overhead reduction |
+US8122200B2 (en) | 2005-10-25 | 2012-02-21 | Waratek Pty Ltd. | Modified machine architecture with advanced synchronization |
+US20070100954A1 (en) * | 2005-10-25 | 2007-05-03 | Holt John M | Modified machine architecture with partial memory updating |
+US8122198B2 (en) | 2005-10-25 | 2012-02-21 | Waratek Pty Ltd. | Modified machine architecture with partial memory updating |
+US7660960B2 (en) | 2005-10-25 | 2010-02-09 | Waratek Pty, Ltd. | Modified machine architecture with partial memory updating |
+US7996627B2 (en) | 2005-10-25 | 2011-08-09 | Waratek Pty Ltd | Replication of object graphs |
+US20070126750A1 (en) * | 2005-10-25 | 2007-06-07 | Holt John M | Replication of object graphs |
+US7581069B2 (en) | 2005-10-25 | 2009-08-25 | Waratek Pty Ltd. | Multiple computer system with enhanced memory clean up |
+US20070174734A1 (en) * | 2005-10-25 | 2007-07-26 | Holt John M | Failure resistant multiple computer system and method |
+US8015236B2 (en) | 2005-10-25 | 2011-09-06 | Waratek Pty. Ltd. | Replication of objects having non-primitive fields, especially addresses |
+US20080215703A1 (en) * | 2005-10-25 | 2008-09-04 | Holt John M | Modified machine architecture with partial memory updating |
+US20080215928A1 (en) * | 2005-10-25 | 2008-09-04 | Holt John M | Failure resistant multiple computer system and method |
+US20080215701A1 (en) * | 2005-10-25 | 2008-09-04 | Holt John M | Modified machine architecture with advanced synchronization |
+US20080215593A1 (en) * | 2005-10-25 | 2008-09-04 | Holt John M | Replication of object graphs |
+US20080195682A1 (en) * | 2005-10-25 | 2008-08-14 | Holt John M | Multiple computer system with enhanced memory clean up |
+US20080195617A1 (en) * | 2005-10-25 | 2008-08-14 | Holt John M | Modified machine architecture with machine redundancy |
+US20080130631A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Contention detection with modified message format |
+US20080133694A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Redundant multiple computer architecture |
+US20080151902A1 (en) * | 2006-10-05 | 2008-06-26 | Holt John M | Multiple network connections for multiple computers |
+US20080155127A1 (en) * | 2006-10-05 | 2008-06-26 | Holt John M | Multi-path switching networks |
+US20080140801A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple computer system with dual mode redundancy architecture |
+US20080140975A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Contention detection with data consolidation |
+US20080140805A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple network connections for multiple computers |
+US20080140856A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple communication networks for multiple computers |
+US20080114943A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Adding one or more computers to a multiple computer system |
+US20080114944A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Contention detection |
+US20080120477A1 (en) * | 2006-10-05 | 2008-05-22 | Holt John M | Contention detection with modified message format |
+US20080114896A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Asynchronous data transmission |
+US20080141092A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Network protocol for network communications |
+US20080114853A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Network protocol for network communications |
+US20080137662A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Asynchronous data transmission |
+US20080140982A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Redundant multiple computer architecture |
+US20080140799A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Contention detection and resolution |
+US20080140863A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Multiple communication networks for multiple computers |
+US20080140976A1 (en) * | 2006-10-05 | 2008-06-12 | Holt John M | Advanced contention detection |
+US20080114945A1 (en) * | 2006-10-05 | 2008-05-15 | Holt John M | Contention detection |
+US20100121935A1 (en) * | 2006-10-05 | 2010-05-13 | Holt John M | Hybrid replicated shared memory |
+US20080133871A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Hybrid replicated shared memory |
+US20080133711A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Advanced contention detection |
+US20080133689A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Silent memory reclamation |
+US20080133870A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Hybrid replicated shared memory |
+US20080133859A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Advanced synchronization and contention resolution |
+US20080133692A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Multiple computer system with redundancy architecture |
+US7831779B2 (en) | 2006-10-05 | 2010-11-09 | Waratek Pty Ltd. | Advanced contention detection |
+US20080133690A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Contention detection and resolution |
+US7849151B2 (en) | 2006-10-05 | 2010-12-07 | Waratek Pty Ltd. | Contention detection |
+US20080133861A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Silent memory reclamation |
+US20080133869A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Redundant multiple computer architecture |
+US7852845B2 (en) | 2006-10-05 | 2010-12-14 | Waratek Pty Ltd. | Asynchronous data transmission |
+US20080184071A1 (en) * | 2006-10-05 | 2008-07-31 | Holt John M | Cyclic redundant multiple computer architecture |
+US20080120478A1 (en) * | 2006-10-05 | 2008-05-22 | Holt John M | Advanced synchronization and contention resolution |
+US20080126322A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Synchronization with partial memory replication |
+US7894341B2 (en) | 2006-10-05 | 2011-02-22 | Waratek Pty Ltd. | Switch protocol for network communications |
+US20080130652A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Multiple communication networks for multiple computers |
+US7949837B2 (en) | 2006-10-05 | 2011-05-24 | Waratek Pty Ltd. | Contention detection and resolution |
+US20080134189A1 (en) * | 2006-10-05 | 2008-06-05 | Holt John M | Job scheduling amongst multiple computers |
+US7958329B2 (en) | 2006-10-05 | 2011-06-07 | Waratek Pty Ltd | Hybrid replicated shared memory |
+US7962697B2 (en) | 2006-10-05 | 2011-06-14 | Waratek Pty Limited | Contention detection |
+US7971005B2 (en) | 2006-10-05 | 2011-06-28 | Waratek Pty Ltd. | Advanced contention detection |
+US20080126504A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Contention detection |
+US20080126506A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Multiple computer system with redundancy architecture |
+US20080126703A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Cyclic redundant multiple computer architecture |
+US20080126508A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Synchronization with partial memory replication |
+US20080126516A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Advanced contention detection |
+US8086805B2 (en) | 2006-10-05 | 2011-12-27 | Waratek Pty Ltd. | Advanced contention detection |
+US8090926B2 (en) | 2006-10-05 | 2012-01-03 | Waratek Pty Ltd. | Hybrid replicated shared memory |
+US8095616B2 (en) | 2006-10-05 | 2012-01-10 | Waratek Pty Ltd. | Contention detection |
+US20080126505A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Multiple computer system with redundancy architecture |
+US20080126503A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Contention resolution with echo cancellation |
+US20080123642A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Switch protocol for network communications |
+US8473564B2 (en) | 2006-10-05 | 2013-06-25 | Waratek Pty Ltd. | Contention detection and resolution |
+US20080126721A1 (en) * | 2006-10-05 | 2008-05-29 | Holt John M | Contention detection and resolution |
+US8316190B2 (en) | 2007-04-06 | 2012-11-20 | Waratek Pty. Ltd. | Computer architecture and method of operation for multi-computer distributed processing having redundant array of independent systems with replicated memory and code striping |
+US20080250213A1 (en) * | 2007-04-06 | 2008-10-09 | Holt John M | Computer Architecture And Method Of Operation for Multi-Computer Distributed Processing Having Redundant Array Of Independent Systems With Replicated Memory And Code Striping |
+US7870267B2 (en) * | 2007-05-16 | 2011-01-11 | International Business Machines Corporation | Creating global sessions across converged protocol applications |
+US20080288644A1 (en) * | 2007-05-16 | 2008-11-20 | Gilfix Michael A | System and Method for Creating Global Sessions Across Converged Protocol Applications |
+US8656396B2 (en) * | 2009-08-11 | 2014-02-18 | International Business Machines Corporation | Performance optimization based on threshold performance measure by resuming suspended threads if present or by creating threads within elastic and data parallel operators |
+US20110041132A1 (en) * | 2009-08-11 | 2011-02-17 | Internationl Business Machines Corporation | Elastic and data parallel operators for stream processing |
+US9106391B2 (en) | 2013-05-28 | 2015-08-11 | International Business Machines Corporation | Elastic auto-parallelization for stream processing applications based on a measured throughput and congestion |
+US9112666B2 (en) | 2013-05-28 | 2015-08-18 | International Business Machines Corporation | Elastic auto-parallelization for stream processing applications based on measured throughput and congestion |
+US11265266B2 (en) * | 2017-01-16 | 2022-03-01 | Fujitsu Limited | Computer-readable recording medium recording port switching program and port switching method |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US6192514B1 (en) | Multicomputer system | |
+US6393459B1 (en) | Multicomputer with distributed directory and operating system | |
+US6424988B2 (en) | Multicomputer system | |
+US7349970B2 (en) | Workload management of stateful program entities | |
+US5222217A (en) | System and method for implementing operating system message queues with recoverable shared virtual storage | |
+US7111291B2 (en) | Data management application programming interface session management for a parallel file system | |
+US7124255B2 (en) | Message based inter-process for high volume data | |
+US6574749B1 (en) | Reliable distributed shared memory | |
+US7584222B1 (en) | Methods and apparatus facilitating access to shared storage among multiple computers | |
+JP4771378B2 (en) | File system serialization reinitialization apparatus, system, and method | |
+EP0501610B1 (en) | Object oriented distributed computing system | |
+US7716377B2 (en) | Clustering server providing virtual machine data sharing | |
+Hendriks | BProc: The Beowulf distributed process space | |
+EP3356936B1 (en) | Network attached memory using selective resource migration | |
+CN107077358B (en) | System and method for supporting dynamic deployment of executable code in a distributed computing environment | |
+US7533377B2 (en) | Achieving autonomic behavior in an operating system via a hot-swapping mechanism | |
+Douglis | Transparent process migration in the Sprite operating system | |
+KR100380996B1 (en) | system for maintaining object consistency and for implementating distributed shared memory in Java and its method | |
+Cahill et al. | Supporting the Amadeus platform on UNIX | |
+Galdámez et al. | HIDRA: Architecture and high availability support | |
+Schantz et al. | A Technical Overview of the National Software Works. | |
+Stewart | A Highly Available CORBA Naming Service Presented by Jeffrey Brian Stewart |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+AS | Assignment |
+Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:LURADAL, SCOTT;REEL/FRAME:011344/0773Effective date: 20001120 |
+|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FEPP | Fee payment procedure |
+Free format text: PAT HOLDER NO LONGER CLAIMS SMALL ENTITY STATUS, ENTITY STATUS SET TO UNDISCOUNTED (ORIGINAL EVENT CODE: STOL); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+REFU | Refund |
+Free format text: REFUND - SURCHARGE, PETITION TO ACCEPT PYMT AFTER EXP, UNINTENTIONAL (ORIGINAL EVENT CODE: R2551); ENTITY STATUS OF PATENT OWNER: LARGE ENTITY |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+SULP | Surcharge for late payment | ||
+FPAY | Fee payment |
+Year of fee payment: 8 |
+|
+AS | Assignment |
+Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023312/0044Effective date: 20090601Owner name: UNISYS HOLDING CORPORATION, DELAWAREFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023312/0044Effective date: 20090601Owner name: UNISYS CORPORATION,PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023312/0044Effective date: 20090601Owner name: UNISYS HOLDING CORPORATION,DELAWAREFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023312/0044Effective date: 20090601 |
+|
+AS | Assignment |
+Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023263/0631Effective date: 20090601Owner name: UNISYS HOLDING CORPORATION, DELAWAREFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023263/0631Effective date: 20090601Owner name: UNISYS CORPORATION,PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023263/0631Effective date: 20090601Owner name: UNISYS HOLDING CORPORATION,DELAWAREFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:CITIBANK, N.A.;REEL/FRAME:023263/0631Effective date: 20090601 |
+|
+AS | Assignment |
+Owner name: DEUTSCHE BANK TRUST COMPANY AMERICAS, AS COLLATERAFree format text: PATENT SECURITY AGREEMENT (PRIORITY LIEN);ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:023355/0001Effective date: 20090731 |
+|
+AS | Assignment |
+Owner name: DEUTSCHE BANK TRUST COMPANY AMERICAS, AS COLLATERAFree format text: PATENT SECURITY AGREEMENT (JUNIOR LIEN);ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:023364/0098Effective date: 20090731 |
+|
+AS | Assignment |
+Owner name: GENERAL ELECTRIC CAPITAL CORPORATION, AS AGENT, ILFree format text: SECURITY AGREEMENT;ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:026509/0001Effective date: 20110623 |
+|
+AS | Assignment |
+Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:DEUTSCHE BANK TRUST COMPANY AMERICAS;REEL/FRAME:027869/0724Effective date: 20120315Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:DEUTSCHE BANK TRUST COMPANY AMERICAS;REEL/FRAME:027869/0655Effective date: 20120315Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:DEUTSCHE BANK TRUST COMPANY AMERICAS;REEL/FRAME:027869/0770Effective date: 20120315 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:028060/0908Effective date: 20120229 |
+|
+AS | Assignment |
+Owner name: GOOGLE INC., CALIFORNIAFree format text: CORRECTIVE ASSIGNMENT TO CORRECT THE PATENTS 6,192,414 AND 6,490,585 PREVIOUSLY RECORDED ON REEL 028060 FRAME 0908. ASSIGNOR(S) HEREBY CONFIRMS THE THE EXECUTION DATE IS INCORRECT FOR PATENTS 6490585 AND 6192514. PLEASE REMOVE THESE TWO PATENTS FROM THIS REEL/FRAME.;ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:028104/0819Effective date: 20120315Owner name: GOOGLE INC., CALIFORNIAFree format text: ASSIGNMENT OF ASSIGNORS INTEREST;ASSIGNOR:UNISYS CORPORATION;REEL/FRAME:028103/0230Effective date: 20120315 |
+|
+FPAY | Fee payment |
+Year of fee payment: 12 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044127/0735Effective date: 20170929 |
+|
+AS | Assignment |
+Owner name: UNISYS CORPORATION, PENNSYLVANIAFree format text: RELEASE BY SECURED PARTY;ASSIGNOR:WELLS FARGO BANK, NATIONAL ASSOCIATION (SUCCESSOR TO GENERAL ELECTRIC CAPITAL CORPORATION);REEL/FRAME:044416/0358Effective date: 20171005 |

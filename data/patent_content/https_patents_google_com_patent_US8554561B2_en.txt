@@ -1,0 +1,673 @@
+US8554561B2 - Efficient indexing of documents with similar content - Google Patents
+Efficient indexing of documents with similar content Download PDFInfo
+- Publication number
+- US8554561B2 US8554561B2 US13/571,316 US201213571316A US8554561B2 US 8554561 B2 US8554561 B2 US 8554561B2 US 201213571316 A US201213571316 A US 201213571316A US 8554561 B2 US8554561 B2 US 8554561B2
+- Authority
+- US
+- United States
+- Prior art keywords
+- documents
+- document
+- cluster
+- data
+- tokens
+- Prior art date
+- Legal status (The legal status is an assumption and is not a legal conclusion. Google has not performed a legal analysis and makes no representation as to the accuracy of the status listed.)
+- Active
+Links
+Images
+Classifications
+-
+- G—PHYSICS
+- G06—COMPUTING; CALCULATING OR COUNTING
+- G06F—ELECTRIC DIGITAL DATA PROCESSING
+- G06F16/00—Information retrieval; Database structures therefor; File system structures therefor
+- G06F16/30—Information retrieval; Database structures therefor; File system structures therefor of unstructured textual data
+- G06F16/35—Clustering; Classification
+- G06F16/355—Class or cluster creation or modification
+Definitions
+- the disclosed embodiments relate generally to information retrieval systems, and more particularly, to a scheme of indexing and storing documents with similar content.
+- Information retrieval systems such as search engines, run queries against an index of documents generated from a document corpus (e.g., the World Wide Web).
+- the document corpus may have groups of documents that, within each group, have similar content. For example, webpages from the same domain may have much text in common and/or use the same HTML code for their formatting.
+- the document corpus may have documents that are exactly or almost the same with respect to content and may differ only in their timestamps and Uniform Resource Locators (URLs). Eliminating these duplicate or near-duplicates can help conserve storage space.
+- a typical strategy regarding duplicates or near-duplicates is to eliminate all but one copy of the duplicates or near-duplicates. Alternately, one of the duplicates or near-duplicates is identified as the representative or canonical instance of the document, and only that one copy of the document is indexed. As a result, the other copies or versions of the document are not accessible via the index. While these strategies help conserve storage space, they also have some drawbacks, particularly in the context of a webpage retrieval system. First, if the duplicates all have different URLs, then elimination of the duplicates may hinder retrieval of the stored copy when the requested URL corresponds to an eliminated duplicate. Another drawback is that it makes the retrieval system susceptible to page hijacking Furthermore, this strategy is difficult to apply in practice to near-duplicates because of the difficulty in finding the optimal threshold degree of duplication for a document to be eliminated.
+- Tokens are fixed or variable length objects, each of which represents a term, word, phrase, punctuation symbol, HTML tag or the like.
+- a set of documents is represented as a sequence of tokens in a tokenspace repository.
+- a tokenspace repository stores documents as a sequence of tokens.
+- tokens all have the same fixed length (e.g., 32 bits).
+- a tokenspace representation of a document can be very space efficient, because each word or term is represented by a single token, regardless of the number of letters or symbols in the word or term.
+- a method of processing documents includes grouping a set of documents into a plurality of clusters, the set of documents comprising a sequence of tokens, wherein each cluster includes one or more documents of the set of documents; generating a compressed sequence of tokens from the respective clusters; and generating a compressed sequence index of the compressed sequence of tokens, including indexing each token in the compressed sequence of tokens based on a respective token position of the respective token in the compressed sequence.
+- a method of processing a query includes receiving a query, the query comprising one or more tokens; identifying in a compressed sequence of tokens one or more cluster subsequences that each include at least one of the query tokens, each cluster subsequence corresponding to a respective cluster of documents; for at least one respective cluster subsequence of the identified cluster subsequences, identifying one or more documents within the respective cluster subsequence that satisfy the query; and returning the identified documents as matches to the query.
+- the aforementioned operations may be performed by a system including one or more modules with instructions to perform the aforementioned operations.
+- instructions for performing the aforementioned operations may be included in a computer program product.
+- FIG. 1 is a block diagram illustrating an information retrieval system, in accordance with some embodiments.
+- FIG. 2 is a block diagram illustrating a document processing server, in accordance with some embodiments.
+- FIG. 3 is a flow diagram of a process for generating a compressed sequence of tokens and indexing the sequence, in accordance with some embodiments.
+- FIG. 4 is a flow diagram of a process for processing a query on a compressed sequence of tokens, in accordance with some embodiments.
+- FIG. 5 illustrates different queries and matches for those queries, in accordance with some embodiments.
+- FIG. 6 is a diagram illustrating an uncompressed sequence of tokens and a compressed sequence of tokens, in accordance with some embodiments.
+- FIG. 7 is a diagram illustrating an uncompressed sequence of tokens and a compressed sequence of tokens, both of which include subsequences of tokens corresponding to single-document clusters, in accordance with some embodiments.
+- FIG. 8 is a conceptual block diagram of the Bentley-McIlroy data compression method.
+- FIGS. 9A and 9B are conceptual block diagrams of a modified version of the Bentley-McIlroy data compression method, the output from which can be decoded without generating a hash table or dictionary.
+- FIG. 10 is a flow chart of a data compression process compatible with the Bentley-McIlroy data compression method of FIG. 8 and the modified Bentley-McIlroy data compression method of FIGS. 9A and 9B .
+- FIG. 1 is a block diagram illustrating an information retrieval system, in accordance with some embodiments.
+- the information retrieval system 100 includes an encoding/decoding system 104 and one or more query processors or query threads 110 (e.g., threads of execution within a single processor or group of processors).
+- the encoding/decoding system 104 receives documents from a document repository 102 and populates a compressed tokenspace repository 106 with the documents.
+- Documents in the document repository 102 may be documents, web pages, emails, application specific documents and data structures, instant messaging (IM) messages, audio files, video files, and any other data or applications that may reside on one or more computer systems.
+- the write encoding/decoding system 104 also updates the compressed tokenspace repository 106 whenever updates to the document repository 102 occur.
+- the compressed tokenspace repository 106 stores the documents of the document repository 102 as a compressed sequence of tokens.
+- a “token” can be any object typically found in a document, including but not limited to terms (e.g., words), phrases, punctuation symbols, HTML tags and the like.
+- a set of documents is represented as a sequence of tokens.
+- the tokens all have the same fixed length (e.g., 32 bits).
+- a tokenspace representation of a document can be very space efficient, because each word or term is represented by a single token, regardless of the number of letters or symbols in the word or term.
+- each token in the sequence of tokens has a token position, which also represents the position of the token in the set of documents. For example, the first token in the set of documents may be assigned a position of 0, the second token in the set of documents may be assigned a position of 1, and so on.
+- a compressed sequence of tokens is a “compression” of the sequence of tokens that represents a set of documents as described above.
+- the sequence of tokens prior to compression is hereinafter referred to as the “uncompressed” sequence of tokens. Alternately, this may be called the pre-compression sequence of tokens. Further details about the compression of a sequence of tokens are described below, in relation to FIG. 3 .
+- the compressed tokenspace inverted index 112 indexes the tokens of the compressed tokenspace repository 106 .
+- the compressed tokenspace inverted index 112 maps tokens in the documents to their positions within the compressed tokenspace repository 106 .
+- the tokens in the repository are fixed-length tokens. For instance, every token may occupy exactly 32 bits (4 bytes). In other words, every term, symbol, tag and the like that has been mapped to a unique token is represented by a respective fixed-length token value in the tokenspace repository.
+- the compressed tokenspace inverted index 112 index specifies that a particular token is found in positions A, B and C (e.g., 1041, 12349 and 992345) in the compressed tokenspace repository 106 , those positions in the repository can be accessed directly by treating the token positions as offsets from the start address of the repository in memory, and then accessing the resulting memory locations.
+- each unique token may be mapped to a fixed-length global token identifier (or global token ID).
+- the global token ID may occupy exactly 32 bits (4 bytes).
+- the global token IDs are mapped, in turn, to words, terms, punctuation symbols, and the like.
+- the tokens are stored in the repository are global token IDs and a separate lexicon maintains the mappings between the tokens and the global token IDs.
+- the embodiments described below use fixed length tokens in the tokenspace repository, with each unique token corresponding to a respective word, term, punctuation symbol or the like.
+- the query processors or query threads perform queries on the compressed tokenspace repository 106 .
+- the query processors or threads 110 accept queries and return results of those queries.
+- the query processors or threads 110 parse a query into multiple query terms which are transformed by the query processor(s) 110 into a query expression (e.g., a Boolean tree expression).
+- the query terms are used to retrieve token positions from a compressed tokenspace inverted index 112 .
+- the query processor(s) 110 generate an ordered list of documents, which are presented to the user via one or more modes of communication (e.g., display device, audio, etc.).
+- the information retrieval system 100 may be distributed over a plurality of computers, such as servers.
+- the document repository 102 may be divided into a plurality of portions and each portion may be stored in its own compressed tokenspace repository 106 , with each compressed tokenspace repository 106 residing on a separate server.
+- one or more of the servers may host a plurality of the compressed tokenspace repositories.
+- Each document of the document repository 102 (and of the compressed tokenspace repository 106 ) may be globally identified within the information retrieval system 100 by a global document identifier and, within a portion, by a local document identifier.
+- the compressed tokenspace repository 106 is “compressed” because the sequence of tokens it stores is a subset of all of the tokens of the documents in the document repository 102 .
+- the “compressed” sequence of tokens is a “compression” of an “uncompressed” sequence of tokens that represent the documents in the document repository 102 .
+- the uncompressed sequence of tokens is compressed so that some repeated occurrences of tokens sequences within the uncompressed sequence are elided from storage in the compressed tokenspace repository 106 . Further details about the compression are described below.
+- FIG. 2 is a block diagram illustrating a document processing server, in accordance with some embodiments.
+- the document processing server 200 typically includes one or more processing units (CPU's) 202 , one or more network or other communications interfaces 204 , memory 206 , and one or more communication buses 208 for interconnecting these components.
+- the document processing server 200 optionally may include a user interface comprising a display device and a keyboard/mouse (not shown).
+- the memory 206 includes random access memory, such as DRAM, SRAM, DDR RAM or other random access solid state memory devices; and may include non-volatile memory, such as one or more magnetic disk storage devices, optical disk storage devices, flash memory devices, or other non-volatile solid state storage devices.
+- Memory 206 may optionally include one or more storage devices remotely located from the CPU(s) 202 . In some embodiments, the memory 206 stores the following programs, modules and data structures, or a subset thereof:
+- the document data 108 includes document boundaries 222 , document reconstruction data 224 , and a compressed-uncompressed map 226 .
+- the document boundaries 222 specify token positions in the compressed tokenspace repository 106 that demarcate tokens representing particular documents.
+- the document reconstruction data 224 include instructions for reconstructing documents from the compressed tokenspace repository 106 , as explained in more detail below.
+- the compressed-uncompressed map 226 maps the positions of tokens in the compressed sequence of tokens in the compressed tokenspace repository 106 to corresponding positions in the uncompressed sequence of tokens.
+- the query module or processor(s) 110 includes a query parser 234 for parsing a query and identifying the tokens and operations included in the query.
+- unique tokens maybe mapped in the optional lexicon 218 to global token IDs, which are values of fixed length.
+- the tokens are stored using the global token IDs rather than the tokens themselves.
+- Each of the above identified elements may be stored in one or more of the previously mentioned memory devices, and corresponds to a set of instructions for performing a function described above.
+- the above identified modules or programs i.e., sets of instructions
+- memory 206 may store a subset of the modules and data structures identified above.
+- memory 206 may store additional modules and data structures not described above.
+- FIG. 2 shows a “document processing server,” FIG. 2 is intended more as functional description of the various features which may be present in a set of servers than as a structural schematic of the embodiments described herein.
+- items shown separately could be combined and some items could be separated.
+- some items shown separately in FIG. 2 could be implemented on single servers and single items could be implemented by one or more servers.
+- the actual number of servers used to implement a document processing server and how features are allocated among them will vary from one implementation to another, and may depend in part on the amount of data traffic that the system must handle during peak usage periods as well as during average usage periods.
+- FIG. 3 is a flow diagram of a process for generating a compressed sequence of tokens and indexing the compressed sequence, in accordance with some embodiments.
+- Process flow 300 illustrates a process of compressing an uncompressed sequence of tokens by eliding at least some repeating tokens from storage and indexing the compressed sequence.
+- a set of documents (the document corpus) is identified ( 302 ).
+- Each document in the corpus contains a number of tokens. Any token may appear in more than one document in the corpus. Similarly, any token may appear multiple times within a document.
+- the document corpus is parsed to identify all tokens within the document corpus. After parsing, the corpus is represented as an “uncompressed” sequence of tokens. In some embodiments, unique tokens are also mapped to global token IDs.
+- the documents in the corpus are grouped into clusters and the uncompressed sequence of tokens rearranged to group clustered documents ( 304 ). This groups documents that are more likely to have tokens in common together.
+- a cluster may have one or more documents.
+- each of the document has an associated locator (e.g., a Uniform Resource Locator or URL), and the documents are grouped into clusters based on a lexicographic ordering of the locators of the documents. In such a lexicographic ordering, the domains of the document URLs are reversed and the protocol indicators are moved to the end.
+- locator e.g., a Uniform Resource Locator or URL
+- the URL “http://www.yahoo.com/index.html” would be rewritten as “com.yahoo.www/index.html:http” for purposes of lexicographic ordering of the documents.
+- the clusters may be chosen as sets of K consecutive documents from the ordering, where K may be any positive integer. In some embodiments, K is 10. In some other embodiments, K is a larger or smaller number. This ordering tends to group documents from the same sub-domain within the same domain. Such documents tend to have token sequences (such as boilerplate text) in common, and therefore make good candidates for clustering.
+- different versions of the same document from different times may be grouped together into a cluster.
+- This clustering technique is particularly useful when the compressed tokenspace repository and the inverted index are used in a historical archive of varying versions of documents.
+- the clustering may be performed using more complex techniques such as similarity-hashing techniques.
+- the clusters are encoded into cluster sequences of tokens ( 306 ).
+- a cluster sequence of tokens for a cluster is the compression of the sequence of tokens representing the documents in the cluster.
+- the encoding utilizes the Bentley-McIlroy data compression method or a compression method similar to the Bentley-McIlroy data compression method.
+- the Bentley-McIlroy data compression method is described in Jon Bentley and Douglas McIlroy, “Data compression using long common strings,” Proceedings of the IEEE Data Compression Conference, March. 1999, pp. 287-295, which is hereby incorporated by reference.
+- Some embodiments of compression methods that are based on the Bentley-McIlroy data compression method are described in detail below, in relation to FIGS. 8-10 .
+- a sequence of tokens representing documents in a cluster is compressed such that some redundant tokens (that is, duplicates of tokens) may be elided from storage.
+- the redundant tokens may be elided from storage because they can be copied from an earlier occurrence of the same tokens. Because the compression elides only tokens that are duplicates, the cluster sequence includes all unique tokens that appear in the documents in the corresponding cluster.
+- only redundant token sequences of at least a predefined minimum length are eligible for elision from storage. That is, a sequence of consecutive tokens that is a repeat of a previous sequence of consecutive tokens is not elided from storage if it is shorter than the predefined minimum length.
+- the predefined minimum length N is twenty tokens. That is, only repeated sequences of twenty tokens or longer are eligible for elision from storage. In some other embodiments, N is a larger or smaller number than twenty.
+- the encoding generates, for a cluster, the cluster sequence and document reconstruction data for the cluster, which includes a plurality of Add and Copy codes.
+- Each Add code includes a sequence of one or more literal tokens (e.g., a sequence of tokens) or refers to a sequence of one or more tokens in the cluster sequence.
+- Each Copy code specifies a range of locations in the cluster sequence that is to be duplicated or copied to produce a decoded portion of a document.
+- the Copy code may include a start position within the cluster sequence and a length, or it may indicate start and end positions.
+- a compressed sequence of tokens for the document corpus is generated by concatenating the cluster sequences of tokens into one long sequence of tokens ( 308 ).
+- the compressed sequence of tokens for the document corpus is generated by combining the cluster sequences of tokens, each cluster sequence being a compression of a sequence of tokens formed by a cluster of documents from the document corpus.
+- the compressed sequence is stored in the compressed tokenspace repository 106 .
+- the document reconstruction data for the clusters are combined to form the document reconstruction data for the document corpus.
+- Position data within the Copy codes may be modified to conform to the positions of corresponding tokens in the compressed sequence.
+- single-document clusters may precede multiple-document clusters.
+- the uncompressed sequence of tokens 702 is rearranged, to the extent such rearranging is needed, so as to put the tokens for the single-document clusters (e.g., clusters A through E) ahead of the multiple-document clusters (e.g., clusters F, G, H et seq.).
+- the cluster sequences for single-document clusters include the single documents, without any elision of repeating tokens, and are placed in the compressed sequence 704 ahead of the clusters for the multiple-document clusters, in the same order as the order of clusters in the uncompressed sequence.
+- Tokens in the compressed sequence of tokens are indexed according to their token positions in the compressed sequence ( 310 ).
+- a compressed sequence inverted index is generated, mapping tokens to positions in the compressed sequence.
+- a mapping between token positions in the compressed sequence and token positions in the uncompressed sequence is generated ( 312 ).
+- the mapping maps, for each token in the compressed sequence, its position in the compressed sequence of tokens to one or more positions in the uncompressed sequence of tokens.
+- the mapping from compressed sequence positions to uncompressed sequence positions may include one-to-many mappings because a token in the compressed sequence may correspond, due to the Copy codes, to a plurality of instances of the token in the uncompressed sequence.
+- a reverse mapping that maps positions in the uncompressed sequence to positions in the compressed sequence may also be generated.
+- cluster boundary data such as cluster boundaries 228 , may be generated. This data identifies the positions in the compresses sequence that demarcate the cluster sequences within.
+- FIG. 6 shows a portion of an uncompressed sequence of tokens 602 , which includes a plurality of blocks, each block corresponding to a token in a document.
+- the portion shown corresponds to tokens of documents within a single cluster.
+- the thick lines demarcate individual documents within the cluster and are shown for ease of understanding. Position numbers are also shown for ease of understanding.
+- tokens 0 - 4 correspond to a document
+- tokens 5 - 9 , 10 - 12 , and 13 - 17 correspond to additional documents.
+- the predefined minimum length N is 2 tokens.
+- the encoding/decoding system 104 encodes the uncompressed sequence 104 and generates a cluster sequence of tokens 604 and document reconstruction data 608 .
+- the document reconstruction data 608 includes a sequence of Add codes and Copy codes.
+- Each Add code includes a sequence of one or more literal tokens (e.g., a sequence of tokens) or refers to a sequence of one or more tokens in the cluster sequence 604 .
+- Each Copy code specifies a range of locations in the cluster sequence 604 that are to be duplicated or copied to produce a decoded portion of a document.
+- the Copy code may include a start position within the cluster sequence 604 and a length, or it may indicate start and end positions.
+- a number of tokens have been elided from the cluster sequence 604 as a result of the encoding.
+- tokens “CD” (positions 5 - 6 ) in the uncompressed sequence 602 are elided from the cluster sequence 604 because they can be copied from a previous occurrence of the same sequence of tokens, located in positions 2 - 3 in the cluster sequence 604 .
+- this is indicated by the “Copy( 2 , 2 )” instruction.
+- “Copy( 2 , 2 )” indicates that 2 tokens are to be copied starting from position 2 in the cluster sequence 604 .
+- Token “A,” at position 10 in the uncompressed sequence 602 is not elided from the cluster sequence 604 , appearing in position 8 .
+- Tokens “FGH,” at positions 15 - 17 in the uncompressed sequence 602 , are elided from the cluster sequence 604 .
+- the document reconstruction data 608 includes a copy instruction “Copy( 5 , 3 )” to copy 3 characters starting from position 5 in the cluster sequence 608 , which is a previous occurrence of the tokens “FGH.”
+- document boundary data such as document boundaries 222
+- the document boundary data identifies the positions, within the cluster sequences or the compressed sequence, that demarcate documents.
+- the document boundary data may be used to determine if a token is within a document or another.
+- the document boundaries data may be stored separately from the document reconstruction data or integrated with the document reconstruction data.
+- FIG. 4 is a flow diagram of a process for processing a query on a compressed sequence of tokens, in accordance with some embodiments.
+- Process flow 400 illustrates a process for processing a query, which includes one or more tokens and perhaps one or more operators, on the compressed tokenspace repository.
+- a query is received by the query processor(s) 110 ( 402 ).
+- the query includes one or more tokens and perhaps one or more Boolean operators or other operators applied to the tokens.
+- Boolean operators in any particular query may one or more of the following operators: “OR,” “AND,” and “NOT.” In some embodiments, other operators are used in queries and those operators are identified by the query processor(s).
+- Examples of such other operators include “near” (a token appearing within some “distance” from another token); “in_title:” (the token(s) must appear in the title of the document); “in_url:” (the token(s) must appear in the Uniform Resource Locator (URL) of the document); and the exact phrase operator, generally indicated by putting the applicable tokens in double quotation marks (the tokens must all appear in the order specified in the query, perhaps consecutively).
+- the query is parsed by the query processor(s) to identify the tokens and the operators.
+- the query tokens are matched to cluster sequences of tokens within the compressed sequence of tokens ( 404 ).
+- the compressed sequence of tokens is searched for occurrences of the query tokens. The positions of these occurrences within the compressed sequence and the cluster sequences (which are subsequences of the compressed sequence) corresponding to these occurrences are identified. In other words, cluster sequences that include the query tokens are identified as candidates for further consideration.
+- a subset of the cluster sequences identified as having occurrences of the query tokens may be further singled out. For example, if the query is “google AND yahoo,” then the cluster sequences that include both tokens “google” and “yahoo” are identified and singled out because cluster sequences that include either token but not both cannot satisfy the query. Similarly, if the query is “‘I love you,’” then the cluster sequences that include all the tokens “I,” “love,” and “you” are identified. More generally, if the operator in the query is one that requires appearance of multiple tokens, then cluster sequences that do not include all of the multiple tokens may be eliminated from further consideration because no document in those clusters can satisfy the query.
+- the cluster sequences that are more likely to have documents that satisfy the query are identified for further consideration. This narrows down the field of cluster sequences that are to be processed further, without decoding the compressed sequence into the corresponding uncompressed sequence.
+- documents within the cluster sequences that actually satisfy the query are identified ( 406 ) and the identified documents are returned as matches to the query ( 408 ).
+- Identification of documents that satisfy the query requires identifying the documents within the clusters (to which the cluster sequences correspond) that not only includes the tokens specified in the query, but also satisfies the operator(s) applied to the query tokens.
+- some embodiments position some or all of the single document clusters (i.e., each of which has only a single respective document) at the beginning of the document repository, or at some other well defined portion of the repository.
+- the process determines whether the identified cluster is a single document cluster. This may be determined by its location within the repository (e.g., the token positions of the matching tokens are all located at token locations within the single-document cluster portion of the document repository). If the identified cluster is a single document cluster, then there is no need to identify documents within the cluster, because the identified cluster has only one document.
+- FIG. 5 illustrates examples of operators that may appear in queries and the criteria for identifying documents that satisfy such queries. If the query contains only a token and no operators, then the identification of the documents that satisfy the query involves simply identifying the documents in which the query token occurs. The positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the document reconstruction data and/or the compressed-uncompressed mapping, to find the documents that actually include the token.
+- the identification of the documents involves identifying the documents in which at least one of the query tokens occurs ( 510 ); documents in which any one of the query tokens occur satisfies the query.
+- the identification is similar to that of the single token query.
+- the positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include any of the tokens to which a Boolean OR operator is applied.
+- a received query is converted into a Boolean expression of the query, which is represented by a tree or graph structure in which each Boolean operator of the Boolean expression is represented by a node in the tree or graph structure.
+- the Boolean expression (A OR B OR C) may be represented by a single Boolean operator node, representing the OR operation, and a plurality of child nodes representing the tokens to which the Boolean OR operator is applied.
+- the identification of the documents that satisfy the query involves identifying the documents in which all of the query tokens occur ( 508 ).
+- the positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include all of the tokens operated upon by the AND operator.
+- identification of the documents that satisfy the query involves identifying the documents in which all of the query tokens occur and occur in the order specified in the query ( 512 ).
+- a document with the phrase “you love i” does not satisfy the query unless it also includes the phrase “i love you.”
+- the positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include all of the tokens in the consecutive order specified in the query.
+- An exact phrase query can pose a challenge if a matching phrase occurs across a transition point between an Add code and a Copy code. That is, a part of the matching phrase contains literal tokens and another part of the phrase contains copied tokens.
+- a solution to this challenge takes place at the encoding stage.
+- the Copy codes may be shortened by some number of tokens on both ends, up to any phrase separators such as punctuation marks. This lengthens the literal token sequences (the Add codes) that are in the compressed sequence. While this does lessen the possibility that a matching phrase will span an Add code and a Copy code, it does not eliminate that possibility altogether.
+- phrase query can be split up into a query consisting of shorter phrases linked by the Boolean AND operator.
+- Matching cluster sequences are identified using the modified query.
+- documents that actually satisfy the original query are identified using the compressed-uncompressed mapping.
+- More complicated queries such as queries having combinations of AND and OR operators, “x near y” queries, and queries for tokens in the body or URL of a document, may be handled using the compressed-uncompressed mapping and the document reconstruction data, as well as the document boundaries.
+- FIG. 8 is a conceptual representation of the Bentley-McIlroy data compression method or process.
+- the process compresses an input string 800 , which is treated as a string of literal data values (e.g., a string of bytes or words, each of which can have any value).
+- the base unit of information in the input string 800 may be a byte or a word of any suitable size, such as 4 bytes.
+- the input is divided into tiles 802 , and each tile is represented by an entry in a hash table 810 .
+- the input string 800 is considered to be the “dictionary” for the compression method, and the hash table is used to quickly find common strings in the input.
+- the input string 800 includes multiple versions of the same web page, at least some of which contain large portions that are identical to other versions of the web page. If each version of the web page occupies thousand bytes of storage (e.g., 25,000 bytes), at least some of the matching common strings in the input string will be separated by distances of thousands of bytes.
+- the tiles 802 are 32-bytes long and do not overlap. In other embodiments, the tiles are other sizes. Increasing the tile size reduces the chances of finding matches in small matching strings (strings of size less than twice the tile size), but decreases the number of hash table entries and decreases processing time.
+- the hash table 810 includes a map 812 and an array 814 . Each entry 816 in the map 812 points to an entry 818 in the array 814 .
+- the map entries 816 are located at positions in the map 812 based on the hash value of the tile being added to the hash table 810 .
+- Array entries 818 are added sequentially to the array 814 , so the location of last entry in the array 814 is known to the procedures used to access the hash table.
+- the input string 800 is processed from the beginning to the end, by sliding a virtual window 820 over the input string 800 and processing the input string at each position of the virtual window.
+- the virtual window 820 is moved in predefined increments or units, such as one byte or one word.
+- the window 820 has the same size (e.g., 32 bytes) as the tiles 802 .
+- Each time the virtual window 820 is moved the input string portion in the window is mapped by a hash function 822 into a hash value 824 .
+- the hash value 824 has a predefined size, such as 32 bits .
+- a lookup is performed on the hash value 814 to see if matching entry is found in the hash table. If so, a copy code is added to the output string 830 . If the hash value 824 is not found in the hash table, the literal value at the beginning of the window is added to an “Add String”.
+- the hash table is updated to include either a new entry, or by updating an existing entry. If the map 812 does not include an entry 816 corresponding to the hash value of the current input sub-string (i.e., the portion of the input string in the virtual window 820 ), an entry 818 is added to the array and an entry 816 is added to the map that points to the new array entry 818 .
+- the array entry 818 stores the hash value, and a reference to the location of the input sub-string in the input string 800 , which is also the current position of the virtual window 820 .
+- the hash table already has an entry for the hash value of the current input sub-string, then that entry may be updated by adding a reference to the current position of the virtual window 820 .
+- the number of input string positions indicated by any one hash table entry 816 is limited to a predefined number (e.g., 4, 8, 16 or 32), and a predefined rule is applied to determine which input string positions to keep in an entry and which to discard or not record.
+- the output string 830 contains a sequence of Add codes and Copy codes.
+- Each Add code includes a sequence of one or more literal data values.
+- Each Copy code specifies a range of locations in the input string that are to be duplicated or copied to produce a decoded portion of the input string 800 .
+- the Copy code may include a start position within the input string and a length, or it may indicate start and end positions.
+- the output string 830 of the compression process becomes the input string to the decoding process.
+- Add codes are executed or decoded simply by adding the literal data values in the add code to a decoded output string.
+- Copy codes are executed by copying the specified range of values from the decoded output string to the current endpoint of the decoded output string.
+- the “dictionary” is the decoded version of all the Add and Copy codes preceding the Copy code currently being decoded.
+- FIGS. 9A and 9B are a conceptual representation of another dictionary-based compression process that is somewhat similar to the Bentley-McIlroy data compression method or process. While similar data structures and processes are used, the content of the hash table 910 , the output string 930 and the state of the “dictionary” are different.
+- the process compresses an input string 800 , which is treated as a string of literal data values. Further, the input string 800 is treated as a sequence of input values 936 (e.g., documents, web pages, or other values), each of which is a string of literal data values.
+- the output string 930 is tiled, and tiles 932 of the output string 930 are hashed by the hash function 822 to produce the hash values 924 that are stored in a hash table 910 .
+- the tiles 932 of the output string 930 are 32 -bytes long and do not overlap. In other embodiments, the tiles are other sizes.
+- the dictionary used by the compression process is a virtual dictionary 950 , shown in FIG. 9B , formed by concatenating the output string 952 for all prior values 934 in the input string, and the portion 954 of the current value 936 ending at the current position of the sliding window.
+- the hash table 910 includes a map 912 and an array 914 . Each entry 916 in the map 912 points to an entry 918 in the array 914 .
+- the map entries 916 are located at positions in the map 912 based on the hash value of the tile being added to the hash table 910 .
+- Array entries 918 are added sequentially to the array 914 , so the location of last entry in the array 914 is known to the procedures used to access the hash table.
+- the input string 800 is processed from the beginning to the end, by sliding a virtual window 820 over the input string 800 and processing the input string at each position of the virtual window.
+- the window 800 is moved in predefined increments or units, such as one byte or one word.
+- the window has the same size (e.g., 32 bytes) as the tiles 932 .
+- Each time the virtual window 820 is moved the input string portion in the window is mapped by a hash function 822 into a hash value 924 .
+- the hash value 924 has a predefined size, such as 32 bits .
+- a lookup is performed on the hash value 924 to see if matching entry is found in the hash table 910 . If so, a Copy code is added to the output string 930 . If the hash value 924 is not found in the hash table 910 , the literal value at the beginning of the window is added to an “Add String”.
+- any new tiles 932 in the output string 930 are hashed by the hash function 822 to produce hash values 924 .
+- the hash table 910 is updated to include either a new entry, or by updating an existing entry. If the map 912 does not include an entry 916 corresponding to the hash value of a tile 932 in the output string, an entry 918 is added to the array and an entry 916 is added to the map that points to the new array entry 918 .
+- the array entry 918 stores the hash value, and a reference to the location of the tile 932 in the output string 930 .
+- the hash table 910 already has an entry for the hash value 924 of the current tile 932 , then that entry may be updated by adding a reference to the position of current tile 932 .
+- the number of positions indicated by any one array entry 918 is limited to a predefined number (e.g., 4, 8, 16 or 32), and a predefined rule is applied to determine which input string positions to keep in an entry and which to discard or not record.
+- the tiles 938 of the current input value 936 are hashed by hash function 822 to produce hash values 942 .
+- array entries 918 B are temporary entries created for the tiles 938 of the current input value. These temporary entries are located in the array 914 after the last hash table array entry for the prior encoded values, and they are deleted from the hash table 910 when compression of the current input value is completed.
+- these additional hash table entries are used to find common strings within the current input value 936 .
+- Copy codes produced as the result of matches with temporary entries 918 in the hash table reference a range of locations in the virtual dictionary 950 that are after the last location associated with the output string for prior values 952 .
+- these copy codes are recognized and are decoded by referencing the portion 954 of the virtual dictionary that comprises the portion of the current value that has already been decoded.
+- there are two types of Copy codes Copy codes that reference a range of positions in the output string 952 , and Copy codes that reference earlier portions of the current value.
+- the output string 930 contains a sequence of Add codes and Copy codes.
+- Each Add code includes a sequence of one or more literal data values (e.g., a sequence of bytes or words, each of which can have any value).
+- Each Copy code specifies a range of locations in the virtual dictionary 950 that are to be duplicated or copied to produce a decoded portion of the input string 800 .
+- the Copy code may include a start position within the virtual dictionary and a length, or it may indicate start and end positions.
+- the output string 930 of the compression process becomes the input string to the decoding process.
+- Add codes are executed or decoded simply by adding the literal data values in the Add codes to a decoded output string.
+- Copy codes are executed by copying the specified range of values from the virtual dictionary to the current endpoint of the decoded output string.
+- the dictionary-based compression process for compressing an input string of values begins by adding to the output string an Add code for the first tile of the input string ( 1002 ).
+- the sliding window is positioned at the end of the first tile of the input string, in preparation for starting processing at the second tile of the input string.
+- a value e.g., a value corresponding to a document, web page or the like
+- the sliding window is moved to a next position, the windowed input is hashed and a lookup is performed on the resulting hash value ( 1006 ).
+- a unit e.g., byte or word
+- the “pending Add String” is a string of data from the input string which will be inserted into the output as an Add code, unless some or all of the Add String is found to match a string in the dictionary.
+- the dictionary location or locations identified by the matching entry are searched backward and forward to find the longest matching string ( 1012 ).
+- the sliding window is repositioned to the last matching position of the current input value. If there is no pending Add String ( 1014 -No), a Copy code identifying the longest match is added to the output string ( 1018 ). If there is a pending Add String ( 1014 -Yes), the Add String is adjusted, if necessary, to remove any portion covered by the identified longest matching string ( 1016 ). This can be determined, for instance, based on the Start position of the longest match.
+- a current input value 936 e.g., a document, web page or the like
+- a number of operations are performed. If there is a pending Add String ( 1020 -Yes), an Add Code with the Add String is output ( 1020 ), which completes the output for the current input value.
+- the input values 936 belong to (e.g., are accessed as) key-value pairs, and a pointer or link for the key corresponding to the current input value 936 is updated to point to the set of output codes (i.e., a sequence of one or more Copy codes and/or Add codes) for the current input value ( 1024 ).
+- processing continues with the next input value at 1006 . Otherwise ( 1026 -yes) the output string is closed and becomes a completed block of compressed data ( 1028 ). If the process has reached the end of the input string ( 1030 -yes), the compression process is completed. Otherwise ( 1030 -no), processing for a new block is initiated by starting a new block and re-initializing the hash table ( 1032 ), and then resuming the process at 1002 . In this case, however, the “first tile of the input string” is the first tile of the remaining portion of the input string (i.e., after the last processed block).
+Abstract
+A computer system comprising one or more processors and memory groups a set of documents into a plurality of clusters. Each cluster includes one or more documents of the set of documents and a respective cluster of documents of the plurality of clusters includes respective cluster data corresponding to a plurality of documents including a first document and a second document. The computer system determines that the second document includes duplicate data that is duplicative of corresponding data in the first document, identifies a respective subset of the respective cluster data that excludes at least a subset of the duplicate data, and generates an index of the respective subset of the respective cluster data.
+Description
+This application is a continuation of U.S. patent application Ser. No. 13/249,136, filed Sep. 29, 2011, now U.S. Pat. No. 8,244,530, which is a continuation of U.S. patent application Ser. No. 11/419,423, filed May 19, 2006, now U.S. Pat. No. 8,175,875 which applications are incorporated by reference herein in their entirety.
+The disclosed embodiments relate generally to information retrieval systems, and more particularly, to a scheme of indexing and storing documents with similar content.
+Information retrieval systems, such as search engines, run queries against an index of documents generated from a document corpus (e.g., the World Wide Web). The document corpus may have groups of documents that, within each group, have similar content. For example, webpages from the same domain may have much text in common and/or use the same HTML code for their formatting. As another example, the document corpus may have documents that are exactly or almost the same with respect to content and may differ only in their timestamps and Uniform Resource Locators (URLs). Eliminating these duplicate or near-duplicates can help conserve storage space.
+A typical strategy regarding duplicates or near-duplicates is to eliminate all but one copy of the duplicates or near-duplicates. Alternately, one of the duplicates or near-duplicates is identified as the representative or canonical instance of the document, and only that one copy of the document is indexed. As a result, the other copies or versions of the document are not accessible via the index. While these strategies help conserve storage space, they also have some drawbacks, particularly in the context of a webpage retrieval system. First, if the duplicates all have different URLs, then elimination of the duplicates may hinder retrieval of the stored copy when the requested URL corresponds to an eliminated duplicate. Another drawback is that it makes the retrieval system susceptible to page hijacking Furthermore, this strategy is difficult to apply in practice to near-duplicates because of the difficulty in finding the optimal threshold degree of duplication for a document to be eliminated.
+Tokens are fixed or variable length objects, each of which represents a term, word, phrase, punctuation symbol, HTML tag or the like. After parsing, a set of documents is represented as a sequence of tokens in a tokenspace repository. Thus, a tokenspace repository stores documents as a sequence of tokens. In some embodiments, tokens all have the same fixed length (e.g., 32 bits). A tokenspace representation of a document can be very space efficient, because each word or term is represented by a single token, regardless of the number of letters or symbols in the word or term.
+According to some embodiments, a method of processing documents includes grouping a set of documents into a plurality of clusters, the set of documents comprising a sequence of tokens, wherein each cluster includes one or more documents of the set of documents; generating a compressed sequence of tokens from the respective clusters; and generating a compressed sequence index of the compressed sequence of tokens, including indexing each token in the compressed sequence of tokens based on a respective token position of the respective token in the compressed sequence.
+According to some embodiments, a method of processing a query includes receiving a query, the query comprising one or more tokens; identifying in a compressed sequence of tokens one or more cluster subsequences that each include at least one of the query tokens, each cluster subsequence corresponding to a respective cluster of documents; for at least one respective cluster subsequence of the identified cluster subsequences, identifying one or more documents within the respective cluster subsequence that satisfy the query; and returning the identified documents as matches to the query.
+According to some embodiments, the aforementioned operations may be performed by a system including one or more modules with instructions to perform the aforementioned operations.
+According to some embodiments, instructions for performing the aforementioned operations may be included in a computer program product.
+Like reference numerals refer to corresponding parts throughout the drawings.
+The compressed tokenspace repository 106 stores the documents of the document repository 102 as a compressed sequence of tokens. As mentioned above, a “token” can be any object typically found in a document, including but not limited to terms (e.g., words), phrases, punctuation symbols, HTML tags and the like. After parsing, a set of documents is represented as a sequence of tokens. As discussed below, in some embodiments, the tokens all have the same fixed length (e.g., 32 bits). A tokenspace representation of a document can be very space efficient, because each word or term is represented by a single token, regardless of the number of letters or symbols in the word or term. Furthermore, each token in the sequence of tokens has a token position, which also represents the position of the token in the set of documents. For example, the first token in the set of documents may be assigned a position of 0, the second token in the set of documents may be assigned a position of 1, and so on.
+A compressed sequence of tokens is a “compression” of the sequence of tokens that represents a set of documents as described above. For ease of understanding and explanation, the sequence of tokens prior to compression is hereinafter referred to as the “uncompressed” sequence of tokens. Alternately, this may be called the pre-compression sequence of tokens. Further details about the compression of a sequence of tokens are described below, in relation to FIG. 3 .
+The compressed tokenspace inverted index 112 indexes the tokens of the compressed tokenspace repository 106. The compressed tokenspace inverted index 112 maps tokens in the documents to their positions within the compressed tokenspace repository 106.
+In some embodiments, the tokens in the repository are fixed-length tokens. For instance, every token may occupy exactly 32 bits (4 bytes). In other words, every term, symbol, tag and the like that has been mapped to a unique token is represented by a respective fixed-length token value in the tokenspace repository. As a result, when the compressed tokenspace inverted index 112 index specifies that a particular token is found in positions A, B and C (e.g., 1041, 12349 and 992345) in the compressed tokenspace repository 106, those positions in the repository can be accessed directly by treating the token positions as offsets from the start address of the repository in memory, and then accessing the resulting memory locations.
+In some embodiments, each unique token (fixed-length or otherwise) may be mapped to a fixed-length global token identifier (or global token ID). For example, the global token ID may occupy exactly 32 bits (4 bytes). The global token IDs are mapped, in turn, to words, terms, punctuation symbols, and the like. In these embodiments, the tokens are stored in the repository are global token IDs and a separate lexicon maintains the mappings between the tokens and the global token IDs. For purposes of explaining the various aspects of the present invention, the embodiments described below use fixed length tokens in the tokenspace repository, with each unique token corresponding to a respective word, term, punctuation symbol or the like.
+The query processors or query threads (i.e., threads of execution in a processor or group of processors) 110 perform queries on the compressed tokenspace repository 106. The query processors or threads 110 accept queries and return results of those queries. In some embodiments, the query processors or threads 110 parse a query into multiple query terms which are transformed by the query processor(s) 110 into a query expression (e.g., a Boolean tree expression). The query terms are used to retrieve token positions from a compressed tokenspace inverted index 112. In response to the query terms, the query processor(s) 110 generate an ordered list of documents, which are presented to the user via one or more modes of communication (e.g., display device, audio, etc.).
+In some embodiments, the information retrieval system 100 may be distributed over a plurality of computers, such as servers. For example, the document repository 102 may be divided into a plurality of portions and each portion may be stored in its own compressed tokenspace repository 106, with each compressed tokenspace repository 106 residing on a separate server. Alternately, one or more of the servers may host a plurality of the compressed tokenspace repositories. Each document of the document repository 102 (and of the compressed tokenspace repository 106) may be globally identified within the information retrieval system 100 by a global document identifier and, within a portion, by a local document identifier.
+The compressed tokenspace repository 106 is “compressed” because the sequence of tokens it stores is a subset of all of the tokens of the documents in the document repository 102. The “compressed” sequence of tokens is a “compression” of an “uncompressed” sequence of tokens that represent the documents in the document repository 102. The uncompressed sequence of tokens is compressed so that some repeated occurrences of tokens sequences within the uncompressed sequence are elided from storage in the compressed tokenspace repository 106. Further details about the compression are described below.
+-
+- an
+operating system 210 that includes procedures for handling various basic system services and for performing hardware dependent tasks; - a
+network communication module 212 that is used for connecting thedocument processing server 200 to other computers via the one or more communication network interfaces 204 (wired or wireless) and one or more communication networks, such as the Internet, other wide area networks, local area networks, metropolitan area networks, and so on; - a
+compressed tokenspace repository 106 for storing documents as a compressed sequence of tokens; - a compressed tokenspace inverted
+index 112 for mapping tokens to positions within thecompressed tokenspace repository 106; - an optional lexicon 218 for mapping unique tokens to global token identifiers;
+-
+document data 108 for storing data regarding the documents that are stored in thecompressed tokenspace repository 106; - cluster boundaries 228 for specifying token positions in the compressed tokenspace repository 214 that demarcate sequences of tokens representing clusters of documents;
+- an encoding/
+decoding module 104 for encoding documents, represented by uncompressed sequences of tokens, to compressed sequences of tokens, and for decoding compressed sequences of tokens to uncompressed sequences of tokens that represent documents; - a
+clustering module 232 for grouping documents into clusters; and - a query module or processor(s) 110 for receiving and processing queries.
+- an
+The document data 108 includes document boundaries 222, document reconstruction data 224, and a compressed-uncompressed map 226. The document boundaries 222 specify token positions in the compressed tokenspace repository 106 that demarcate tokens representing particular documents. The document reconstruction data 224 include instructions for reconstructing documents from the compressed tokenspace repository 106, as explained in more detail below. The compressed-uncompressed map 226 maps the positions of tokens in the compressed sequence of tokens in the compressed tokenspace repository 106 to corresponding positions in the uncompressed sequence of tokens.
+The query module or processor(s) 110 includes a query parser 234 for parsing a query and identifying the tokens and operations included in the query.
+In some embodiments, unique tokens maybe mapped in the optional lexicon 218 to global token IDs, which are values of fixed length. In these embodiments, within the compressed tokenspace repository 106, the tokens are stored using the global token IDs rather than the tokens themselves.
+Each of the above identified elements may be stored in one or more of the previously mentioned memory devices, and corresponds to a set of instructions for performing a function described above. The above identified modules or programs (i.e., sets of instructions) need not be implemented as separate software programs, procedures or modules, and thus various subsets of these modules may be combined or otherwise re-arranged in various embodiments. In some embodiments, memory 206 may store a subset of the modules and data structures identified above. Furthermore, memory 206 may store additional modules and data structures not described above.
+Although FIG. 2 shows a “document processing server,” FIG. 2 is intended more as functional description of the various features which may be present in a set of servers than as a structural schematic of the embodiments described herein. In practice, and as recognized by those of ordinary skill in the art, items shown separately could be combined and some items could be separated. For example, some items shown separately in FIG. 2 could be implemented on single servers and single items could be implemented by one or more servers. The actual number of servers used to implement a document processing server and how features are allocated among them will vary from one implementation to another, and may depend in part on the amount of data traffic that the system must handle during peak usage periods as well as during average usage periods.
+A set of documents (the document corpus) is identified (302). Each document in the corpus contains a number of tokens. Any token may appear in more than one document in the corpus. Similarly, any token may appear multiple times within a document. The document corpus is parsed to identify all tokens within the document corpus. After parsing, the corpus is represented as an “uncompressed” sequence of tokens. In some embodiments, unique tokens are also mapped to global token IDs.
+The documents in the corpus are grouped into clusters and the uncompressed sequence of tokens rearranged to group clustered documents (304). This groups documents that are more likely to have tokens in common together. A cluster may have one or more documents. In some embodiments, each of the document has an associated locator (e.g., a Uniform Resource Locator or URL), and the documents are grouped into clusters based on a lexicographic ordering of the locators of the documents. In such a lexicographic ordering, the domains of the document URLs are reversed and the protocol indicators are moved to the end. For example, the URL “http://www.yahoo.com/index.html” would be rewritten as “com.yahoo.www/index.html:http” for purposes of lexicographic ordering of the documents. After the documents are ordered based on the reversed URLs, the clusters may be chosen as sets of K consecutive documents from the ordering, where K may be any positive integer. In some embodiments, K is 10. In some other embodiments, K is a larger or smaller number. This ordering tends to group documents from the same sub-domain within the same domain. Such documents tend to have token sequences (such as boilerplate text) in common, and therefore make good candidates for clustering.
+In some other embodiments, different versions of the same document from different times may be grouped together into a cluster. This clustering technique is particularly useful when the compressed tokenspace repository and the inverted index are used in a historical archive of varying versions of documents. In further other embodiments, the clustering may be performed using more complex techniques such as similarity-hashing techniques.
+The clusters are encoded into cluster sequences of tokens (306). A cluster sequence of tokens for a cluster is the compression of the sequence of tokens representing the documents in the cluster. In some embodiments, the encoding utilizes the Bentley-McIlroy data compression method or a compression method similar to the Bentley-McIlroy data compression method. The Bentley-McIlroy data compression method is described in Jon Bentley and Douglas McIlroy, “Data compression using long common strings,” Proceedings of the IEEE Data Compression Conference, March. 1999, pp. 287-295, which is hereby incorporated by reference. Some embodiments of compression methods that are based on the Bentley-McIlroy data compression method are described in detail below, in relation to FIGS. 8-10 .
+In the encoding procedure, a sequence of tokens representing documents in a cluster is compressed such that some redundant tokens (that is, duplicates of tokens) may be elided from storage. The redundant tokens may be elided from storage because they can be copied from an earlier occurrence of the same tokens. Because the compression elides only tokens that are duplicates, the cluster sequence includes all unique tokens that appear in the documents in the corresponding cluster.
+In some embodiments, only redundant token sequences of at least a predefined minimum length are eligible for elision from storage. That is, a sequence of consecutive tokens that is a repeat of a previous sequence of consecutive tokens is not elided from storage if it is shorter than the predefined minimum length. In some embodiments, the predefined minimum length N is twenty tokens. That is, only repeated sequences of twenty tokens or longer are eligible for elision from storage. In some other embodiments, N is a larger or smaller number than twenty.
+The encoding generates, for a cluster, the cluster sequence and document reconstruction data for the cluster, which includes a plurality of Add and Copy codes. Each Add code includes a sequence of one or more literal tokens (e.g., a sequence of tokens) or refers to a sequence of one or more tokens in the cluster sequence. Each Copy code specifies a range of locations in the cluster sequence that is to be duplicated or copied to produce a decoded portion of a document. The Copy code may include a start position within the cluster sequence and a length, or it may indicate start and end positions.
+A compressed sequence of tokens for the document corpus is generated by concatenating the cluster sequences of tokens into one long sequence of tokens (308). The compressed sequence of tokens for the document corpus is generated by combining the cluster sequences of tokens, each cluster sequence being a compression of a sequence of tokens formed by a cluster of documents from the document corpus. The compressed sequence is stored in the compressed tokenspace repository 106. The document reconstruction data for the clusters are combined to form the document reconstruction data for the document corpus. Position data within the Copy codes may be modified to conform to the positions of corresponding tokens in the compressed sequence.
+In some embodiments, in the compressed sequence of tokens, single-document clusters may precede multiple-document clusters. As shown in FIG. 7 , the uncompressed sequence of tokens 702 is rearranged, to the extent such rearranging is needed, so as to put the tokens for the single-document clusters (e.g., clusters A through E) ahead of the multiple-document clusters (e.g., clusters F, G, H et seq.). The cluster sequences for single-document clusters include the single documents, without any elision of repeating tokens, and are placed in the compressed sequence 704 ahead of the clusters for the multiple-document clusters, in the same order as the order of clusters in the uncompressed sequence. This aligns the token positions in the compressed sequence of tokens 704 and the uncompressed sequence of tokens 702 for the single-document clusters. That is, for the documents in the single-document clusters, the token positions in the uncompressed space and the token positions in the compressed space are the same.
+Tokens in the compressed sequence of tokens are indexed according to their token positions in the compressed sequence (310). A compressed sequence inverted index is generated, mapping tokens to positions in the compressed sequence.
+A mapping between token positions in the compressed sequence and token positions in the uncompressed sequence is generated (312). The mapping maps, for each token in the compressed sequence, its position in the compressed sequence of tokens to one or more positions in the uncompressed sequence of tokens. The mapping from compressed sequence positions to uncompressed sequence positions may include one-to-many mappings because a token in the compressed sequence may correspond, due to the Copy codes, to a plurality of instances of the token in the uncompressed sequence. In some embodiments, a reverse mapping that maps positions in the uncompressed sequence to positions in the compressed sequence may also be generated.
+In some embodiments, cluster boundary data, such as cluster boundaries 228, may be generated. This data identifies the positions in the compresses sequence that demarcate the cluster sequences within.
+An example of the encoding of a sequence of tokens of documents in a cluster into cluster sequence of tokens is illustrated in FIG. 6 . FIG. 6 shows a portion of an uncompressed sequence of tokens 602, which includes a plurality of blocks, each block corresponding to a token in a document. The portion shown corresponds to tokens of documents within a single cluster. The thick lines demarcate individual documents within the cluster and are shown for ease of understanding. Position numbers are also shown for ease of understanding. Thus, in the uncompressed sequence 602, tokens 0-4 correspond to a document, while tokens 5-9, 10-12, and 13-17 correspond to additional documents. For purposes of this example, the predefined minimum length N is 2 tokens.
+The encoding/decoding system 104 encodes the uncompressed sequence 104 and generates a cluster sequence of tokens 604 and document reconstruction data 608. The document reconstruction data 608 includes a sequence of Add codes and Copy codes. Each Add code includes a sequence of one or more literal tokens (e.g., a sequence of tokens) or refers to a sequence of one or more tokens in the cluster sequence 604. Each Copy code specifies a range of locations in the cluster sequence 604 that are to be duplicated or copied to produce a decoded portion of a document. The Copy code may include a start position within the cluster sequence 604 and a length, or it may indicate start and end positions.
+A number of tokens have been elided from the cluster sequence 604 as a result of the encoding. For example, tokens “CD” (positions 5-6) in the uncompressed sequence 602 are elided from the cluster sequence 604 because they can be copied from a previous occurrence of the same sequence of tokens, located in positions 2-3 in the cluster sequence 604. In the document reconstruction data 608, this is indicated by the “Copy(2,2)” instruction. “Copy(2,2)” indicates that 2 tokens are to be copied starting from position 2 in the cluster sequence 604.
+Token “A,” at position 10 in the uncompressed sequence 602 is not elided from the cluster sequence 604, appearing in position 8. This token is not elided because this token sequence has a length of 1, which is shorter than the minimum length N=2.
+Tokens “FGH,” at positions 15-17 in the uncompressed sequence 602, are elided from the cluster sequence 604. The document reconstruction data 608 includes a copy instruction “Copy(5,3)” to copy 3 characters starting from position 5 in the cluster sequence 608, which is a previous occurrence of the tokens “FGH.”
+In some embodiments, document boundary data such as document boundaries 222, is also generated by the encoding procedure. The document boundary data identifies the positions, within the cluster sequences or the compressed sequence, that demarcate documents. The document boundary data may be used to determine if a token is within a document or another. The document boundaries data may be stored separately from the document reconstruction data or integrated with the document reconstruction data.
+A query is received by the query processor(s) 110 (402). The query includes one or more tokens and perhaps one or more Boolean operators or other operators applied to the tokens. Boolean operators in any particular query may one or more of the following operators: “OR,” “AND,” and “NOT.” In some embodiments, other operators are used in queries and those operators are identified by the query processor(s). Examples of such other operators include “near” (a token appearing within some “distance” from another token); “in_title:” (the token(s) must appear in the title of the document); “in_url:” (the token(s) must appear in the Uniform Resource Locator (URL) of the document); and the exact phrase operator, generally indicated by putting the applicable tokens in double quotation marks (the tokens must all appear in the order specified in the query, perhaps consecutively).
+The query is parsed by the query processor(s) to identify the tokens and the operators. The query tokens are matched to cluster sequences of tokens within the compressed sequence of tokens (404). The compressed sequence of tokens is searched for occurrences of the query tokens. The positions of these occurrences within the compressed sequence and the cluster sequences (which are subsequences of the compressed sequence) corresponding to these occurrences are identified. In other words, cluster sequences that include the query tokens are identified as candidates for further consideration.
+In some embodiments, depending on the operator(s) included in the query, a subset of the cluster sequences identified as having occurrences of the query tokens may be further singled out. For example, if the query is “google AND yahoo,” then the cluster sequences that include both tokens “google” and “yahoo” are identified and singled out because cluster sequences that include either token but not both cannot satisfy the query. Similarly, if the query is “‘I love you,’” then the cluster sequences that include all the tokens “I,” “love,” and “you” are identified. More generally, if the operator in the query is one that requires appearance of multiple tokens, then cluster sequences that do not include all of the multiple tokens may be eliminated from further consideration because no document in those clusters can satisfy the query.
+Thus, in block 404, the cluster sequences that are more likely to have documents that satisfy the query are identified for further consideration. This narrows down the field of cluster sequences that are to be processed further, without decoding the compressed sequence into the corresponding uncompressed sequence.
+For the cluster sequences identified in block 404, documents within the cluster sequences that actually satisfy the query are identified (406) and the identified documents are returned as matches to the query (408). Identification of documents that satisfy the query requires identifying the documents within the clusters (to which the cluster sequences correspond) that not only includes the tokens specified in the query, but also satisfies the operator(s) applied to the query tokens.
+As noted above, some embodiments position some or all of the single document clusters (i.e., each of which has only a single respective document) at the beginning of the document repository, or at some other well defined portion of the repository. When a cluster sequence identified by operation 404, the process determines whether the identified cluster is a single document cluster. This may be determined by its location within the repository (e.g., the token positions of the matching tokens are all located at token locations within the single-document cluster portion of the document repository). If the identified cluster is a single document cluster, then there is no need to identify documents within the cluster, because the identified cluster has only one document.
+If the query contains a plurality of tokens and a Boolean OR operator on the tokens (e.g., “google OR yahoo OR microsoft”) (504), the identification of the documents involves identifying the documents in which at least one of the query tokens occurs (510); documents in which any one of the query tokens occur satisfies the query. The identification is similar to that of the single token query. The positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include any of the tokens to which a Boolean OR operator is applied. In some embodiments, a received query is converted into a Boolean expression of the query, which is represented by a tree or graph structure in which each Boolean operator of the Boolean expression is represented by a node in the tree or graph structure. The Boolean expression (A OR B OR C) may be represented by a single Boolean operator node, representing the OR operation, and a plurality of child nodes representing the tokens to which the Boolean OR operator is applied.
+If the query contains a plurality of tokens and a Boolean AND operator on the tokens (e.g., “google AND yahoo AND microsoft”) (502), the identification of the documents that satisfy the query involves identifying the documents in which all of the query tokens occur (508). The positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include all of the tokens operated upon by the AND operator.
+If the query contains a plurality of tokens and an exact phrase operator on the tokens (e.g., “‘i love you’”) (506), identification of the documents that satisfy the query involves identifying the documents in which all of the query tokens occur and occur in the order specified in the query (512). Thus, a document with the phrase “you love i” does not satisfy the query unless it also includes the phrase “i love you.” The positions in which the token occurs can be cross referenced with the document boundary data and, if necessary, the compressed-uncompressed mapping, to find the documents that actually include all of the tokens in the consecutive order specified in the query.
+An exact phrase query can pose a challenge if a matching phrase occurs across a transition point between an Add code and a Copy code. That is, a part of the matching phrase contains literal tokens and another part of the phrase contains copied tokens.
+In some embodiments, a solution to this challenge takes place at the encoding stage. At the encoding stage, the Copy codes may be shortened by some number of tokens on both ends, up to any phrase separators such as punctuation marks. This lengthens the literal token sequences (the Add codes) that are in the compressed sequence. While this does lessen the possibility that a matching phrase will span an Add code and a Copy code, it does not eliminate that possibility altogether.
+An alternative solution may be applied at the query processing level. The phrase query can be split up into a query consisting of shorter phrases linked by the Boolean AND operator. Matching cluster sequences are identified using the modified query. Within the identified clusters, documents that actually satisfy the original query are identified using the compressed-uncompressed mapping.
+More complicated queries, such as queries having combinations of AND and OR operators, “x near y” queries, and queries for tokens in the body or URL of a document, may be handled using the compressed-uncompressed mapping and the document reconstruction data, as well as the document boundaries.
+First Embodiment of Bently-McIlroy-Based Compression Process
+In some embodiments, the tiles 802 are 32-bytes long and do not overlap. In other embodiments, the tiles are other sizes. Increasing the tile size reduces the chances of finding matches in small matching strings (strings of size less than twice the tile size), but decreases the number of hash table entries and decreases processing time.
+The hash table 810 includes a map 812 and an array 814. Each entry 816 in the map 812 points to an entry 818 in the array 814. The map entries 816 are located at positions in the map 812 based on the hash value of the tile being added to the hash table 810. Array entries 818 are added sequentially to the array 814, so the location of last entry in the array 814 is known to the procedures used to access the hash table.
+The input string 800 is processed from the beginning to the end, by sliding a virtual window 820 over the input string 800 and processing the input string at each position of the virtual window. The virtual window 820 is moved in predefined increments or units, such as one byte or one word. The window 820 has the same size (e.g., 32 bytes) as the tiles 802. Each time the virtual window 820 is moved, the input string portion in the window is mapped by a hash function 822 into a hash value 824. The hash value 824 has a predefined size, such as 32 bits . A lookup is performed on the hash value 814 to see if matching entry is found in the hash table. If so, a copy code is added to the output string 830. If the hash value 824 is not found in the hash table, the literal value at the beginning of the window is added to an “Add String”.
+When the virtual window 820 completely overlaps a tile, the hash table is updated to include either a new entry, or by updating an existing entry. If the map 812 does not include an entry 816 corresponding to the hash value of the current input sub-string (i.e., the portion of the input string in the virtual window 820), an entry 818 is added to the array and an entry 816 is added to the map that points to the new array entry 818. The array entry 818 stores the hash value, and a reference to the location of the input sub-string in the input string 800, which is also the current position of the virtual window 820. If the hash table already has an entry for the hash value of the current input sub-string, then that entry may be updated by adding a reference to the current position of the virtual window 820. In some embodiments, the number of input string positions indicated by any one hash table entry 816 is limited to a predefined number (e.g., 4, 8, 16 or 32), and a predefined rule is applied to determine which input string positions to keep in an entry and which to discard or not record.
+The output string 830 contains a sequence of Add codes and Copy codes. Each Add code includes a sequence of one or more literal data values. Each Copy code specifies a range of locations in the input string that are to be duplicated or copied to produce a decoded portion of the input string 800. The Copy code may include a start position within the input string and a length, or it may indicate start and end positions. During decoding, the output string 830 of the compression process becomes the input string to the decoding process. Add codes are executed or decoded simply by adding the literal data values in the add code to a decoded output string. Copy codes are executed by copying the specified range of values from the decoded output string to the current endpoint of the decoded output string. Thus, during decoding, while decoding any copy code in the encoded data, the “dictionary” is the decoded version of all the Add and Copy codes preceding the Copy code currently being decoded.
+Second Embodiment of Bentley-McIlroy-Based Compression Process
+As before, the process compresses an input string 800, which is treated as a string of literal data values. Further, the input string 800 is treated as a sequence of input values 936 (e.g., documents, web pages, or other values), each of which is a string of literal data values. In this process, the output string 930 is tiled, and tiles 932 of the output string 930 are hashed by the hash function 822 to produce the hash values 924 that are stored in a hash table 910. In some embodiments, the tiles 932 of the output string 930 are 32-bytes long and do not overlap. In other embodiments, the tiles are other sizes.
+In this data compression process, the dictionary used by the compression process is a virtual dictionary 950, shown in FIG. 9B , formed by concatenating the output string 952 for all prior values 934 in the input string, and the portion 954 of the current value 936 ending at the current position of the sliding window.
+The hash table 910 includes a map 912 and an array 914. Each entry 916 in the map 912 points to an entry 918 in the array 914. The map entries 916 are located at positions in the map 912 based on the hash value of the tile being added to the hash table 910. Array entries 918 are added sequentially to the array 914, so the location of last entry in the array 914 is known to the procedures used to access the hash table.
+The input string 800 is processed from the beginning to the end, by sliding a virtual window 820 over the input string 800 and processing the input string at each position of the virtual window. The window 800 is moved in predefined increments or units, such as one byte or one word. The window has the same size (e.g., 32 bytes) as the tiles 932. Each time the virtual window 820 is moved, the input string portion in the window is mapped by a hash function 822 into a hash value 924. The hash value 924 has a predefined size, such as 32 bits . A lookup is performed on the hash value 924 to see if matching entry is found in the hash table 910. If so, a Copy code is added to the output string 930. If the hash value 924 is not found in the hash table 910, the literal value at the beginning of the window is added to an “Add String”.
+Whenever all the output codes (i.e., a sequence of one or more Add codes and/or Copy codes) for a current value 936 have been added to the output string 930, any new tiles 932 in the output string 930 are hashed by the hash function 822 to produce hash values 924. The hash table 910 is updated to include either a new entry, or by updating an existing entry. If the map 912 does not include an entry 916 corresponding to the hash value of a tile 932 in the output string, an entry 918 is added to the array and an entry 916 is added to the map that points to the new array entry 918. The array entry 918 stores the hash value, and a reference to the location of the tile 932 in the output string 930. If the hash table 910 already has an entry for the hash value 924 of the current tile 932, then that entry may be updated by adding a reference to the position of current tile 932. In some embodiments, the number of positions indicated by any one array entry 918 is limited to a predefined number (e.g., 4, 8, 16 or 32), and a predefined rule is applied to determine which input string positions to keep in an entry and which to discard or not record.
+While processing a value 936 (e.g., a document, web page, or the like) in the input string, some of which can be very long, the current input value is tiled and temporary entries are added to the hash table 910 for those tiles 938. As shown in FIG. 9B , the tiles 938 of the current input value 936 are hashed by hash function 822 to produce hash values 942. Referring to FIG. 9A , array entries 918B are temporary entries created for the tiles 938 of the current input value. These temporary entries are located in the array 914 after the last hash table array entry for the prior encoded values, and they are deleted from the hash table 910 when compression of the current input value is completed. Thus, while scanning the sliding window over the current input value 936 in the input string 800, these additional hash table entries are used to find common strings within the current input value 936.
+Copy codes produced as the result of matches with temporary entries 918 in the hash table reference a range of locations in the virtual dictionary 950 that are after the last location associated with the output string for prior values 952. During decompression these copy codes are recognized and are decoded by referencing the portion 954 of the virtual dictionary that comprises the portion of the current value that has already been decoded. In effect, there are two types of Copy codes: Copy codes that reference a range of positions in the output string 952, and Copy codes that reference earlier portions of the current value.
+As in the first embodiment, the output string 930 contains a sequence of Add codes and Copy codes. Each Add code includes a sequence of one or more literal data values (e.g., a sequence of bytes or words, each of which can have any value). Each Copy code specifies a range of locations in the virtual dictionary 950 that are to be duplicated or copied to produce a decoded portion of the input string 800. The Copy code may include a start position within the virtual dictionary and a length, or it may indicate start and end positions. During decoding, the output string 930 of the compression process becomes the input string to the decoding process. Add codes are executed or decoded simply by adding the literal data values in the Add codes to a decoded output string. Copy codes are executed by copying the specified range of values from the virtual dictionary to the current endpoint of the decoded output string.
+Referring to FIG. 10 , the dictionary-based compression process for compressing an input string of values begins by adding to the output string an Add code for the first tile of the input string (1002). In addition, the sliding window is positioned at the end of the first tile of the input string, in preparation for starting processing at the second tile of the input string.
+If the process has not yet reached the end of a value (e.g., a value corresponding to a document, web page or the like) (1004-No), the sliding window is moved to a next position, the windowed input is hashed and a lookup is performed on the resulting hash value (1006). If a matching entry is not found in the hash table (1008-No), a unit (e.g., byte or word) of the input string is added to the pending Add String (1010) and the process continues at 1004. The “pending Add String” is a string of data from the input string which will be inserted into the output as an Add code, unless some or all of the Add String is found to match a string in the dictionary.
+If a matching entry is found in the hash table (1008-Yes), the dictionary location or locations identified by the matching entry are searched backward and forward to find the longest matching string (1012). The sliding window is repositioned to the last matching position of the current input value. If there is no pending Add String (1014-No), a Copy code identifying the longest match is added to the output string (1018). If there is a pending Add String (1014-Yes), the Add String is adjusted, if necessary, to remove any portion covered by the identified longest matching string (1016). This can be determined, for instance, based on the Start position of the longest match. If an Add String still exists after any pruning, an Add Code with the remaining Add String is added to the output string, the Add String is reset (1016), and a Copy code identifying the longest match is added to the output string (1018). After the Copy code is output, the process resumes at 1004.
+If the process has reached the end of a current input value 936 (e.g., a document, web page or the like)) (1004-Yes), a number of operations are performed. If there is a pending Add String (1020-Yes), an Add Code with the Add String is output (1020), which completes the output for the current input value. In some embodiments, the input values 936 belong to (e.g., are accessed as) key-value pairs, and a pointer or link for the key corresponding to the current input value 936 is updated to point to the set of output codes (i.e., a sequence of one or more Copy codes and/or Add codes) for the current input value (1024).
+If the size of the output string does not exceed a threshold value (1026-no), processing continues with the next input value at 1006. Otherwise (1026-yes) the output string is closed and becomes a completed block of compressed data (1028). If the process has reached the end of the input string (1030-yes), the compression process is completed. Otherwise (1030-no), processing for a new block is initiated by starting a new block and re-initializing the hash table (1032), and then resuming the process at 1002. In this case, however, the “first tile of the input string” is the first tile of the remaining portion of the input string (i.e., after the last processed block).
+The foregoing description, for purpose of explanation, has been described with reference to specific embodiments. However, the illustrative discussions above are not intended to be exhaustive or to limit the invention to the precise forms disclosed. Many modifications and variations are possible in view of the above teachings. The embodiments were chosen and described in order to best explain the principles of the invention and its practical applications, to thereby enable others skilled in the art to best utilize the invention and various embodiments with various modifications as are suited to the particular use contemplated.
+Claims (29)
+1. A method of processing documents, comprising:
+at a computer system having one or more processors and memory storing one or more programs for execution by the one or more processors:
+grouping a set of documents into a plurality of clusters, wherein each cluster includes one or more documents of the set of documents and a respective cluster of documents of the plurality of clusters includes respective cluster data corresponding to a plurality of documents including a first document and a second document;
+determining that the second document includes duplicate data that is duplicative of corresponding data in the first document;
+identifying a respective subset of the respective cluster data that excludes at least a subset of the duplicate data; and
+generating an index of the respective subset of the respective cluster data.
+2. The method of claim 1 , wherein:
+the plurality of clusters includes a first cluster and a second cluster;
+a representation of the first cluster is stored at a first computer system; and
+a representation of the second cluster is stored at a second computer system different from the first computer system.
+3. The method of claim 1 , wherein:
+the first document is associated with a plurality of document identifiers including a global document identifier and a local document identifier;
+the global document identifier identifies the first document with respect to a document repository; and
+the local document identifies the first document with respect to a portion of the document repository.
+4. The method of claim 1 , wherein generating the index excludes indexing the duplicate data.
+5. The method of claim 1 , wherein identifying the respective subset includes generating respective compressed cluster data that does not include at least a subset of the duplicate data.
+6. The method of claim 5 , wherein:
+the plurality of clusters include a plurality of single-document clusters and a plurality of multi-document clusters; and
+the method further comprises, before generating the respective compressed cluster data, rearranging the plurality of clusters in a sequence of clusters in accordance with the criteria that that single-document clusters precede multi-document clusters in the sequence of clusters.
+7. The method of claim 5 , wherein:
+the plurality of documents are represented, in the cluster data, as a sequence of tokens;
+identifying the respective subset includes storing document reconstruction data for reconstructing documents from the respective compressed cluster data; and
+the method further comprises, after generating the index:
+receiving a query including one or more query tokens; and
+in response to receiving the query:
+identifying positions corresponding to occurrences of the one or more query tokens in the respective subset of the respective cluster data based on the index; and
+identifying documents matching the query based on the positions corresponding to occurrences of the one or more query tokens and the document reconstruction data.
+8. The method of claim 5 , wherein:
+the plurality of documents are represented, in the cluster data, as a sequence of tokens;
+the method further comprises, after generating the index:
+receiving a query including a plurality of query tokens; and
+in response to receiving the query:
+searching through compressed cluster data, corresponding to a plurality of clusters of documents, for occurrences of the query tokens;
+in accordance with a determination that compressed cluster data corresponding to the respective cluster of documents includes all of the plurality of query tokens, determining whether the respective cluster of documents includes a document matching the search query; and
+in accordance with a determination that compressed cluster data corresponding to the respective cluster of documents does not include at least one of the plurality of query tokens, eliminating documents in the respective cluster of documents from further consideration.
+9. The method of claim 8 , wherein:
+identifying the respective subset includes storing document reconstruction data for reconstructing documents from the respective compressed cluster data;
+the query specifies a respective sequence for the plurality of query tokens; and
+determining whether the respective cluster of documents includes a document matching the search query includes determining, based on the document reconstruction data, whether the respective cluster of documents includes a document in which the plurality of query tokens occur in the respective sequence.
+10. The method of claim 1 , wherein:
+the respective cluster of documents includes a plurality of documents that are determined to be related to each other; and
+a respective document is determined to be related to one or more other documents in the respective cluster of documents based on an analysis of content of the respective document and content of the one or more documents in the respective cluster of documents.
+11. The method of claim 1 , wherein:
+the respective cluster of documents includes a plurality of documents that are determined to be related to each other; and
+a respective document is determined to be related to one or more other documents in the respective cluster of documents based on a resource locator of the respective document and resource locators of the one or more other documents in the respective cluster of documents.
+12. The method of claim 11 , wherein:
+a plurality of documents in the set of documents each have a resource locator;
+grouping the set of documents into a plurality of clusters includes:
+ordering the set of documents in accordance with the resource locators; and
+selecting a respective plurality of consecutive documents from the ordering for inclusion in the respective cluster of documents.
+13. The method of claim 12 , wherein:
+a plurality of documents in the set of documents each have a URL including a respective plurality of domains and a respective protocol indicator;
+prior to ordering the set of documents, a modified locator is generated for each respective document, wherein generating a respective modified locator for a particular document having a particular URL includes reversing the domains of the particular URL and moving the protocol indicator for the particular URL to the end of the respective modified locator; and
+the documents are ordered in accordance with the modified locators.
+14. The method of claim 1 , wherein:
+the set of documents comprises a historical archive of different versions of documents; and
+a respective cluster of documents of the plurality of clusters includes a plurality of different versions of a same document from different times.
+15. A computer system, comprising:
+one or more processors;
+memory; and
+one or more programs, wherein the one or more programs are stored in the memory and configured to be executed by the one or more processors, the one or more programs including instructions for:
+grouping a set of documents into a plurality of clusters, wherein each cluster includes one or more documents of the set of documents and a respective cluster of documents of the plurality of clusters includes respective cluster data corresponding to a plurality of documents including a first document and a second document;
+determining that the second document includes duplicate data that is duplicative of corresponding data in the first document;
+identifying a respective subset of the respective cluster data that excludes the duplicate data; and
+generating an index of the respective subset of the respective cluster data.
+16. The system of claim 15 , wherein:
+the plurality of clusters includes a first cluster and a second cluster;
+a representation of the first cluster is stored at a first computer system; and
+a representation of the second cluster is stored at a second computer system different from the first computer system.
+17. The system of claim 15 , wherein:
+the first document is associated with a plurality of document identifiers including a global document identifier and a local document identifier;
+the global document identifier identifies the first document with respect to a document repository; and
+the local document identifies the first document with respect to a portion of the document repository.
+18. The system of claim 15 , wherein generating the index excludes indexing the duplicate data.
+19. The system of claim 15 , wherein identifying the respective subset includes generating respective compressed cluster data that does not include at least a subset of the duplicate data.
+20. The system of claim 19 , wherein:
+the plurality of clusters include a plurality of single-document clusters and a plurality of multi-document clusters; and
+the one or more programs further include instructions for, before generating the respective compressed cluster data, rearranging the plurality of clusters in a sequence of clusters in accordance with the criteria that that single-document clusters precede multi-document clusters in the sequence of clusters.
+21. The system of claim 19 , wherein:
+the plurality of documents are represented, in the cluster data, as a sequence of tokens;
+identifying the respective subset includes storing document reconstruction data for reconstructing documents from the respective compressed cluster data; and
+the one or more programs further include instructions for, after generating the index:
+receiving a query including one or more query tokens; and
+in response to receiving the query:
+identifying positions corresponding to occurrences of the one or more query tokens in the respective subset of the respective cluster data based on the index; and
+identifying documents matching the query based on the positions corresponding to occurrences of the one or more query tokens and the document reconstruction data.
+22. The system of claim 19 , wherein:
+the plurality of documents are represented, in the cluster data, as a sequence of tokens;
+the one or more programs further include instructions for, after generating the index:
+receiving a query including a plurality of query tokens; and
+in response to receiving the query:
+searching through compressed cluster data, corresponding to a plurality of clusters of documents, for occurrences of the query tokens;
+in accordance with a determination that compressed cluster data corresponding to the respective cluster of documents includes all of the plurality of query tokens, determining whether the respective cluster of documents includes a document matching the search query; and
+in accordance with a determination that compressed cluster data corresponding to the respective cluster of documents does not include at least one of the plurality of query tokens, eliminating documents in the respective cluster of documents from further consideration.
+23. The system of claim 22 , wherein:
+identifying the respective subset includes storing document reconstruction data for reconstructing documents from the respective compressed cluster data;
+the query specifies a respective sequence for the plurality of query tokens; and
+determining whether the respective cluster of documents includes a document matching the search query includes determining, based on the document reconstruction data, whether the respective cluster of documents includes a document in which the plurality of query tokens occur in the respective sequence.
+24. The system of claim 15 , wherein:
+the respective cluster of documents includes a plurality of documents that are determined to be related to each other; and
+a respective document is determined to be related to one or more other documents in the respective cluster of documents based on an analysis of content of the respective document and content of the one or more documents in the respective cluster of documents.
+25. The system of claim 15 , wherein:
+the respective cluster of documents includes a plurality of documents that are determined to be related to each other; and
+a respective document is determined to be related to one or more other documents in the respective cluster of documents based on a resource locator of the respective document and resource locators of the one or more other documents in the respective cluster of documents.
+26. The system of claim 25 , wherein:
+a plurality of documents in the set of documents each have a resource locator;
+grouping the set of documents into a plurality of clusters includes:
+ordering the set of documents in accordance with the resource locators; and
+selecting a respective plurality of consecutive documents from the ordering for inclusion in the respective cluster of documents.
+27. The system of claim 26 , wherein:
+a plurality of documents in the set of documents each have a URL including a respective plurality of domains and a respective protocol indicator;
+prior to ordering the set of documents, a modified locator is generated for each respective document, wherein generating a respective modified locator for a particular document having a particular URL includes reversing the domains of the particular URL and moving the protocol indicator for the particular URL to the end of the respective modified locator; and
+the documents are ordered in accordance with the modified locators.
+28. The system of claim 15 , wherein:
+the set of documents comprises a historical archive of different versions of documents; and
+a respective cluster of documents of the plurality of clusters includes a plurality of different versions of a same document from different times.
+29. A non-transitory computer readable storage medium storing one or more programs, the one or more programs comprising instructions, which when executed by a computer system with one or more processors, cause the computer system to:
+group a set of documents into a plurality of clusters, wherein each cluster includes one or more documents of the set of documents and a respective cluster of documents of the plurality of clusters includes respective cluster data corresponding to a plurality of documents including a first document and a second document;
+determine that the second document includes duplicate data that is duplicative of corresponding data in the first document;
+identify a respective subset of the respective cluster data that excludes the duplicate data; and
+generate an index of the respective subset of the respective cluster data.
+Priority Applications (1)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US13/571,316 US8554561B2 (en) | 2006-05-19 | 2012-08-09 | Efficient indexing of documents with similar content |
+Applications Claiming Priority (3)
+Application Number | Priority Date | Filing Date | Title |
+---|---|---|---|
+US11/419,423 US8175875B1 (en) | 2006-05-19 | 2006-05-19 | Efficient indexing of documents with similar content |
+US13/249,136 US8244530B2 (en) | 2006-05-19 | 2011-09-29 | Efficient indexing of documents with similar content |
+US13/571,316 US8554561B2 (en) | 2006-05-19 | 2012-08-09 | Efficient indexing of documents with similar content |
+Related Parent Applications (1)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US13/249,136 Continuation US8244530B2 (en) | 2006-05-19 | 2011-09-29 | Efficient indexing of documents with similar content |
+Publications (2)
+Publication Number | Publication Date |
+---|---|
+US20120303622A1 US20120303622A1 (en) | 2012-11-29 |
+US8554561B2 true US8554561B2 (en) | 2013-10-08 |
+Family
+ID=45494406
+Family Applications (3)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US11/419,423 Active 2028-10-13 US8175875B1 (en) | 2006-05-19 | 2006-05-19 | Efficient indexing of documents with similar content |
+US13/249,136 Active US8244530B2 (en) | 2006-05-19 | 2011-09-29 | Efficient indexing of documents with similar content |
+US13/571,316 Active US8554561B2 (en) | 2006-05-19 | 2012-08-09 | Efficient indexing of documents with similar content |
+Family Applications Before (2)
+Application Number | Title | Priority Date | Filing Date |
+---|---|---|---|
+US11/419,423 Active 2028-10-13 US8175875B1 (en) | 2006-05-19 | 2006-05-19 | Efficient indexing of documents with similar content |
+US13/249,136 Active US8244530B2 (en) | 2006-05-19 | 2011-09-29 | Efficient indexing of documents with similar content |
+Country Status (1)
+Country | Link |
+---|---|
+US (3) | US8175875B1 (en) |
+Cited By (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US9760600B2 (en) | 2014-01-14 | 2017-09-12 | Google Inc. | Serving recurrent calendar events |
+Families Citing this family (56)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US8180741B2 (en) * | 2006-06-06 | 2012-05-15 | Red Hat, Inc. | Methods and systems for providing data objects on a token |
+US8515903B2 (en) * | 2007-10-03 | 2013-08-20 | Database Logic Inc. | Collaboration of plural databases by interaction through universal index |
+US8775441B2 (en) * | 2008-01-16 | 2014-07-08 | Ab Initio Technology Llc | Managing an archive for approximate string matching |
+US8484162B2 (en) | 2008-06-24 | 2013-07-09 | Commvault Systems, Inc. | De-duplication systems and methods for application-specific data |
+US8484215B2 (en) | 2008-10-23 | 2013-07-09 | Ab Initio Technology Llc | Fuzzy data operations |
+US9135249B2 (en) * | 2009-05-29 | 2015-09-15 | Xerox Corporation | Number sequences detection systems and methods |
+US8930306B1 (en) | 2009-07-08 | 2015-01-06 | Commvault Systems, Inc. | Synchronized data deduplication |
+US8972930B2 (en) * | 2010-06-04 | 2015-03-03 | Microsoft Corporation | Generating text manipulation programs using input-output examples |
+US9613115B2 (en) | 2010-07-12 | 2017-04-04 | Microsoft Technology Licensing, Llc | Generating programs based on input-output examples using converter modules |
+US8364652B2 (en) | 2010-09-30 | 2013-01-29 | Commvault Systems, Inc. | Content aligned block-based deduplication |
+US8572340B2 (en) | 2010-09-30 | 2013-10-29 | Commvault Systems, Inc. | Systems and methods for retaining and using data block signatures in data protection operations |
+US9424351B2 (en) * | 2010-11-22 | 2016-08-23 | Microsoft Technology Licensing, Llc | Hybrid-distribution model for search engine indexes |
+US9020900B2 (en) | 2010-12-14 | 2015-04-28 | Commvault Systems, Inc. | Distributed deduplicated storage system |
+US8954446B2 (en) | 2010-12-14 | 2015-02-10 | Comm Vault Systems, Inc. | Client-side repository in a networked deduplicated storage system |
+US8498972B2 (en) * | 2010-12-16 | 2013-07-30 | Sap Ag | String and sub-string searching using inverted indexes |
+CN102737012B (en) * | 2011-04-06 | 2015-09-30 | 赛恩倍吉科技顾问（深圳）有限公司 | text information comparison method and system |
+EP3855321A1 (en) | 2011-11-15 | 2021-07-28 | AB Initio Technology LLC | Data clustering based on variant token networks |
+US20130254223A1 (en) * | 2012-03-22 | 2013-09-26 | Ramp Holdings, Inc. | Search for related items using data channels |
+US9552335B2 (en) | 2012-06-04 | 2017-01-24 | Microsoft Technology Licensing, Llc | Expedited techniques for generating string manipulation programs |
+US9218374B2 (en) | 2012-06-13 | 2015-12-22 | Commvault Systems, Inc. | Collaborative restore in a networked storage system |
+AU2013366088B2 (en) * | 2012-12-20 | 2019-06-06 | Bae Systems Plc | Searchable data archive |
+EP2767911A1 (en) * | 2013-02-13 | 2014-08-20 | BAE Systems PLC | Data storage and retrieval |
+US9633033B2 (en) | 2013-01-11 | 2017-04-25 | Commvault Systems, Inc. | High availability distributed deduplicated storage system |
+US9703855B1 (en) * | 2013-04-15 | 2017-07-11 | Ca, Inc. | System and method for classifying content with a web service |
+US20150207742A1 (en) * | 2014-01-22 | 2015-07-23 | Wipro Limited | Methods for optimizing data for transmission and devices thereof |
+US9633056B2 (en) | 2014-03-17 | 2017-04-25 | Commvault Systems, Inc. | Maintaining a deduplication database |
+US10380072B2 (en) | 2014-03-17 | 2019-08-13 | Commvault Systems, Inc. | Managing deletions from a deduplication database |
+US11249858B2 (en) | 2014-08-06 | 2022-02-15 | Commvault Systems, Inc. | Point-in-time backups of a production application made accessible over fibre channel and/or ISCSI as data sources to a remote application by representing the backups as pseudo-disks operating apart from the production application and its host |
+US9852026B2 (en) | 2014-08-06 | 2017-12-26 | Commvault Systems, Inc. | Efficient application recovery in an information management system based on a pseudo-storage-device driver |
+US9575673B2 (en) | 2014-10-29 | 2017-02-21 | Commvault Systems, Inc. | Accessing a file system using tiered deduplication |
+US9607029B1 (en) * | 2014-12-17 | 2017-03-28 | Amazon Technologies, Inc. | Optimized mapping of documents to candidate duplicate documents in a document corpus |
+US10339106B2 (en) | 2015-04-09 | 2019-07-02 | Commvault Systems, Inc. | Highly reusable deduplication database after disaster recovery |
+US20160350391A1 (en) | 2015-05-26 | 2016-12-01 | Commvault Systems, Inc. | Replication using deduplicated secondary copy data |
+US10558690B2 (en) * | 2015-07-06 | 2020-02-11 | International Business Machines Corporation | Multiple sub-string searching |
+US9766825B2 (en) | 2015-07-22 | 2017-09-19 | Commvault Systems, Inc. | Browse and restore for block-level backups |
+JP6753401B2 (en) * | 2015-07-24 | 2020-09-09 | 富士通株式会社 | Coding programs, coding devices, and coding methods |
+CN106375270B (en) * | 2015-07-24 | 2020-12-08 | 华为技术有限公司 | Token generation and authentication method and authentication server |
+US20170192868A1 (en) | 2015-12-30 | 2017-07-06 | Commvault Systems, Inc. | User interface for identifying a location of a failed secondary storage device |
+US10296368B2 (en) | 2016-03-09 | 2019-05-21 | Commvault Systems, Inc. | Hypervisor-independent block-level live browse for access to backed up virtual machine (VM) data and hypervisor-free file-level recovery (block-level pseudo-mount) |
+US11620304B2 (en) | 2016-10-20 | 2023-04-04 | Microsoft Technology Licensing, Llc | Example management for string transformation |
+US11256710B2 (en) | 2016-10-20 | 2022-02-22 | Microsoft Technology Licensing, Llc | String transformation sub-program suggestion |
+US10846298B2 (en) | 2016-10-28 | 2020-11-24 | Microsoft Technology Licensing, Llc | Record profiling for dataset sampling |
+US10740193B2 (en) | 2017-02-27 | 2020-08-11 | Commvault Systems, Inc. | Hypervisor-independent reference copies of virtual machine payload data based on block-level pseudo-mount |
+US10664352B2 (en) | 2017-06-14 | 2020-05-26 | Commvault Systems, Inc. | Live browsing of backed up data residing on cloned disks |
+US11106867B2 (en) * | 2017-08-15 | 2021-08-31 | Oracle International Corporation | Techniques for document marker tracking |
+US10671353B2 (en) | 2018-01-31 | 2020-06-02 | Microsoft Technology Licensing, Llc | Programming-by-example using disjunctive programs |
+JP7006462B2 (en) * | 2018-04-02 | 2022-01-24 | 富士通株式会社 | Data generation program, data generation method and information processing equipment |
+US10789430B2 (en) * | 2018-11-19 | 2020-09-29 | Genesys Telecommunications Laboratories, Inc. | Method and system for sentiment analysis |
+US11010258B2 (en) | 2018-11-27 | 2021-05-18 | Commvault Systems, Inc. | Generating backup copies through interoperability between components of a data storage management system and appliances for data storage and deduplication |
+US11698727B2 (en) | 2018-12-14 | 2023-07-11 | Commvault Systems, Inc. | Performing secondary copy operations based on deduplication performance |
+US11216459B2 (en) * | 2019-03-25 | 2022-01-04 | Microsoft Technology Licensing, Llc | Multi-layer semantic search |
+US10824794B2 (en) * | 2019-04-08 | 2020-11-03 | Paypal, Inc. | Process for creating a fixed length representation of a variable length input |
+US20200327017A1 (en) | 2019-04-10 | 2020-10-15 | Commvault Systems, Inc. | Restore using deduplicated secondary copy data |
+US11463264B2 (en) | 2019-05-08 | 2022-10-04 | Commvault Systems, Inc. | Use of data block signatures for monitoring in an information management system |
+US20210173811A1 (en) | 2019-12-04 | 2021-06-10 | Commvault Systems, Inc. | Optimizing the restoration of deduplicated data stored in multi-node replicated file systems |
+US11687424B2 (en) | 2020-05-28 | 2023-06-27 | Commvault Systems, Inc. | Automated media agent state management |
+Citations (10)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5819258A (en) | 1997-03-07 | 1998-10-06 | Digital Equipment Corporation | Method and apparatus for automatically generating hierarchical categories from large document collections |
+US20020065857A1 (en) | 2000-10-04 | 2002-05-30 | Zbigniew Michalewicz | System and method for analysis and clustering of documents for search engine |
+US6547829B1 (en) * | 1999-06-30 | 2003-04-15 | Microsoft Corporation | Method and system for detecting duplicate documents in web crawls |
+US6611213B1 (en) | 1999-03-22 | 2003-08-26 | Lucent Technologies Inc. | Method and apparatus for data compression using fingerprinting |
+US20050149473A1 (en) | 2003-12-24 | 2005-07-07 | Microsoft Corporation | Dynamic grouping of content including captive data |
+US6978419B1 (en) | 2000-11-15 | 2005-12-20 | Justsystem Corporation | Method and apparatus for efficient identification of duplicate and near-duplicate documents and text spans using high-discriminability text fragments |
+US20060026128A1 (en) | 2004-06-29 | 2006-02-02 | Xerox Corporation | Expanding a partially-correct list of category elements using an indexed document collection |
+US7366718B1 (en) * | 2001-01-24 | 2008-04-29 | Google, Inc. | Detecting duplicate and near-duplicate files |
+US7386532B2 (en) * | 2002-12-19 | 2008-06-10 | Mathon Systems, Inc. | System and method for managing versions |
+US7599931B2 (en) * | 2006-03-03 | 2009-10-06 | Microsoft Corporation | Web forum crawler |
+-
+2006
+- 2006-05-19 US US11/419,423 patent/US8175875B1/en active Active
+-
+2011
+- 2011-09-29 US US13/249,136 patent/US8244530B2/en active Active
+-
+2012
+- 2012-08-09 US US13/571,316 patent/US8554561B2/en active Active
+Patent Citations (10)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US5819258A (en) | 1997-03-07 | 1998-10-06 | Digital Equipment Corporation | Method and apparatus for automatically generating hierarchical categories from large document collections |
+US6611213B1 (en) | 1999-03-22 | 2003-08-26 | Lucent Technologies Inc. | Method and apparatus for data compression using fingerprinting |
+US6547829B1 (en) * | 1999-06-30 | 2003-04-15 | Microsoft Corporation | Method and system for detecting duplicate documents in web crawls |
+US20020065857A1 (en) | 2000-10-04 | 2002-05-30 | Zbigniew Michalewicz | System and method for analysis and clustering of documents for search engine |
+US6978419B1 (en) | 2000-11-15 | 2005-12-20 | Justsystem Corporation | Method and apparatus for efficient identification of duplicate and near-duplicate documents and text spans using high-discriminability text fragments |
+US7366718B1 (en) * | 2001-01-24 | 2008-04-29 | Google, Inc. | Detecting duplicate and near-duplicate files |
+US7386532B2 (en) * | 2002-12-19 | 2008-06-10 | Mathon Systems, Inc. | System and method for managing versions |
+US20050149473A1 (en) | 2003-12-24 | 2005-07-07 | Microsoft Corporation | Dynamic grouping of content including captive data |
+US20060026128A1 (en) | 2004-06-29 | 2006-02-02 | Xerox Corporation | Expanding a partially-correct list of category elements using an indexed document collection |
+US7599931B2 (en) * | 2006-03-03 | 2009-10-06 | Microsoft Corporation | Web forum crawler |
+Non-Patent Citations (5)
+Title |
+---|
+Bentley, J., et al., "Data Compression Using Long Common Strings," Proceedings of IEEE Data Compression Conf., Mar. 1999, pp. 287-295. |
+Broder, A.Z., et al., "Syntactic Clustering of the Web," Computer Networks and ISDN Systems, vol. 29, 1997, pp. 1157-1166. |
+Charikar, M., et al., "Incremental Clustering and Dynamic Information Retrieval," SIAM J. Comput., vol. 33, No. 6, 2004, pp. 1417-1440. |
+Charikar, M.S., "Similarity Estimation Techniques from Rounding Algorithms," Proceedings of 34th Annual ACM Symposium on Theory of Computing Table of Contents, Montreal, Quebec, Canada, May 19-21, 2002, pp. 380-388. |
+Lee, et al., "Duplicate Detection for Symbolically Compressed Documents," IEEE, Sep. 1999, pp. 305-308. |
+Cited By (1)
+Publication number | Priority date | Publication date | Assignee | Title |
+---|---|---|---|---|
+US9760600B2 (en) | 2014-01-14 | 2017-09-12 | Google Inc. | Serving recurrent calendar events |
+Also Published As
+Publication number | Publication date |
+---|---|
+US20120303622A1 (en) | 2012-11-29 |
+US20120023073A1 (en) | 2012-01-26 |
+US8244530B2 (en) | 2012-08-14 |
+US8175875B1 (en) | 2012-05-08 |
+Similar Documents
+Publication | Publication Date | Title |
+---|---|---|
+US8554561B2 (en) | Efficient indexing of documents with similar content | |
+US11567901B2 (en) | Reduction of data stored on a block processing storage system | |
+JP4805267B2 (en) | Multi-stage query processing system and method for use with a token space repository | |
+JP6596102B2 (en) | Lossless data loss by deriving data from basic data elements present in content-associative sheaves | |
+US9619565B1 (en) | Generating content snippets using a tokenspace repository | |
+KR20130062889A (en) | Method and system for data compression | |
+JP2020518207A (en) | Lossless reduction of data using basic data sheaves, and performing multidimensional search and content-associative retrieval on losslessly reduced data using basic data sieves | |
+US7783589B2 (en) | Inverted index processing | |
+JP6846426B2 (en) | Reduction of voice data and data stored on block processing storage systems | |
+JP6726690B2 (en) | Performing multidimensional search, content-associative retrieval, and keyword-based retrieval and retrieval on losslessly reduced data using basic data sieves | |
+US20110113052A1 (en) | Query result iteration for multiple queries | |
+Flor | A fast and flexible architecture for very large word n-gram datasets | |
+US8392433B2 (en) | Self-indexer and self indexing system | |
+Zhang et al. | Efficient search in large textual collections with redundancy | |
+Zhang | Transform based and search aware text compression schemes and compressed domain text retrieval | |
+CN117290523B (en) | Full text retrieval method and device based on dynamic index table |
+Legal Events
+Date | Code | Title | Description |
+---|---|---|---|
+STCF | Information on status: patent grant |
+Free format text: PATENTED CASE |
+|
+FPAY | Fee payment |
+Year of fee payment: 4 |
+|
+AS | Assignment |
+Owner name: GOOGLE LLC, CALIFORNIAFree format text: CHANGE OF NAME;ASSIGNOR:GOOGLE INC.;REEL/FRAME:044695/0115Effective date: 20170929 |
+|
+MAFP | Maintenance fee payment |
+Free format text: PAYMENT OF MAINTENANCE FEE, 8TH YEAR, LARGE ENTITY (ORIGINAL EVENT CODE: M1552); ENTITY STATUS OF PATENT OWNER: LARGE ENTITYYear of fee payment: 8 |
